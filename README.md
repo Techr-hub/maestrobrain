@@ -45,7 +45,7 @@ There is nothing to `npm install`: Maestro has zero dependencies, so it works on
 
 ## What's on the dashboard
 
-- **Brain map (centre):** the reasoning core surrounded by your knowledge (vault notes linked by `[[wikilinks]]`, grouped into lobes by folder) and an orbit of connected sources. Notifications fly in as particles; notes the brain used for an answer light up.
+- **Brain map (centre):** a 3D world you can explore: drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset (it slowly auto-rotates when idle). The reasoning core is surrounded by your knowledge (vault notes linked by `[[wikilinks]]`, grouped into lobes by folder) and an orbit of connected sources. Notifications fly in as particles; notes the brain used for an answer light up.
 - **Chat + voice:** type, or press the mic (or **Alt+V**) and talk. The avatar **pulses while you speak** and **spins while the brain answers**. Replies can be read aloud. Hands-free mode listens for *"Hey Jarvis…"*.
 - **@agents:** `@Jarvis`, `@Research`, `@Coach`, plus `@Product`, `@Design`, `@Dev` from role packs.
 - **Intelligence Feed (right):** every notification normalised into one card: category, source, priority, deadline, progress and suggested actions (click an action to make it a task).

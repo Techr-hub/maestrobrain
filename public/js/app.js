@@ -146,7 +146,7 @@ function buildDashboard() {
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
     onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : navigate('connections')),
-    onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) st.style.top = Math.round(b.cy + (b.compact ? 92 : 108)) + 'px'; },
+    onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
   av = makeAvatar($('#avatar-canvas'));
   $('#brand-avatar').onclick = () => { navigate('dashboard'); toggleMic(); };
