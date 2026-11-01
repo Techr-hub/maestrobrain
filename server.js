@@ -56,14 +56,20 @@ function readBody(req) {
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(new Error('Invalid JSON')); } });
   });
 }
+// Saved field values go back to the settings window so people can see what they connected.
+// Secrets come back masked; calendar links come back as a list.
+function savedFields(def, conn) {
+  if (!conn || !conn.fields) return {};
+  const out = {};
+  for (const f of def.liveFields || []) {
+    if (f.type === 'list') out[f.key] = f.key === 'icsUrls' ? connectors.calendarUrls(conn.fields) : (conn.fields[f.key] || []);
+    else if (conn.fields[f.key]) out[f.key] = f.secret ? '••••••••' : conn.fields[f.key];
+  }
+  return out;
+}
 function connectorView(cfg) {
-  return connectors.list().map((c) => ({
-    ...c,
-    status: {
-      business: cfg.connections.business[c.id] ? { mode: cfg.connections.business[c.id].mode, connectedAt: cfg.connections.business[c.id].connectedAt, message: cfg.connections.business[c.id].message || '' } : null,
-      personal: cfg.connections.personal[c.id] ? { mode: cfg.connections.personal[c.id].mode, connectedAt: cfg.connections.personal[c.id].connectedAt, message: cfg.connections.personal[c.id].message || '' } : null,
-    },
-  }));
+  const st = (c, prof) => { const k = cfg.connections[prof][c.id]; return k ? { mode: k.mode, connectedAt: k.connectedAt, message: k.message || '', fields: savedFields(c, k), error: k.lastError || '' } : null; };
+  return connectors.list().map((c) => ({ ...c, status: { business: st(c, 'business'), personal: st(c, 'personal') } }));
 }
 
 // ---------------------------------------------------------------- routes
@@ -126,7 +132,7 @@ async function hubView(hid) {
   if (hub.calendar && out.connected) {
     const live = members.filter((m) => m.connected).map((m) => m.id);
     out.events = (await calendar.list({ days: 7 })).filter((e) => live.includes(e.source));
-    for (const m of members) { const c = conns[m.id]; if (c && c.mode === 'live' && c.fields && c.fields.icsUrl) m.error = calendar.errorFor(c.fields.icsUrl) || m.error; }
+    for (const m of members) { const c = conns[m.id]; if (c && c.mode === 'live') m.error = calendar.errorForConn(c) || m.error; }
   }
   if (hub.projects) {
     // Projects always has your vault's project notes, even before a project tool is connected.
@@ -152,7 +158,7 @@ route('GET', '/api/source', async (q) => {
   out.error = conn.lastError || null;
   if (isCal || id === 'gmail') {
     out.events = (await calendar.list({ days: 7 })).filter((e) => e.source === id);
-    if (conn.mode === 'live' && conn.fields && conn.fields.icsUrl) out.error = calendar.errorFor(conn.fields.icsUrl) || out.error;
+    if (conn.mode === 'live') out.error = calendar.errorForConn(conn) || out.error;
   }
   out.items = feed.list({ source: id, limit: 40 });
   return out;
@@ -168,9 +174,11 @@ route('POST', '/api/connections', async (_q, body) => {
     const prev = c.connections[profile][id];
     // keep previously saved secrets when the form sends a masked value
     const merged = { ...((prev && prev.fields) || {}) };
-    for (const [k, v] of Object.entries(fields)) if (v && !String(v).startsWith('••')) merged[k] = v;
+    for (const [k, v] of Object.entries(fields)) if (Array.isArray(v) || (v && !String(v).startsWith('••'))) merged[k] = v;
+    if (Array.isArray(fields.icsUrls)) delete merged.icsUrl; // the list replaces the old single link
     c.connections[profile][id] = { mode, connectedAt: Date.now(), fields: mode === 'live' ? merged : undefined, message };
   });
+  if (mode === 'live') calendar.forget(connectors.calendarUrls(fields));
   const surfaced = mode !== 'live' ? feed.surfaceSource(id, profile) : 0;
   if (mode === 'live') feed.pollLive().catch(() => {});
   return { ok: true, message, surfaced };

@@ -29,6 +29,13 @@ async function main() {
   ok('state loads', st.config && st.connectors.length >= 15);
   ok('starter agents present', st.agents.length >= 3);
   ok('foundation skills present', st.skills.length >= 5);
+  {
+    const { parseIcs, calendarUrls } = require('../core/connectors');
+    const ics = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:r1\nDTSTART:20260105T140000Z\nDTEND:20260105T141500Z\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE\nEXDATE:20261104T140000Z\nSUMMARY:Standup\nEND:VEVENT\nEND:VCALENDAR';
+    const ev = parseIcs(ics, { from: new Date('2026-11-01T00:00:00Z'), to: new Date('2026-11-10T00:00:00Z') });
+    ok('calendar: recurring events expand, EXDATE skipped', ev.map((e) => e.start.slice(0, 10)).join(',') === '2026-11-02,2026-11-09');
+    ok('calendar: several ICS links per connector', calendarUrls({ icsUrl: 'https://a/x.ics', icsUrls: ['webcal://b/y.ics', ''] }).length === 2);
+  }
   const feed = await get('/feed');
   ok('feed has demo items', feed.length >= 5);
   const g = await get('/graph');

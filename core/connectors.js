@@ -15,7 +15,7 @@ const CONNECTORS = [
     id: 'outlook', name: 'Outlook / Microsoft 365', icon: 'mail', color: '#2f8cff', group: 'foundation', category: 'EMAIL',
     description: 'Outlook mail and calendar for work.',
     live: 'dashboard+claude',
-    liveFields: [{ key: 'icsUrl', label: 'Published calendar ICS link (optional)', placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics', help: 'Outlook → Settings → Calendar → Shared calendars → Publish a calendar → copy the ICS link.' }],
+    liveFields: [{ key: 'icsUrls', type: 'list', addLabel: 'Add another calendar', label: 'Published calendar ICS links', placeholder: 'https://outlook.office365.com/owa/calendar/…/calendar.ics', help: 'Outlook → Settings → Calendar → Shared calendars → Publish a calendar → copy the ICS link.' }],
     claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Microsoft 365 for mail. Paste a published ICS link here to stream your Outlook calendar into the feed.',
   },
   {
@@ -28,13 +28,13 @@ const CONNECTORS = [
     id: 'icalendar', name: 'iCalendar', icon: 'calendar-days', color: '#00e5ff', group: 'foundation', category: 'MEETING',
     description: 'Apple iCloud calendar or any .ics feed.',
     live: 'dashboard',
-    liveFields: [{ key: 'icsUrl', label: 'Calendar ICS / webcal link', placeholder: 'webcal://p01-caldav.icloud.com/published/2/…', help: 'Apple Calendar → right-click a calendar → Share → Public Calendar → copy link.' }],
+    liveFields: [{ key: 'icsUrls', type: 'list', addLabel: 'Add another calendar', label: 'Calendar ICS / webcal links', placeholder: 'webcal://p01-caldav.icloud.com/published/2/…', help: 'Apple Calendar → right-click a calendar → Share → Public Calendar → copy link.' }],
   },
   {
     id: 'gcal', name: 'Google Calendar', icon: 'calendar-days', color: '#3d7bff', group: 'foundation', category: 'MEETING',
     description: 'Meetings, events and reminders from Google Calendar.',
     live: 'dashboard+claude',
-    liveFields: [{ key: 'icsUrl', label: 'Secret address in iCal format', placeholder: 'https://calendar.google.com/calendar/ical/…/basic.ics', help: 'Google Calendar → Settings → your calendar → Integrate calendar → Secret address in iCal format.' }],
+    liveFields: [{ key: 'icsUrls', type: 'list', addLabel: 'Add another calendar', label: 'Secret addresses in iCal format', placeholder: 'https://calendar.google.com/calendar/ical/…/basic.ics', help: 'Google Calendar → Settings → your calendar → Integrate calendar → Secret address in iCal format.' }],
     claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Google Calendar so Claude can also create events.',
   },
   {
@@ -117,38 +117,160 @@ function unfoldIcs(text) {
   return text.replace(/\r?\n[ \t]/g, '');
 }
 
+// Every calendar connector can hold several ICS links (one per calendar). Older configs had one `icsUrl`.
+function calendarUrls(fields = {}) {
+  const list = Array.isArray(fields.icsUrls) ? fields.icsUrls : String(fields.icsUrls || '').split(/[\n,]+/);
+  if (fields.icsUrl) list.unshift(fields.icsUrl);
+  return [...new Set(list.map((u) => String(u || '').trim()).filter(Boolean))];
+}
+
+// Outlook writes Windows zone names; map the common ones to IANA.
+const WIN_TZ = {
+  'Eastern Standard Time': 'America/New_York', 'Central Standard Time': 'America/Chicago', 'Mountain Standard Time': 'America/Denver',
+  'Pacific Standard Time': 'America/Los_Angeles', 'Atlantic Standard Time': 'America/Halifax', 'Newfoundland Standard Time': 'America/St_Johns',
+  'Alaskan Standard Time': 'America/Anchorage', 'Hawaiian Standard Time': 'Pacific/Honolulu', 'US Mountain Standard Time': 'America/Phoenix',
+  'GMT Standard Time': 'Europe/London', 'W. Europe Standard Time': 'Europe/Berlin', 'Romance Standard Time': 'Europe/Paris',
+  'Central Europe Standard Time': 'Europe/Budapest', 'E. Europe Standard Time': 'Europe/Bucharest', 'India Standard Time': 'Asia/Kolkata',
+  'China Standard Time': 'Asia/Shanghai', 'Tokyo Standard Time': 'Asia/Tokyo', 'AUS Eastern Standard Time': 'Australia/Sydney', 'UTC': 'UTC',
+};
+
+// Minutes a time zone is ahead of UTC at a given instant.
+function tzOffset(zone, at) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(at).map((x) => [x.type, x.value]));
+    return (Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - at.getTime()) / 60000;
+  } catch { return null; }
+}
+
+// "DTSTART;TZID=America/Toronto:20261101T090000" → Date (UTC instant). Floating times use the computer's zone.
 function parseIcsDate(v) {
   if (!v) return null;
-  const val = v.split(':').pop();
+  const val = v.slice(v.lastIndexOf(':') + 1).trim();
   const m = val.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/);
   if (!m) return null;
   const [, y, mo, d, h = '00', mi = '00', s = '00', z] = m;
   if (z) return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+  const tz = (v.match(/TZID=("?)([^;:"]+)\1/) || [])[2];
+  const zone = tz && (WIN_TZ[tz] || tz.replace(/^\/[^/]+\/[^/]+\//, ''));
+  if (zone && m[4]) {
+    const wall = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
+    const off1 = tzOffset(zone, new Date(wall));
+    if (off1 != null) {
+      const off2 = tzOffset(zone, new Date(wall - off1 * 60000));
+      return new Date(wall - (off2 != null ? off2 : off1) * 60000);
+    }
+  }
   return new Date(+y, +mo - 1, +d, +h, +mi, +s);
 }
 
-function parseIcs(text) {
+const DAYS = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+
+// Expand a recurring event (RRULE) into the occurrences that fall inside [from, to].
+// Covers what real calendars use for meetings: DAILY / WEEKLY (BYDAY) / MONTHLY (BYMONTHDAY or BYDAY like 2TU, -1FR) / YEARLY,
+// with INTERVAL, COUNT and UNTIL. EXDATEs are skipped.
+function expandRule(start, rule, from, to, exdates) {
+  const r = Object.fromEntries(rule.split(';').map((p) => p.split('=')));
+  const freq = r.FREQ, interval = Math.max(1, Number(r.INTERVAL || 1));
+  const until = r.UNTIL ? parseIcsDate(':' + r.UNTIL) : null;
+  const count = r.COUNT ? Number(r.COUNT) : Infinity;
+  const byDay = r.BYDAY ? r.BYDAY.split(',') : null;
+  const byMonthDay = r.BYMONTHDAY ? r.BYMONTHDAY.split(',').map(Number) : null;
+  const out = [];
+  let n = 0;
+  const keep = (d) => {
+    if (d < start) return true;
+    if (until && d > until) return false;
+    if (++n > count) return false;
+    if (d > to) return false;
+    if (d >= from && !exdates.has(d.getTime())) out.push(d);
+    return true;
+  };
+  const at = (base, days) => { const d = new Date(base); d.setDate(d.getDate() + days); return d; };
+  const limit = 3000;
+  if (freq === 'DAILY') {
+    for (let i = 0; i < limit; i++) { if (!keep(at(start, i * interval))) break; }
+  } else if (freq === 'WEEKLY') {
+    const days = (byDay || [Object.keys(DAYS)[start.getDay()]]).map((x) => DAYS[x.slice(-2)]).sort();
+    const weekStart = at(start, -start.getDay());
+    outer: for (let w = 0; w < limit; w++) {
+      for (const dow of days) { const d = at(weekStart, w * 7 * interval + dow); if (!keep(d)) break outer; }
+    }
+  } else if (freq === 'MONTHLY') {
+    outer2: for (let i = 0; i < limit; i++) {
+      const base = new Date(start); base.setDate(1); base.setMonth(start.getMonth() + i * interval);
+      const cands = [];
+      if (byDay) {
+        for (const spec of byDay) {
+          const mm = spec.match(/^(-?\d)?(\w\w)$/); if (!mm) continue;
+          const dow = DAYS[mm[2]], nth = Number(mm[1] || 0);
+          const days = []; const d = new Date(base);
+          while (d.getMonth() === base.getMonth()) { if (d.getDay() === dow) days.push(new Date(d)); d.setDate(d.getDate() + 1); }
+          if (nth > 0 && days[nth - 1]) cands.push(days[nth - 1]); else if (nth < 0 && days[days.length + nth]) cands.push(days[days.length + nth]); else if (!nth) cands.push(...days);
+        }
+      } else {
+        for (const md of byMonthDay || [start.getDate()]) { const d = new Date(base); d.setDate(md); if (d.getMonth() === base.getMonth()) cands.push(d); }
+      }
+      cands.sort((a, b) => a - b);
+      for (const d of cands) if (!keep(d)) break outer2;
+    }
+  } else if (freq === 'YEARLY') {
+    for (let i = 0; i < 200; i++) { const d = new Date(start); d.setFullYear(start.getFullYear() + i * interval); if (!keep(d)) break; }
+  }
+  return out;
+}
+
+function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new Date(Date.now() + 90 * 86400000) } = {}) {
   const events = [];
+  const overrides = new Map(); // uid -> Set of replaced occurrence times
   const body = unfoldIcs(text);
-  const blocks = body.split('BEGIN:VEVENT').slice(1);
+  const blocks = body.split('BEGIN:VEVENT').slice(1).map((b) => b.split('END:VEVENT')[0]);
+  const parsed = [];
   for (const b of blocks) {
     const get = (key) => {
       const m = b.match(new RegExp('^' + key + '(;[^:\\r\\n]*)?:(.*)$', 'm'));
       return m ? (m[1] || '') + ':' + m[2].trim() : null;
     };
-    const val = (key) => { const g = get(key); return g ? g.slice(g.indexOf(':') + 1).replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';') : ''; };
-    const start = parseIcsDate(get('DTSTART'));
+    const all = (key) => [...b.matchAll(new RegExp('^' + key + '(;[^:\\r\\n]*)?:(.*)$', 'gm'))].map((m) => (m[1] || '') + ':' + m[2].trim());
+    const val = (key) => { const g = get(key); return g ? g.slice(g.indexOf(':') + 1).replace(/\\n/gi, '\n').replace(/\\,/g, ',').replace(/\;/g, ';') : ''; };
+    if (/^CANCELLED$/i.test(val('STATUS'))) { const rid = parseIcsDate(get('RECURRENCE-ID')); if (rid) { const uid = val('UID'); if (!overrides.has(uid)) overrides.set(uid, new Set()); overrides.get(uid).add(rid.getTime()); } continue; }
+    const dtstart = get('DTSTART');
+    const start = parseIcsDate(dtstart);
     if (!start) continue;
-    const end = parseIcsDate(get('DTEND')) || new Date(start.getTime() + 30 * 60000);
-    events.push({ title: val('SUMMARY') || '(no title)', start: start.toISOString(), end: end.toISOString(), location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 400), allDay: !/T/.test(get('DTSTART')) });
+    const allDay = !/T\d{6}/.test(dtstart.slice(dtstart.lastIndexOf(':') + 1));
+    const end = parseIcsDate(get('DTEND')) || new Date(start.getTime() + (allDay ? 86400000 : 30 * 60000));
+    const rid = parseIcsDate(get('RECURRENCE-ID'));
+    const uid = val('UID');
+    if (rid) { if (!overrides.has(uid)) overrides.set(uid, new Set()); overrides.get(uid).add(rid.getTime()); }
+    const exdates = new Set();
+    for (const ex of all('EXDATE')) { const head = ex.slice(0, ex.lastIndexOf(':') + 1); for (const part of ex.slice(ex.lastIndexOf(':') + 1).split(',')) { const d = parseIcsDate(head + part); if (d) exdates.add(d.getTime()); } }
+    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 400) });
   }
+  for (const e of parsed) {
+    const base = { title: e.title, location: e.location, description: e.description, allDay: e.allDay };
+    const dur = e.end - e.start;
+    if (e.rrule && !e.rid) {
+      const skip = overrides.get(e.uid) || new Set();
+      for (const d of expandRule(e.start, e.rrule, new Date(from.getTime() - dur), to, e.exdates)) {
+        if (skip.has(d.getTime())) continue;
+        events.push({ ...base, start: d.toISOString(), end: new Date(d.getTime() + dur).toISOString() });
+      }
+    } else {
+      events.push({ ...base, start: e.start.toISOString(), end: e.end.toISOString() });
+    }
+  }
+  events.sort((a, b) => new Date(a.start) - new Date(b.start));
   return events;
 }
 
 async function fetchIcs(url) {
-  const u = url.replace(/^webcal:/i, 'https:');
+  const u = url.trim().replace(/^webcals?:/i, 'https:');
+  const get = (x) => fetch(x, { headers: { 'User-Agent': 'Maestro-Brain', Accept: 'text/calendar, */*' }, redirect: 'follow' });
   let res;
-  try { res = await fetch(u, { headers: { 'User-Agent': 'Maestro-Brain' } }); } catch (e) { let host = 'the calendar server'; try { host = new URL(u).host; } catch { /* bad link */ } throw friendly(e, host); }
+  try { res = await get(u); } catch (e) {
+    // a few webcal servers only speak plain http
+    let host = 'the calendar server'; try { host = new URL(u).host; } catch { /* bad link */ }
+    if (/^webcal:/i.test(url.trim())) { try { res = await get(u.replace(/^https:/, 'http:')); } catch { throw friendly(e, host); } } else throw friendly(e, host);
+  }
   if (!res.ok) throw new Error('Calendar link returned HTTP ' + res.status);
   const text = await res.text();
   if (!text.includes('BEGIN:VCALENDAR')) throw new Error('That link did not return an iCalendar file');
@@ -195,16 +317,23 @@ function friendly(e, host) {
 }
 
 async function testLive(id, fields) {
-  const host = { slack: 'slack.com', twilio_sms: 'api.twilio.com', twilio_calls: 'api.twilio.com', whatsapp: 'api.twilio.com' }[id] || (() => { try { return new URL(String(fields.icsUrl || '').replace(/^webcal:/i, 'https:')).host; } catch { return 'the calendar server'; } })();
+  const host = { slack: 'slack.com', twilio_sms: 'api.twilio.com', twilio_calls: 'api.twilio.com', whatsapp: 'api.twilio.com' }[id] || (() => { try { return new URL(String(calendarUrls(fields)[0] || '').replace(/^webcal:/i, 'https:')).host; } catch { return 'the calendar server'; } })();
   try { return await testLiveRaw(id, fields); } catch (e) { throw friendly(e, host); }
 }
 
 async function testLiveRaw(id, fields) {
   if (['icalendar', 'gcal', 'outlook'].includes(id)) {
-    if (!fields.icsUrl) throw new Error('Paste the calendar link first');
-    if (!/^(https?|webcal):\/\//i.test(fields.icsUrl.trim())) throw new Error('The calendar link should start with https:// or webcal://');
-    const ev = await fetchIcs(fields.icsUrl);
-    return `Calendar connected: ${ev.length} events found`;
+    const urls = calendarUrls(fields);
+    if (!urls.length) throw new Error('Paste a calendar link first');
+    const label = (i) => (urls.length > 1 ? `Calendar ${i + 1}: ` : '');
+    urls.forEach((u, i) => { if (!/^(https?|webcal):\/\//i.test(u)) throw new Error(`${label(i)}the link should start with https:// or webcal://`); });
+    let total = 0, upcoming = 0;
+    for (const [i, u] of urls.entries()) {
+      let ev;
+      try { ev = await fetchIcs(u); } catch (e) { let host = 'the calendar server'; try { host = new URL(u.replace(/^webcal:/i, 'https:')).host; } catch { /* bad link */ } const f = friendly(e, host); f.message = label(i) + f.message; throw f; }
+      total += ev.length; upcoming += ev.filter((x) => new Date(x.end) >= new Date() && new Date(x.start) <= new Date(Date.now() + 7 * 86400000)).length;
+    }
+    return `${urls.length === 1 ? 'Calendar' : urls.length + ' calendars'} connected: ${upcoming} events in the next 7 days`;
   }
   if (id === 'slack') {
     const r = await slackHistory(fields);
@@ -216,4 +345,4 @@ async function testLiveRaw(id, fields) {
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }
 
-module.exports = { list, get, fetchIcs, parseIcs, slackHistory, twilioList, testLive };
+module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, slackHistory, twilioList, testLive };

@@ -219,6 +219,37 @@ export async function registerClaude(done) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+// One input per value; a "list" field (calendar links) gets a row per link plus "Add another".
+function liveFieldHtml(f, saved) {
+  if (f.type === 'list') {
+    const vals = (saved[f.key] && saved[f.key].length ? saved[f.key] : ['']);
+    return `<div class="field"><label>${esc(f.label)}</label><div class="list-rows" data-list="${f.key}" data-ph="${esc(f.placeholder || '')}">${vals.map((v) => listRowHtml(v, f.placeholder)).join('')}</div>
+      <button type="button" class="btn small ghost add-row" data-add="${f.key}">${icon('plus')} ${esc(f.addLabel || 'Add another')}</button>${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`;
+  }
+  return `<div class="field"><label>${esc(f.label)}</label><input class="input" data-f="${f.key}" type="${f.secret ? 'password' : 'text'}" placeholder="${esc(f.placeholder || '')}" value="${esc(saved[f.key] || '')}">${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`;
+}
+function listRowHtml(v, ph) {
+  return `<div class="list-row"><input class="input" type="text" placeholder="${esc(ph || '')}" value="${esc(v || '')}" aria-label="Calendar link"><button type="button" class="icon-btn small" data-remove title="Remove this link" aria-label="Remove this link">${icon('x')}</button></div>`;
+}
+function wireListFields(m) {
+  const sync = (box) => { const rows = box.querySelectorAll('.list-row'); rows.forEach((r) => { r.querySelector('[data-remove]').hidden = rows.length < 2 && !r.querySelector('input').value; }); };
+  m.querySelectorAll('[data-list]').forEach((box) => {
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-remove]'); if (!b) return;
+      const rows = box.querySelectorAll('.list-row');
+      if (rows.length > 1) b.closest('.list-row').remove(); else rows[0].querySelector('input').value = '';
+      sync(box);
+    });
+    box.addEventListener('input', () => sync(box));
+    sync(box);
+  });
+  m.querySelectorAll('[data-add]').forEach((btn) => btn.onclick = () => {
+    const box = m.querySelector(`[data-list="${btn.dataset.add}"]`);
+    box.insertAdjacentHTML('beforeend', listRowHtml('', box.dataset.ph));
+    sync(box); box.lastElementChild.querySelector('input').focus();
+  });
+}
+
 export function connectModal(c, prof, done) {
   const s = c.status[prof];
   const canLive = c.live && c.live.includes('dashboard');
@@ -226,7 +257,7 @@ export function connectModal(c, prof, done) {
   modal(`${modalHead(`Connect ${esc(c.name)}`, `${profileName()} profile`)}
     <button class="choice ${!s || s.mode === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>
     ${canLive ? `<button class="choice ${s && s.mode === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
-      <div id="live-fields" ${s && s.mode === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => `<div class="field"><label>${esc(f.label)}</label><input class="input" data-f="${f.key}" type="${f.secret ? 'password' : 'text'}" placeholder="${esc(f.placeholder || '')}">${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`).join('')}</div>` : ''}
+      <div id="live-fields" ${s && s.mode === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.fields) || {})).join('')}</div>` : ''}
     ${viaClaude ? `<button class="choice ${s && s.mode === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>` : ''}
     <div class="modal-foot">${s ? '<button class="btn small danger" id="off" style="margin-right:auto">Disconnect</button>' : ''}<button class="btn ghost" data-close>Cancel</button><button class="btn connect" id="go">${icon('plug')} ${s ? 'Save' : 'Connect'}</button></div>`, {
     onMount: (m, close) => {
@@ -238,9 +269,11 @@ export function connectModal(c, prof, done) {
       });
       const off = m.querySelector('#off');
       if (off) off.onclick = async () => { await api('/connections/disconnect', { id: c.id, profile: prof }); toast(`${c.name} disconnected`); close(); done(); };
+      wireListFields(m);
       m.querySelector('#go').onclick = async (e) => {
         const fields = {};
         m.querySelectorAll('[data-f]').forEach((i) => { if (i.value.trim()) fields[i.dataset.f] = i.value.trim(); });
+        m.querySelectorAll('[data-list]').forEach((box) => { fields[box.dataset.list] = [...box.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean); });
         e.target.disabled = true; e.target.textContent = 'Connecting…';
         try {
           const r = await api('/connections', { id: c.id, profile: prof, mode, fields });

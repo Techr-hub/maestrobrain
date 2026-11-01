@@ -405,3 +405,11 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .hub-chip.on { border-style: solid; border-color: var(--green-line); color: var(--green); background: var(--green-bg); }
 .hub-chip.err { border-style: solid; border-color: #5a1020; color: #ff8095; }
 .sched-ev .progress { margin-top: 4px; }
+
+/* calendar links: one row per link */
+.list-rows { display: flex; flex-direction: column; gap: 8px; }
+.list-row { display: flex; gap: 8px; align-items: center; }
+.list-row .input { flex: 1; min-width: 0; }
+.list-row .icon-btn.small { width: 34px; height: 34px; flex: none; }
+.add-row { align-self: flex-start; margin-top: 2px; }
+

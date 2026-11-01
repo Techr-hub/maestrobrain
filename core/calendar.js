@@ -32,11 +32,14 @@ async function list({ profile, days = 7 } = {}) {
   events.push(...demo.calendarEvents(prof, now).filter((e) => demoSources.includes(e.source)));
   for (const s of CAL_SOURCES) {
     const c = conns[s];
-    if (c && c.mode === 'live' && c.fields && c.fields.icsUrl) {
-      const ev = await liveEvents(c.fields.icsUrl);
-      events.push(...ev.map((e) => ({ ...e, source: s, live: true })));
+    const urls = c && c.mode === 'live' ? connectors.calendarUrls(c.fields) : [];
+    if (urls.length) {
+      for (const u of urls) {
+        const ev = await liveEvents(u);
+        events.push(...ev.map((e) => ({ ...e, source: s, live: true, calendar: u })));
+      }
       // remember failures so the brain map and feed can show them
-      const err = errorFor(c.fields.icsUrl) || undefined;
+      const err = errorForConn(c) || undefined;
       if (err !== c.lastError) config.update((x) => { const k = x.connections[prof][s]; if (k) { if (err) k.lastError = err; else delete k.lastError; } });
     }
   }
@@ -47,4 +50,14 @@ async function list({ profile, days = 7 } = {}) {
 
 function errorFor(url) { const hit = icsCache.get(url); return hit && hit.error ? hit.error : null; }
 
-module.exports = { list, errorFor, CAL_SOURCES };
+// First failing link of a connection, labelled when there are several.
+function errorForConn(conn) {
+  const urls = conn ? connectors.calendarUrls(conn.fields) : [];
+  for (const [i, u] of urls.entries()) { const e = errorFor(u); if (e) return (urls.length > 1 ? `Calendar ${i + 1}: ` : '') + e; }
+  return null;
+}
+
+// Forget cached results so a newly saved link is fetched straight away.
+function forget(urls = []) { for (const u of urls) icsCache.delete(u); }
+
+module.exports = { list, errorFor, errorForConn, forget, CAL_SOURCES };
