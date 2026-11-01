@@ -12,10 +12,16 @@ It is built for the **Build Your Brain** workshop: everything works out of the b
 
 **You need:** [Node.js 18.17+](https://nodejs.org) (LTS), Chrome or Edge, and ideally [Obsidian](https://obsidian.md/download) and [Claude Desktop](https://claude.ai/download).
 
-1. **Download** the ZIP: [github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip](https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip) and unzip it somewhere you'll keep it (e.g. `Documents/maestro-brain`).
-2. **Start it:**
-   - **Mac:** double-click `Start Maestro.command`. (First time: right-click → **Open** → **Open**, because it was downloaded.)
-   - **Windows:** double-click `Start Maestro.bat`.
+1. **Install and start with one line** (recommended, no security prompts):
+   - **Mac:** open **Terminal** (⌘Space, type Terminal) and paste:
+     `curl -fsSL https://raw.githubusercontent.com/Techr-hub/maestrobrain/main/install.sh | bash`
+   - **Windows:** open **PowerShell** and paste:
+     `irm https://raw.githubusercontent.com/Techr-hub/maestrobrain/main/install.ps1 | iex`
+
+   This puts Maestro in `maestro-brain` in your home folder and starts it.
+2. **Or download the ZIP:** [main.zip](https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip), unzip it, then:
+   - **Mac:** macOS blocks double-clicking downloaded scripts. Open **Terminal**, type `bash ` (with a space), drag `Start Maestro.command` into the window and press Enter. To allow double-click from then on: try to open it once, then **System Settings → Privacy & Security → Open Anyway**.
+   - **Windows:** double-click `Start Maestro.bat` (if SmartScreen appears: **More info → Run anyway**).
    - **Or in a terminal:** `cd maestro-brain` then `npm start`.
 3. Your browser opens **http://localhost:4141**. Follow the 1-minute setup: your name, your role pack, and **Connect to Claude Desktop**.
 4. **Restart Claude Desktop** (fully quit, then reopen). Ask Claude: *"Use Maestro to brief me on my day."*
@@ -120,7 +126,8 @@ Morning brief, meeting prep (before each meeting), inbox triage (hourly) and end
 
 ```
 maestro-brain/
-├── Start Maestro.command / .bat   one-click start (Mac / Windows)
+├── install.sh / install.ps1        one-line installers (Mac / Windows)
+├── Start Maestro.command / .bat   start scripts (Mac / Windows)
 ├── bin/maestro.js                 CLI: start | setup | connect-claude | reset
 ├── server.js                      dashboard server + API (Node built-ins only)
 ├── mcp/server.js                  MCP server for Claude Desktop (stdio)
@@ -140,7 +147,7 @@ Everything runs on `localhost`. Your notes stay in the vault folder, settings an
 | Problem | Fix |
 |---|---|
 | "node is not recognized" / "command not found" | Install Node.js LTS from nodejs.org, then reopen the terminal |
-| Mac says the app is from an unidentified developer | Right-click `Start Maestro.command` → Open → Open |
+| Mac won't open `Start Maestro.command` ("Apple could not verify…" or "not allowed") | Use the one-line installer, or in Terminal run `bash ` + drag the file in. To allow double-click: System Settings → Privacy & Security → Open Anyway |
 | Port 4141 in use | Maestro picks the next free port automatically, so check the terminal for the URL |
 | Claude Desktop doesn't show *maestro* | Fully quit Claude Desktop (not just close the window) and reopen; check Settings → Developer for MCP logs |
 | Mic button does nothing | Use Chrome or Edge, allow microphone access for localhost |

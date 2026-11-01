@@ -2,7 +2,12 @@
 
 A run-sheet for the hands-on part of the 2.5-hour workshop. Participants leave with a working second brain on their own laptop, connected to Claude Desktop and open in Obsidian.
 
-**Share this link before the session:** https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip
+**Install command to put on the slide:**
+
+- Mac (Terminal): `curl -fsSL https://raw.githubusercontent.com/Techr-hub/maestrobrain/main/install.sh | bash`
+- Windows (PowerShell): `irm https://raw.githubusercontent.com/Techr-hub/maestrobrain/main/install.ps1 | iex`
+
+ZIP fallback: https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip
 
 ## Before the day (send to participants)
 
@@ -10,7 +15,7 @@ A run-sheet for the hands-on part of the 2.5-hour workshop. Participants leave w
 2. Install **Claude Desktop** (claude.ai/download) and sign in.
 3. Install **Obsidian** (obsidian.md/download).
 4. Use **Chrome or Edge** for the dashboard (needed for voice).
-5. Optional: download the ZIP in advance. It's small and needs no `npm install`, so conference Wi-Fi is fine.
+5. Optional: run the install command in advance. It's small and needs no `npm install`, so conference Wi-Fi is fine.
 
 Facilitator check: run `npm test` on a clean machine the day before. It should print `24 passed, 0 failed`.
 
@@ -32,8 +37,8 @@ Facilitator check: run `npm test` on a clean machine the day before. It should p
 ## Build Your Brain (45 min)
 
 ### 1. Download and start (10 min)
-- Unzip to `Documents/maestro-brain`.
-- **Mac:** right-click `Start Maestro.command` → Open → Open. **Windows:** double-click `Start Maestro.bat` (if SmartScreen appears: *More info → Run anyway*).
+- Paste the one-line install command for your OS (on the slide). It downloads, installs to `~/maestro-brain` and starts Maestro.
+- ZIP users on **Mac**: macOS blocks double-clicking downloaded scripts. In Terminal type `bash ` and drag `Start Maestro.command` in, then Enter. **Windows**: double-click `Start Maestro.bat` (SmartScreen: *More info → Run anyway*).
 - The browser opens `http://localhost:4141`. Complete onboarding: name, role pack, Connect to Claude Desktop.
 - ✅ Checkpoint: everyone sees the brain map and a full Intelligence Feed.
 
@@ -80,8 +85,8 @@ Stretch goal for fast finishers: ask the agent to **save the answer to the vault
 | Symptom | Fix |
 |---|---|
 | `node` not found | Install Node LTS, then open a **new** terminal / re-run the starter |
-| Mac "unidentified developer" | Right-click → Open, or System Settings → Privacy & Security → Open Anyway |
-| Mac starter opens and closes | Run in Terminal: `cd ~/Documents/maestro-brain && node bin/maestro.js start` |
+| Mac won't open `Start Maestro.command` | Use the one-line installer, or `bash ` + drag the file into Terminal. For double-click: System Settings → Privacy & Security → Open Anyway |
+| Mac starter opens and closes | Run in Terminal: `cd ~/maestro-brain && npm start` |
 | Windows: Claude Desktop from Microsoft Store | Maestro writes both config locations automatically; quit and reopen Claude |
 | Claude has no *maestro* | Run `npm run connect-claude`, then fully quit Claude. Check Settings → Developer for logs |
 | Mic does nothing | Chrome/Edge only; click the 🔒 in the address bar → allow microphone |

@@ -8,7 +8,7 @@ const { createZip } = require('../core/zip');
 const ROOT = path.join(__dirname, '..');
 const version = require('../package.json').version;
 const SKIP = [/^\.git(\/|$)/, /^node_modules(\/|$)/, /^data(\/|$)/, /^dist(\/|$)/, /^vault\/Daily\/.+\.md$/, /^vault\/Inbox\/.+\.md$/, /\.DS_Store$/, /^vault\/\.obsidian\/workspace/];
-const EXEC = new Set(['Start Maestro.command', 'bin/maestro.js', 'mcp/server.js']);
+const EXEC = new Set(['Start Maestro.command', 'install.sh', 'bin/maestro.js', 'mcp/server.js']);
 
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
