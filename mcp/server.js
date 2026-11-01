@@ -188,6 +188,37 @@ const TOOLS = [
     run: async (args) => `Saved ${agents.createAgent(args)}`,
   },
   {
+    name: 'add_feed_items',
+    description: 'Push notifications into the Maestro Intelligence Feed for a source the user connected in Claude Desktop (Slack, Linear, Jira, Notion, Figma, Google Drive, GitHub, Gmail…). Call this after reading new messages or activity with that connector. Items are de-duplicated by id, so re-sending is safe.',
+    inputSchema: { type: 'object', properties: {
+      source: { type: 'string', description: 'Maestro connector id, e.g. slack, linear, jira, notion, figma, gdrive, github, gmail, outlook' },
+      items: { type: 'array', maxItems: 50, items: { type: 'object', properties: {
+        id: { type: 'string', description: 'Stable id from the source (message ts, issue key, URL…)' },
+        title: { type: 'string', description: 'Short headline, e.g. "Alex Chen in #launch" or "PLAT-88 moved to QA"' },
+        text: { type: 'string', description: 'The message or a one-line excerpt' },
+        time: { type: 'string', description: 'ISO time it happened' },
+        summary: { type: 'string', description: 'Why it matters, one short line' },
+        priority: { type: 'string', enum: ['High', 'Medium', ''] },
+        action: { type: 'string', description: 'Suggested next step, e.g. "Reply in thread"' },
+        url: { type: 'string' },
+      }, required: ['title'], additionalProperties: false } },
+    }, required: ['source', 'items'], additionalProperties: false },
+    run: async ({ source, items }) => {
+      const def = connectors.get(source);
+      const cfg = config.load();
+      const profile = Object.keys(cfg.connections).find((p) => cfg.connections[p][source] && cfg.connections[p][source].mode === 'claude') || cfg.profile;
+      let added = 0;
+      for (const i of items) {
+        const ts = Date.parse(i.time || '') || Date.now();
+        const it = feed.add({ externalId: `claude:${source}:${i.id || i.url || i.title + '|' + (i.time || '')}`, ts, source, profile, category: (def && def.category) || 'INSIGHT', title: i.title, quote: i.text ? '"' + String(i.text).slice(0, 240) + '"' : '', summary: i.summary || '', priority: i.priority || '', actions: i.action ? [i.action] : [], url: i.url || '', viaClaude: true, unread: Date.now() - ts < 24 * 3600000 });
+        if (it) added++;
+      }
+      const conn = (cfg.connections[profile] || {})[source];
+      const note = conn ? '' : ` Note: ${def ? def.name : source} is not connected in Maestro's ${profile} profile yet, so these stay hidden until the user connects it with "I connected it in Claude Desktop".`;
+      return `Added ${added} new item${added === 1 ? '' : 's'} to the ${profile} feed (${items.length - added} already there).${note}`;
+    },
+  },
+  {
     name: 'list_connections',
     description: 'Show which sources are connected to the brain in each profile (demo or live).',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -203,6 +234,24 @@ const TOOLS = [
     run: async ({ profile }) => { config.update((c) => { c.profile = profile; }); return `Profile is now ${profile}`; },
   },
 ];
+
+// What to read for each source the user marked "I connected it in Claude Desktop".
+function syncPrompt() {
+  const cfg = config.load();
+  const lines = [];
+  for (const [prof, conns] of Object.entries(cfg.connections)) {
+    for (const [id, c] of Object.entries(conns)) {
+      if (c.mode !== 'claude') continue;
+      const def = connectors.get(id) || { name: id };
+      const chans = c.fields && Array.isArray(c.fields.channels) && c.fields.channels.length ? c.fields.channels.map((x) => '#' + String(x).replace(/^#/, '')).join(', ') : '';
+      lines.push(`- ${def.name} (source "${id}", ${prof} profile)` + (id === 'slack' ? `: my mentions and DMs${chans ? `, plus new messages in ${chans}` : ''}` : ': new activity that involves me'));
+    }
+  }
+  if (!lines.length) return 'No sources are marked as connected through Claude Desktop in Maestro yet. Tell me to open Maestro → MCP Connections, pick a source and choose "I connected it in Claude Desktop".';
+  return ['Bring my latest activity into the Maestro feed.', '', 'For each source below, use your connector for it to read what happened in the last 24 hours:', ...lines, '',
+    'Then call the Maestro add_feed_items tool once per source with up to 30 items, newest first. For each item: id = the message ts / issue key / URL, title = "<person> in #<channel>" (or the issue / doc name), text = the message (one or two lines), time = ISO time, summary = why it matters if anything, priority = High when someone is waiting on me, otherwise Medium for direct mentions and DMs, empty for the rest.',
+    'Skip messages I sent myself. If a connector is not available in this chat, say which one and continue with the rest. Finish with one line: how many items you added per source.'].join('\n');
+}
 
 function send(msg) { process.stdout.write(JSON.stringify(msg) + '\n'); }
 function reply(id, result) { send({ jsonrpc: '2.0', id, result }); }
@@ -243,6 +292,7 @@ async function handle(msg) {
       case 'prompts/list': {
         const arg = [{ name: 'focus', description: 'Optional extra focus or details', required: false }];
         return reply(id, { prompts: [
+          { name: 'sync-claude-sources', title: 'Sync my Claude connectors into Maestro', description: 'Read new activity from the sources you connected in Claude Desktop (Slack, Linear, Jira…) and put it in the Maestro feed.', arguments: arg },
           ...agents.skills().map((s) => ({ name: 'skill-' + s.slug, title: 'Skill: ' + s.name, description: s.description || s.name, arguments: arg })),
           ...agents.agents().map((a) => ({ name: 'agent-' + a.handle.toLowerCase(), title: `Agent: @${a.handle}`, description: a.description || a.role || a.name, arguments: arg })),
         ] });
@@ -250,6 +300,7 @@ async function handle(msg) {
       case 'prompts/get': {
         const name = String(params.name || '');
         const focus = params.arguments && params.arguments.focus ? `\n\nFocus: ${params.arguments.focus}` : '';
+        if (name === 'sync-claude-sources') return reply(id, { description: 'Sync Claude connectors into Maestro', messages: [{ role: 'user', content: { type: 'text', text: syncPrompt() + focus } }] });
         if (name.startsWith('agent-')) {
           const a = agents.findAgent(name.slice(6));
           if (!a) return fail(id, -32602, 'Unknown prompt');

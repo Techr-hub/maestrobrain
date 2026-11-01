@@ -136,6 +136,8 @@ async function main() {
     send({ jsonrpc: '2.0', id: 4, method: 'prompts/list' });
     send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'maestro_brief', arguments: {} } });
     send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'get_agent', arguments: { handle: 'Maestro' } } });
+    send({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'add_feed_items', arguments: { source: 'slack', items: [{ id: 'st-1', title: 'Alex Chen in #launch', text: 'Can you approve the copy?' }] } } });
+    send({ jsonrpc: '2.0', id: 8, method: 'prompts/get', params: { name: 'sync-claude-sources' } });
     setTimeout(() => {
       ok('initialize handshake', replies[1] && replies[1].result && replies[1].result.serverInfo.name === 'maestro');
       ok('tools listed', replies[2] && replies[2].result.tools.length >= 15);
@@ -143,6 +145,8 @@ async function main() {
       ok('skills + agents exposed as prompts', replies[4] && replies[4].result.prompts.some((p) => p.name.startsWith('skill-')) && replies[4].result.prompts.some((p) => p.name.startsWith('agent-')));
       ok('maestro_brief returns context', replies[5] && /CALENDAR/.test(replies[5].result.content[0].text));
       ok('get_agent loads an agent', replies[6] && /chief of staff/i.test(replies[6].result.content[0].text));
+      ok('add_feed_items puts Claude connector activity in the feed', replies[7] && /Added 1 new item/.test(replies[7].result.content[0].text));
+      ok('sync prompt for Claude-connected sources', replies[8] && /add_feed_items|No sources/.test(replies[8].result.messages[0].content.text));
       child.kill();
       resolve();
     }, 2500);

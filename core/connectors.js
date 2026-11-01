@@ -51,10 +51,13 @@ const CONNECTORS = [
     description: 'Mentions, DMs and channel activity.',
     live: 'dashboard+claude',
     liveFields: [
-      { key: 'token', label: 'Bot token (xoxb-…)', placeholder: 'xoxb-…', secret: true, help: 'api.slack.com/apps → Create app → OAuth & Permissions → add channels:history, channels:read, users:read → install → copy Bot User OAuth Token. Invite the bot to the channels.' },
-      { key: 'channels', label: 'Channel IDs (comma separated)', placeholder: 'C0123ABCD, C0456EFGH' },
+      { key: 'token', label: 'Slack token (xoxp-… or xoxb-…)', placeholder: 'xoxp-… or xoxb-…', secret: true, help: 'api.slack.com/apps → Create New App → OAuth & Permissions → add the scopes channels:read, channels:history, groups:read, groups:history, users:read (bot tokens also need channels:join) → Install to Workspace → copy the User OAuth Token (sees every channel you are in) or the Bot User OAuth Token.' },
+      { key: 'channels', type: 'channels', label: 'Channels to show notifications from', help: 'Load your channels, then tick the ones Maestro should bring into the feed.' },
     ],
-    claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Slack so Claude can search and post.',
+    claudeFields: [
+      { key: 'channels', type: 'list', label: 'Channels to follow (optional)', placeholder: '#general', addLabel: 'Add another channel', help: 'Leave empty to follow your mentions and DMs only. Claude reads these through its Slack connector when you run "Sync my Claude connectors" in Claude Desktop.' },
+    ],
+    claudeSetup: 'Claude Desktop → Settings → Connectors → Slack. Then, in Claude Desktop, run the "Sync my Claude connectors into Maestro" prompt (+ menu → Maestro) to bring messages into the feed.',
   },
   {
     id: 'twilio_sms', name: 'Text messages (Twilio)', short: 'Text', icon: 'message-square', color: '#ff4d8d', group: 'foundation', category: 'SMS',
@@ -305,21 +308,72 @@ async function calendlyInvitees(token, eventUri) {
   try { const r = await calendlyGet(token, eventUri + '/invitees?count=5'); return (r.collection || []).map((i) => i.name || i.email).filter(Boolean); } catch { return []; }
 }
 
-async function slackHistory({ token, channels }) {
-  const ids = String(channels || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (!token) throw new Error('Slack bot token is missing');
-  const auth = await (await fetch('https://slack.com/api/auth.test', { headers: { Authorization: 'Bearer ' + token } })).json();
-  if (!auth.ok) throw new Error('Slack: ' + auth.error);
-  const out = [];
-  for (const ch of ids.slice(0, 5)) {
-    const r = await (await fetch(`https://slack.com/api/conversations.history?channel=${encodeURIComponent(ch)}&limit=8`, { headers: { Authorization: 'Bearer ' + token } })).json();
-    if (!r.ok) throw new Error(`Slack channel ${ch}: ${r.error}`);
-    for (const m of r.messages || []) {
-      if (!m.text) continue;
-      out.push({ externalId: `slack:${ch}:${m.ts}`, ts: Math.round(parseFloat(m.ts) * 1000), channel: ch, user: m.user || m.username || 'someone', text: m.text });
-    }
+async function slackApi(token, method, params = {}) {
+  if (!token) throw new Error('Slack token is missing');
+  const res = await fetch(`${SLACK_API}/${method}?${new URLSearchParams(params)}`, { headers: { Authorization: 'Bearer ' + token } });
+  const r = await res.json();
+  if (!r.ok) {
+    const hint = { invalid_auth: 'the token is not valid', not_authed: 'the token is missing', missing_scope: `the app needs the ${r.needed || 'right'} scope`, not_in_channel: 'the bot is not in that channel (type /invite @YourApp in it)', channel_not_found: 'that channel was not found or the token cannot see it', token_revoked: 'the token was revoked' }[r.error];
+    throw new Error(`Slack: ${hint || r.error}`);
   }
-  return { team: auth.team, messages: out };
+  return r;
+}
+const SLACK_API = process.env.MAESTRO_SLACK_API || 'https://slack.com/api';
+
+// Every channel the token can see, for the picker on the Slack card.
+async function slackChannels(token) {
+  const auth = await slackApi(token, 'auth.test');
+  const out = [];
+  let cursor = '';
+  for (let page = 0; page < 10; page++) {
+    let r;
+    try { r = await slackApi(token, 'conversations.list', { types: 'public_channel,private_channel', exclude_archived: 'true', limit: '200', ...(cursor ? { cursor } : {}) }); } catch (e) {
+      if (/scope/.test(e.message) && page === 0) r = await slackApi(token, 'conversations.list', { types: 'public_channel', exclude_archived: 'true', limit: '200' }); else throw e;
+    }
+    for (const c of r.channels || []) out.push({ id: c.id, name: c.name, private: !!c.is_private, member: !!c.is_member, members: c.num_members || 0 });
+    cursor = r.response_metadata && r.response_metadata.next_cursor;
+    if (!cursor) break;
+  }
+  out.sort((a, b) => (b.member - a.member) || a.name.localeCompare(b.name));
+  return { team: auth.team, user: auth.user, userId: auth.user_id, bot: /^xoxb-/.test(token), channels: out };
+}
+
+const slackUsers = new Map(); // user id -> display name
+async function slackUserName(token, id) {
+  if (!id) return 'someone';
+  if (slackUsers.has(id)) return slackUsers.get(id);
+  let name = id;
+  try { const r = await slackApi(token, 'users.info', { user: id }); const u = r.user || {}; name = (u.profile && (u.profile.real_name || u.profile.display_name)) || u.real_name || u.name || id; } catch {}
+  slackUsers.set(id, name);
+  return name;
+}
+const slackChannelList = (channels) => (Array.isArray(channels) ? channels : String(channels || '').split(',')).map((c) => (typeof c === 'string' ? { id: c.trim(), name: c.trim() } : c)).filter((c) => c && c.id);
+
+// Recent messages from the channels picked on the Slack card.
+async function slackHistory({ token, channels }) {
+  const auth = await slackApi(token, 'auth.test');
+  const picked = slackChannelList(channels).slice(0, 25);
+  const out = [];
+  const errors = [];
+  const oldest = String(Math.floor((Date.now() - 3 * 86400000) / 1000));
+  for (const ch of picked) {
+    try {
+      let r;
+      try { r = await slackApi(token, 'conversations.history', { channel: ch.id, limit: '15', oldest }); } catch (e) {
+        if (!/not in that channel/.test(e.message)) throw e;
+        await slackApi(token, 'conversations.join', { channel: ch.id }); // bot tokens: join public channels automatically
+        r = await slackApi(token, 'conversations.history', { channel: ch.id, limit: '15', oldest });
+      }
+      for (const m of r.messages || []) {
+        if (!m.text || (m.subtype && !['bot_message', 'thread_broadcast', 'file_share'].includes(m.subtype))) continue;
+        let text = m.text;
+        for (const [, uid] of text.matchAll(/<@([A-Z0-9]+)>/g)) text = text.replace(`<@${uid}>`, '@' + (await slackUserName(token, uid)));
+        text = text.replace(/<#[A-Z0-9]+\|([^>]+)>/g, '#$1').replace(/<(https?:[^|>]+)\|([^>]+)>/g, '$2').replace(/<(https?:[^>]+)>/g, '$1');
+        out.push({ externalId: `slack:${ch.id}:${m.ts}`, ts: Math.round(parseFloat(m.ts) * 1000), channel: ch.id, channelName: ch.name, user: m.user ? await slackUserName(token, m.user) : (m.username || 'a bot'), mine: m.user === auth.user_id, mentionsMe: m.text.includes(`<@${auth.user_id}>`), text });
+      }
+    } catch (e) { errors.push(`#${ch.name}: ${e.message.replace(/^Slack: /, '')}`); }
+  }
+  return { team: auth.team, messages: out, errors, channels: picked.length };
 }
 
 async function twilioList({ accountSid, authToken, number }, kind) {
@@ -378,7 +432,9 @@ async function testLiveRaw(id, fields) {
   }
   if (id === 'slack') {
     const r = await slackHistory(fields);
-    return `Slack workspace "${r.team}" connected: ${r.messages.length} recent messages`;
+    if (!r.channels) return `Slack workspace "${r.team}" connected. Pick channels on the Slack card to see notifications`;
+    if (r.errors.length === r.channels) throw new Error(`Slack connected to "${r.team}", but no channel could be read. ${r.errors[0]}`);
+    return `Slack workspace "${r.team}" connected: ${r.messages.length} messages from the last 3 days in ${r.channels} channel${r.channels === 1 ? '' : 's'}${r.errors.length ? `. Skipped ${r.errors.join('; ')}` : ''}`;
   }
   if (id === 'twilio_sms') { const r = await twilioList(fields, 'messages'); return `Twilio connected: ${r.length} recent messages`; }
   if (id === 'whatsapp') { const r = (await twilioList(fields, 'messages')).filter((m) => /^whatsapp:/.test(m.from || m.to || '')); return `WhatsApp connected: ${r.length} recent messages`; }
@@ -386,4 +442,4 @@ async function testLiveRaw(id, fields) {
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }
 
-module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, slackHistory, twilioList, testLive };
+module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, slackHistory, slackChannels, twilioList, testLive };

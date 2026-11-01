@@ -62,7 +62,7 @@ function readBody(req) {
 function savedFields(def, conn) {
   if (!conn || !conn.fields) return {};
   const out = {};
-  for (const f of def.liveFields || []) {
+  for (const f of (conn.mode === 'claude' ? def.claudeFields : def.liveFields) || []) {
     if (f.type === 'list') out[f.key] = f.key === 'icsUrls' ? connectors.calendarUrls(conn.fields) : (conn.fields[f.key] || []);
     else if (conn.fields[f.key]) out[f.key] = f.secret ? '••••••••' : conn.fields[f.key];
   }
@@ -177,12 +177,22 @@ route('POST', '/api/connections', async (_q, body) => {
     const merged = { ...((prev && prev.fields) || {}) };
     for (const [k, v] of Object.entries(fields)) if (Array.isArray(v) || (v && !String(v).startsWith('••'))) merged[k] = v;
     if (Array.isArray(fields.icsUrls)) delete merged.icsUrl; // the list replaces the old single link
-    c.connections[profile][id] = { mode, connectedAt: Date.now(), fields: mode === 'live' ? merged : undefined, message };
+    const claudeKeys = (def.claudeFields || []).map((f) => f.key);
+    const claudeFields = Object.fromEntries(claudeKeys.filter((k) => fields[k] !== undefined).map((k) => [k, fields[k]]));
+    c.connections[profile][id] = { mode, connectedAt: Date.now(), fields: mode === 'live' ? merged : mode === 'claude' && claudeKeys.length ? claudeFields : undefined, message };
   });
   if (mode === 'live') calendar.forget(connectors.calendarUrls(fields));
-  const surfaced = mode !== 'live' ? feed.surfaceSource(id, profile) : 0;
+  const surfaced = mode === 'demo' ? feed.surfaceSource(id, profile) : 0;
   if (mode === 'live') { feed.pollLive().catch(() => {}); calwatch.check().catch(() => {}); }
   return { ok: true, message, surfaced };
+});
+// Slack channel picker: uses the token typed in the form, or the one already saved.
+route('POST', '/api/slack/channels', async (_q, body) => {
+  const cfg = config.load();
+  const saved = ((cfg.connections[body.profile || cfg.profile] || {}).slack || {}).fields || {};
+  const token = body.token && !String(body.token).startsWith('••') ? body.token : saved.token;
+  if (!token) throw new Error('Paste your Slack token first');
+  return connectors.slackChannels(token);
 });
 route('POST', '/api/connections/disconnect', async (_q, body) => {
   config.update((c) => { delete c.connections[body.profile || c.profile][body.id]; });

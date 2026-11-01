@@ -221,6 +221,13 @@ export async function registerClaude(done) {
 
 // One input per value; a "list" field (calendar links) gets a row per link plus "Add another".
 function liveFieldHtml(f, saved) {
+  if (f.type === 'channels') {
+    const picked = Array.isArray(saved[f.key]) ? saved[f.key].filter((c) => c && c.id) : [];
+    return `<div class="field"><label>${esc(f.label)}</label>
+      <div class="chan-bar"><button type="button" class="btn small" data-load-channels="${f.key}">${icon('hash')} ${picked.length ? 'Change channels' : 'Load my channels'}</button>
+        <input class="input chan-search" type="search" placeholder="Filter channels" aria-label="Filter channels" hidden><span class="chan-count"></span></div>
+      <div class="chan-list" data-channels="${f.key}">${picked.map((c) => chanRowHtml(c, true)).join('')}</div>${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`;
+  }
   if (f.type === 'list') {
     const vals = (saved[f.key] && saved[f.key].length ? saved[f.key] : ['']);
     return `<div class="field"><label>${esc(f.label)}</label><div class="list-rows" data-list="${f.key}" data-ph="${esc(f.placeholder || '')}">${vals.map((v) => listRowHtml(v, f.placeholder)).join('')}</div>
@@ -228,8 +235,37 @@ function liveFieldHtml(f, saved) {
   }
   return `<div class="field"><label>${esc(f.label)}</label><input class="input" data-f="${f.key}" type="${f.secret ? 'password' : 'text'}" placeholder="${esc(f.placeholder || '')}" value="${esc(saved[f.key] || '')}">${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`;
 }
+function chanRowHtml(c, on) {
+  return `<label class="chan-row"><input type="checkbox" ${on ? 'checked' : ''} data-id="${esc(c.id)}" data-name="${esc(c.name)}"><span>${c.private ? icon('key') : '#'} ${esc(c.name)}</span>${c.members ? `<small>${c.members} members${c.member === false ? ' · not joined' : ''}</small>` : ''}</label>`;
+}
+// Slack: fetch every channel the token can see and let the user tick the ones to follow.
+function wireChannelPickers(m, c, prof) {
+  m.querySelectorAll('[data-load-channels]').forEach((btn) => {
+    const key = btn.dataset.loadChannels;
+    const box = m.querySelector(`[data-channels="${key}"]`);
+    const search = btn.parentElement.querySelector('.chan-search');
+    const count = btn.parentElement.querySelector('.chan-count');
+    const upd = () => { count.textContent = `${box.querySelectorAll('input:checked').length} selected`; };
+    box.addEventListener('change', upd); upd();
+    btn.onclick = async () => {
+      const tok = m.querySelector('[data-f="token"]');
+      btn.disabled = true; btn.textContent = 'Loading…';
+      try {
+        const r = await api('/slack/channels', { token: tok ? tok.value.trim() : '', profile: prof });
+        const on = new Set([...box.querySelectorAll('input:checked')].map((i) => i.dataset.id));
+        box.innerHTML = r.channels.map((ch) => chanRowHtml(ch, on.has(ch.id))).join('') || '<span class="help">This token cannot see any channels yet.</span>';
+        search.hidden = r.channels.length < 8;
+        btn.innerHTML = `${icon('refresh')} Reload`;
+        toast(`${r.channels.length} channels in ${r.team}${r.bot ? '. A bot token joins public channels on its own; invite it to private ones' : ''}`);
+        upd();
+      } catch (e) { toast(e.message, 'error'); btn.innerHTML = `${icon('hash')} Load my channels`; }
+      btn.disabled = false;
+    };
+    search.oninput = () => { const q = search.value.toLowerCase(); box.querySelectorAll('.chan-row').forEach((r) => { r.hidden = !r.querySelector('input').dataset.name.toLowerCase().includes(q); }); };
+  });
+}
 function listRowHtml(v, ph) {
-  return `<div class="list-row"><input class="input" type="text" placeholder="${esc(ph || '')}" value="${esc(v || '')}" aria-label="Calendar link"><button type="button" class="icon-btn small" data-remove title="Remove this link" aria-label="Remove this link">${icon('x')}</button></div>`;
+  return `<div class="list-row"><input class="input" type="text" placeholder="${esc(ph || '')}" value="${esc(v || '')}" aria-label="Entry"><button type="button" class="icon-btn small" data-remove title="Remove" aria-label="Remove">${icon('x')}</button></div>`;
 }
 function wireListFields(m) {
   const sync = (box) => { const rows = box.querySelectorAll('.list-row'); rows.forEach((r) => { r.querySelector('[data-remove]').hidden = rows.length < 2 && !r.querySelector('input').value; }); };
@@ -258,8 +294,9 @@ export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real'
   modal(`${modalHead(`Connect ${esc(c.name)}`, `${profileName()} profile`)}
     ${noDemo && first !== 'demo' ? '' : `<button class="choice ${first === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>`}
     ${canLive ? `<button class="choice ${first === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
-      <div id="live-fields" ${first === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.fields) || {})).join('')}</div>` : ''}
-    ${viaClaude ? `<button class="choice ${first === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>` : ''}
+      <div id="live-fields" ${first === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.mode === 'live' && s.fields) || {})).join('')}</div>` : ''}
+    ${viaClaude ? `<button class="choice ${first === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>
+      ${(c.claudeFields || []).length ? `<div id="claude-fields" ${first === 'claude' ? '' : 'hidden'} style="margin:4px 0 10px">${c.claudeFields.map((f) => liveFieldHtml(f, (s && s.mode === 'claude' && s.fields) || {})).join('')}</div>` : ''}` : ''}
     <div class="modal-foot">${s ? '<button class="btn small danger" id="off" style="margin-right:auto">Disconnect</button>' : ''}<button class="btn ghost" data-close>Cancel</button><button class="btn connect" id="go">${icon('plug')} ${s ? 'Save' : 'Connect'}</button></div>`, {
     onMount: (m, close) => {
       let mode = first;
@@ -267,14 +304,18 @@ export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real'
         mode = b.dataset.mode;
         m.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
         const lf = m.querySelector('#live-fields'); if (lf) lf.hidden = mode !== 'live';
+        const cf = m.querySelector('#claude-fields'); if (cf) cf.hidden = mode !== 'claude';
       });
       const off = m.querySelector('#off');
       if (off) off.onclick = async () => { await api('/connections/disconnect', { id: c.id, profile: prof }); toast(`${c.name} disconnected`); close(); done(); };
       wireListFields(m);
+      wireChannelPickers(m, c, prof);
       m.querySelector('#go').onclick = async (e) => {
         const fields = {};
-        m.querySelectorAll('[data-f]').forEach((i) => { if (i.value.trim()) fields[i.dataset.f] = i.value.trim(); });
-        m.querySelectorAll('[data-list]').forEach((box) => { fields[box.dataset.list] = [...box.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean); });
+        const scope = m.querySelector(mode === 'claude' ? '#claude-fields' : '#live-fields') || m;
+        scope.querySelectorAll('[data-f]').forEach((i) => { if (i.value.trim()) fields[i.dataset.f] = i.value.trim(); });
+        scope.querySelectorAll('[data-list]').forEach((box) => { fields[box.dataset.list] = [...box.querySelectorAll('input')].map((i) => i.value.trim()).filter(Boolean); });
+        scope.querySelectorAll('[data-channels]').forEach((box) => { fields[box.dataset.channels] = [...box.querySelectorAll('input:checked')].map((i) => ({ id: i.dataset.id, name: i.dataset.name })); });
         e.target.disabled = true; e.target.textContent = 'Connecting…';
         try {
           const r = await api('/connections', { id: c.id, profile: prof, mode, fields });

@@ -513,6 +513,12 @@ function renderFeed(animateFirst) {
   if (S.sourceView) return renderSourceView();
   const list = $('#feed-list');
   const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source) && (S.category === 'all' || i.category === S.category));
+  const cfgNow = S.state.config, srcConn = S.source !== 'all' ? (cfgNow.connections[cfgNow.profile] || {})[S.source] : null;
+  if (!items.length && srcConn && srcConn.mode === 'claude') { showSource(S.source); return; } // shows how to sync it from Claude
+  if (!items.length && srcConn && srcConn.mode === 'live' && S.source === 'slack' && !(srcConn.fields && srcConn.fields.channels && srcConn.fields.channels.length)) {
+    list.innerHTML = `<div class="feed-empty">${icon('hash')}<br>Slack is connected, but no channels are picked yet.<br>Open the Slack card on <a href="#connections" data-go>MCP Connections</a> and tick the channels to follow.</div>`;
+    return;
+  }
   if (!items.length) {
     list.innerHTML = `<div class="feed-empty">${icon('plug')}<br>No activity yet.<br>Connect sources on the <a href="#connections" data-go>MCP Connections</a> page and notifications will stream in here.</div>`;
     const go = list.querySelector('[data-go]'); if (go) go.onclick = (e) => { e.preventDefault(); navigate('connections'); };
@@ -588,7 +594,17 @@ function renderSourceView() {
   const items = d.connected ? S.feed.filter((i) => i.source === d.id) : [];
   if (d.connected) {
     html += `<div class="section-title" style="margin:14px 4px 6px">Recent activity</div>`;
-    html += items.length ? items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">No recent activity from ${esc(conn.name)}.</div>`;
+    if (!items.length && d.mode === 'claude') {
+      const canLive = conn.live && conn.live.includes('dashboard');
+      html += `<div class="activity notice" style="--c:#8b5cff">
+        <div class="agent-icon">${icon('sparkles')}</div>
+        <div class="activity-details">
+          <span class="a-time">Maestro</span>
+          <div class="a-title">Ask Claude to bring ${esc(conn.name)} in</div>
+          <div class="a-quote">Claude Desktop's ${esc(conn.name)} connector only works inside Claude, so Maestro can't read it by itself. In Claude Desktop, click <b>+</b> → <b>Maestro</b> → <b>Sync my Claude connectors into Maestro</b>, or just type the request below. New items land here a few seconds later.${canLive ? ` To stream ${esc(conn.name)} automatically instead, connect it live with a token.` : ''}</div>
+          <div class="a-actions"><button class="btn small" id="src-copy">${icon('copy')} Copy request for Claude</button>${canLive ? `<button class="btn small connect" id="src-connect">${icon('plug')} Connect live instead</button>` : ''}</div>
+        </div></div>`;
+    } else html += items.length ? items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">No recent activity from ${esc(conn.name)}.</div>`;
   }
   list.innerHTML = html;
   list.querySelector('#src-back').onclick = closeSource;
@@ -597,6 +613,8 @@ function renderSourceView() {
     const c = S.state.connectors.find((x) => x.id === d.id);
     connectModal(c, S.state.config.profile, async () => { await afterChange({ graph: false }); showSource(d.id); });
   };
+  const cp = list.querySelector('#src-copy');
+  if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(`Sync my ${conn.name} into Maestro: read my latest ${conn.name} activity with your connector and add it with the Maestro add_feed_items tool.`); toast('Copied. Paste it into Claude Desktop.'); } catch { toast('Copy failed. Use the Maestro prompt in Claude Desktop instead.', 'error'); } };
   list.querySelectorAll('[data-note]').forEach((el) => el.onclick = () => openNote(el.dataset.note));
   list.querySelectorAll('.activity[data-id]').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);

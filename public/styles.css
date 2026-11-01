@@ -423,3 +423,17 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .onb-steps { margin-right: auto; font-size: 12px; color: var(--soft); align-self: center; }
 @media (max-width: 640px) { .setup-groups { grid-template-columns: 1fr; } }
 
+
+/* Slack channel picker */
+.chan-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.chan-bar .chan-search { flex: 1; min-width: 140px; height: 32px; }
+.chan-count { color: var(--muted); font-size: 12px; }
+.chan-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--line, #15304a); border-radius: 8px; }
+.chan-list:empty { display: none; }
+.chan-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line, #15304a); cursor: pointer; font-size: 13px; }
+.chan-row:last-child { border-bottom: 0; }
+.chan-row span { flex: 1; display: flex; align-items: center; gap: 6px; }
+.chan-row span svg { width: 13px; height: 13px; }
+.chan-row small { color: var(--muted); font-size: 11px; }
+.chan-row[hidden] { display: none; }
+.field label.chan-row { text-transform: none; letter-spacing: normal; font-family: inherit; color: var(--text, inherit); margin: 0; }

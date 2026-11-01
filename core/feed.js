@@ -61,7 +61,7 @@ function visible(items, cfg, profile) {
     if (i.source === 'system') return true;
     const conn = conns[i.source];
     if (!conn) return false;
-    if (i.demo && conn.mode === 'live') return false; // live sources hide their demo data
+    if (i.demo && conn.mode !== 'demo') return false; // live and Claude-connected sources hide their demo data
     return true;
   });
 }
@@ -148,7 +148,12 @@ async function pollLive() {
       try {
         if (id === 'slack') {
           const { messages } = await connectors.slackHistory(conn.fields);
-          for (const m of messages) add({ externalId: m.externalId, ts: m.ts, source: 'slack', profile, category: 'CONVERSATION', title: `Slack message in ${m.channel}`, quote: '"' + m.text.slice(0, 220) + '"', summary: m.text.includes('?') ? 'Question waiting for a reply' : '' });
+          const fresh = Date.now() - 6 * 3600000;
+          for (const m of messages) {
+            if (m.mine) continue;
+            add({ externalId: m.externalId, ts: m.ts, source: 'slack', profile, category: 'CONVERSATION', title: `${m.user} in #${m.channelName}`, quote: '"' + m.text.slice(0, 220) + '"',
+              summary: m.mentionsMe ? 'You were mentioned' : m.text.includes('?') ? 'Question in the channel' : '', priority: m.mentionsMe ? 'Medium' : '', unread: m.ts > fresh, actions: m.mentionsMe ? ['Draft a reply'] : [] });
+          }
         } else if (id === 'twilio_sms') {
           const msgs = await connectors.twilioList(conn.fields, 'messages');
           for (const m of msgs) if (m.direction === 'inbound' && !/^whatsapp:/.test(m.from || '')) add({ externalId: 'sms:' + m.sid, ts: Date.parse(m.date_sent || m.date_created), source: 'twilio_sms', profile, category: 'SMS', title: `Text from ${m.from}`, quote: '"' + (m.body || '').slice(0, 220) + '"' });

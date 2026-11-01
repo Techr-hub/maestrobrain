@@ -63,12 +63,21 @@ Add an IMAP email MCP server to Claude Desktop. Several open-source ones exist; 
 Check the package's README for the exact variable names.
 
 ### Slack
+
+There are two ways to bring Slack in.
+
+**A. Live in Maestro (streams automatically, every 2 minutes)**
 1. Go to **api.slack.com/apps** → **Create New App** → *From scratch* → choose your workspace.
-2. **OAuth & Permissions** → *Bot Token Scopes* → add `channels:history`, `channels:read`, `users:read` (add `groups:history` for private channels).
-3. **Install to Workspace** → copy the **Bot User OAuth Token** (`xoxb-…`).
-4. In Slack, invite the bot to each channel: `/invite @YourApp`. Copy channel IDs (channel name → *View channel details* → bottom of the About tab).
-5. In Maestro: **Slack** → Connect live → paste the token and channel IDs (comma separated) → **Connect**.
-6. Optional: Claude Desktop → Settings → Connectors → **Slack**, so Claude can search and post.
+2. **OAuth & Permissions** → add the scopes `channels:read`, `channels:history`, `groups:read`, `groups:history`, `users:read`. Add them under **User Token Scopes** to read every channel you're in, or under **Bot Token Scopes** (plus `channels:join`) for a bot.
+3. **Install to Workspace** and copy the **User OAuth Token** (`xoxp-…`) or **Bot User OAuth Token** (`xoxb-…`).
+4. In Maestro: **Slack** → Connect live → paste the token → **Load my channels** → tick the channels to show notifications from → **Connect**. Reopen the card any time to change the channels.
+5. A bot joins the public channels you pick by itself. For private channels, type `/invite @YourApp` in the channel.
+
+**B. Through Claude Desktop's Slack connector**
+Claude Desktop's connectors only run inside Claude, so Maestro can't read them on its own. Claude brings the messages over:
+1. Claude Desktop → Settings → Connectors → **Slack**.
+2. In Maestro: **Slack** → **I connected it in Claude Desktop** → optionally list channels to follow → **Connect**.
+3. In Claude Desktop, click **+** → **Maestro** → **Sync my Claude connectors into Maestro** (or type "Sync my Slack into Maestro"). Claude reads your mentions, DMs and those channels and adds them with the `add_feed_items` tool. They appear in the feed a few seconds later. Run it whenever you want a refresh, or make it a scheduled task in Claude.
 
 ### Text messages and calls (Twilio)
 1. Sign up at **twilio.com** and buy a phone number (a trial account works for testing).
@@ -105,7 +114,7 @@ Anything Claude saves with Maestro's `write_note` or `log_decision` tools also s
 | Problem | Fix |
 |---|---|
 | "Test failed: 404" on a calendar | The link isn't public or was regenerated. Copy it again |
-| Slack `not_in_channel` | Invite the bot to the channel with `/invite @YourApp` |
+| Slack `not_in_channel` | Maestro joins public channels by itself (needs `channels:join`). For private ones, invite the bot with `/invite @YourApp` |
 | Slack `missing_scope` | Add the scope, then **reinstall** the app and copy the new token |
 | Twilio `20003` | Wrong SID/token pair, or you used a test credential |
 | Claude doesn't use a connector | Turn it on in the chat's **+ → Connectors** menu, and mention it: "using Gmail…" |
