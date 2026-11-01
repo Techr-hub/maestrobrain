@@ -29,7 +29,7 @@ function banner() {
 function openBrowser(url) {
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
   const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
-  try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch { /* user can click the link */ }
+  try { const c = spawn(cmd, args, { stdio: 'ignore', detached: true }); c.on('error', () => {}); c.unref(); } catch { /* user can click the link */ }
 }
 
 function ask(rl, q, def) {

@@ -416,9 +416,9 @@ export class BrainMap {
 
   drawSource(s, core) {
     const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 : 1), off = s.connected === false;
-    const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off ? 0.5 : 1);
+    const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off && !sat ? 0.5 : 1);
     const anchor = sat ? (this.hubIndex.get(s.parent) || {}).sp || core : core;
-    if (!off || sat) { ctx.strokeStyle = sat ? hex(s.color, (off ? 0.25 : 0.5) * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat && !off ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
+    if (!off || sat) { ctx.strokeStyle = sat ? hex(s.color, 0.5 * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
     const selected = this.selectedSource === s.id;
     if (selected || s.error) { ctx.strokeStyle = s.error ? 'rgba(255,77,109,.9)' : hex(s.color, 0.9); ctx.lineWidth = 1.5; ctx.setLineDash(s.error ? [3, 3] : []); ctx.beginPath(); ctx.arc(p.x, p.y, 22 * k, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; }
     const r = (15 + s.pulse * 6) * k;
@@ -427,7 +427,7 @@ export class BrainMap {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r * 2.2, 0, TAU); ctx.fill();
     ctx.globalAlpha = fog;
     ctx.fillStyle = '#01060e'; ctx.strokeStyle = s.color; ctx.lineWidth = 1.5;
-    if (off) ctx.setLineDash([2, 3]);
+    if (off && !sat) ctx.setLineDash([2, 3]);
     ctx.beginPath(); ctx.arc(p.x, p.y, 15 * k, 0, TAU); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1; ctx.setLineDash([]);
     ctx.fillStyle = s.color; ctx.font = `600 ${Math.round(11 * k)}px Rajdhani, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(s.short || s.name.slice(0, 2).toUpperCase(), p.x, p.y + 1);
