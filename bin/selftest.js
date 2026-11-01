@@ -47,6 +47,10 @@ async function main() {
   ok('direct question: when did Alex call', /Alex Chen called you today at/.test(call.reply));
   const meet = await post('/chat', { message: 'When is my meeting with Sarah?' });
   ok('direct question: next meeting with a person', /next meeting with Sarah/.test(meet.reply));
+  const time = await post('/chat', { message: 'What time is it?' });
+  ok('everyday question: what time is it', /^It's \d/.test(time.reply));
+  const huh = await post('/chat', { message: 'tell me a joke about penguins' });
+  ok('unknown question gets a short reply', /didn't understand/.test(huh.reply) && huh.reply.length < 160);
   const none = await post('/chat', { message: 'When did Bob call me?' });
   ok('direct question: says when nothing matches', /No calls from Bob/.test(none.reply));
   const mem = await post('/chat', { message: 'Remember that the workshop is on Thursday' });

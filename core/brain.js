@@ -116,7 +116,28 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
 // ---------------------------------------------------------------- demo brain (no API key needed)
 function bullets(arr) { return arr.map((s) => `- ${s}`).join('\n'); }
 
+// Everyday questions that don't need the vault: time, date, greetings, thanks, help.
+function smallTalk(message, cfg) {
+  const m = message.toLowerCase().replace(new RegExp(`^(hey |ok |okay )?${cfg.assistantName.toLowerCase()}[,!.]?\\s*`), '').replace(/[?!.]+$/, '').trim();
+  const now = new Date();
+  if (/^(what('s| is)? ?(the )?(current )?time( is it)?( now| right now)?|what time is it( now)?|time|tell me the time|do you know (the|what) time it is)$/.test(m))
+    return `It's ${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
+  if (/^(what('s| is)? ?(the |today'?s )?date( today)?|what day is (it|today)|what('s| is) today|which day is (it|today)|what('s| is) the day( today)?)$/.test(m))
+    return `Today is ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.`;
+  if (/^(hi|hello|hey|yo|hiya|howdy|good (morning|afternoon|evening))( there| ${cfg.assistantName.toLowerCase()})?$/.test(m) || m === '')
+    return `Hi ${cfg.user.name}. What can I help you with?`;
+  if (/^(how are you|how's it going|how are things|you good)( doing| today)?$/.test(m)) return `All systems running. What do you need, ${cfg.user.name}?`;
+  if (/^(thanks|thank you|thx|cheers|great|perfect|awesome|ok|okay|cool|got it)( (so much|a lot|very much))?$/.test(m)) return 'Anytime.';
+  if (/^(who are you|what are you|what is maestro|what's your name|what is your name)$/.test(m))
+    return `I'm ${cfg.assistantName}, your second brain. I know your notes, calendar, messages and tasks.`;
+  if (/^(help|what can you do|what can i ask( you)?|how do (i|you) use (this|you))$/.test(m))
+    return ['Try asking:', '- "Brief me on my day"', '- "When did Alex call me?"', '- "When is my next meeting with Sarah?"', '- "What are my tasks?"', '- "Remember that…" or "Add a task to…"'].join('\n');
+  return null;
+}
+
 function demoAnswer(message, ctx, cfg, profile, agent) {
+  const quick = smallTalk(message, cfg);
+  if (quick) return quick;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
   const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
@@ -252,13 +273,14 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
     if (p) return `**[[${p.title}]]**\n\n${vault.readNote(p.path).body.trim().slice(0, 700)}`;
   }
 
-  // Fallback: search the vault
-  if (ctx.notes.length) {
-    return [`Here is what your brain knows about that${agent ? ` (as @${agent.handle})` : ''}:`, '',
-      ...ctx.notes.slice(0, 3).map((n) => `**[[${n.title}]]**\n${n.excerpt}`),
-      '', '_You are on the offline demo brain. Connect Claude in Settings (or ask in Claude Desktop) for full reasoning over these notes._'].join('\n\n');
+  // Fallback: only answer from the vault when a note is clearly about the question; otherwise say so briefly.
+  const words = vault.tokenize ? vault.tokenize(message) : message.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+  const strong = ctx.notes.filter((n) => words.some((w) => w.length > 2 && n.title.toLowerCase().includes(w)));
+  if (strong.length) {
+    return [`Here's what I have on that${agent ? ` (as @${agent.handle})` : ''}:`, '',
+      ...strong.slice(0, 2).map((n) => `**[[${n.title}]]**\n${n.excerpt}`)].join('\n\n');
   }
-  return `I couldn't find anything about that in your vault or feed yet. Try "brief me", "review my sprint", or "remember that …" to teach me. To get full reasoning, connect Claude in Settings or ask me through Claude Desktop.`;
+  return `Sorry, I didn't understand that. Try "brief me on my day" or ask about a meeting, message or project.`;
 }
 
 // ---------------------------------------------------------------- main entry

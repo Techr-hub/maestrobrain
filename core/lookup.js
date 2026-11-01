@@ -94,7 +94,10 @@ function find(message, { items, events, otherItems = [] }) {
   if (q.eventQ || (futureQ && evMatch.length)) {
     const want = subject.length ? subject : q.terms;
     const hit = want.length ? upcoming.filter((e) => want.some((t) => inEvent(e, t))) : [];
-    return { kind: 'event', q, subject, events: hit.length || subject.length ? hit : upcoming };
+    // "What time is standup?" after standup ended today: say when it was.
+    const earlier = want.length && !hit.length ? events.filter((e) => new Date(e.end) <= Date.now() && want.some((t) => inEvent(e, t))) : [];
+    if (earlier.length) return { kind: 'event', q, subject, events: [], past: earlier[earlier.length - 1] };
+    return { kind: 'event', q, subject, events: hit.length || subject.length || want.length ? hit : upcoming, want };
   }
   let pool = items;
   if (q.cats.length) pool = pool.filter((i) => q.cats.includes(i.category));
@@ -117,7 +120,8 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const link = peopleNote ? `\n\n_More about them: [[${peopleNote.title}]]_` : '';
 
   if (r.kind === 'event') {
-    if (!r.events.length) return `**I don't see anything${who ? ` with ${who}` : ''} on your calendar in the next 7 days.**`;
+    if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
+    if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 7 days.**`;
     const [e, ...rest] = r.events;
     const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
     return [`**${who ? `Your next meeting with ${who} is` : 'Next up:'} ${e.title}, ${whenText(e.start)} · ${mins} min.**`,
