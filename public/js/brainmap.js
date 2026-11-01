@@ -238,12 +238,16 @@ export class BrainMap {
     return { x: Math.cos(a) * ORBIT, y: Math.sin(a * 2 + s.angle) * 38, z: Math.sin(a) * ORBIT };
   }
 
+  // A notification lights its source, then a pulse travels down the line: source → hub → brain core.
   pulseSource(id, color) {
     const s = this.sources.find((x) => x.id === id && x.parent) || this.sources.find((x) => x.id === id) || this.sources.find((x) => x.members && x.members.includes(id));
-    if (s && s.parent && this.hubIndex.get(s.parent)) this.hubIndex.get(s.parent).pulse = 1;
-    const from = s ? this.sourceWorld(s) : { x: (Math.random() - 0.5) * 900, y: -500, z: (Math.random() - 0.5) * 900 };
+    const hub = s && s.parent ? this.hubIndex.get(s.parent) : null;
     if (s) s.pulse = 1;
-    for (let k = 0; k < 3; k++) this.particles.push({ from, p: -k * 0.08, color: color || '#00e5ff' });
+    if (hub) hub.pulse = Math.max(hub.pulse, 0.6);
+    const via = s ? [s, hub].filter(Boolean) : null;
+    const from = s ? null : { x: (Math.random() - 0.5) * 900, y: -500, z: (Math.random() - 0.5) * 900 };
+    const c = color || (hub || s || {}).color || '#00e5ff';
+    for (let k = 0; k < 3; k++) this.particles.push({ via, from, p: -k * 0.07, color: c, beam: true });
   }
 
   highlightNotes(paths, ms = 9000) {
@@ -377,13 +381,30 @@ export class BrainMap {
     // particles
     this.particles = this.particles.filter((p) => p.p < 1);
     for (const p of this.particles) {
-      p.p += p.slow ? 0.012 : 0.018;
+      p.p += p.slow ? 0.012 : p.beam ? 0.011 : 0.018;
       if (p.p < 0) continue;
-      const at = (q) => { const e = 1 - easeInOut(q); return this.project(p.from.x * e, p.from.y * e, p.from.z * e); };
-      const h = at(p.p), t = at(Math.max(0, p.p - 0.08)); if (!h || !t) continue;
-      ctx.fillStyle = hex(p.color, 1 - p.p * 0.5);
-      ctx.beginPath(); ctx.arc(h.x, h.y, 3 * Math.max(0.6, h.k), 0, TAU); ctx.fill();
-      ctx.strokeStyle = hex(p.color, 0.35); ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(h.x, h.y); ctx.stroke();
+      // world-space path to the core (the core sits at the origin)
+      const pts = p.via ? [...p.via.map((s) => this.sourceWorld(s)), { x: 0, y: 0, z: 0 }] : [p.from, { x: 0, y: 0, z: 0 }];
+      const lens = []; let total = 0;
+      for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y, pts[i].z - pts[i - 1].z); lens.push(d); total += d; }
+      const at = (q) => {
+        let dist = easeInOut(clamp(q, 0, 1)) * total;
+        for (let i = 0; i < lens.length; i++) {
+          if (dist <= lens[i] || i === lens.length - 1) { const f = lens[i] ? Math.min(1, dist / lens[i]) : 1, a = pts[i], b = pts[i + 1]; return this.project(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f); }
+          dist -= lens[i];
+        }
+      };
+      const h = at(p.p), t = at(Math.max(0, p.p - (p.beam ? 0.12 : 0.08))); if (!h || !t) continue;
+      // keep the hub line lit while the pulse runs down it
+      if (p.via) for (const s of p.via) if (!s.parent) s.pulse = Math.max(s.pulse, 0.85);
+      ctx.save();
+      if (p.beam) { ctx.shadowColor = p.color; ctx.shadowBlur = 14; }
+      const tg = ctx.createLinearGradient(t.x, t.y, h.x, h.y); tg.addColorStop(0, hex(p.color, 0)); tg.addColorStop(1, hex(p.color, 0.9));
+      ctx.strokeStyle = tg; ctx.lineWidth = p.beam ? 3 * Math.max(0.7, h.k) : 1; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(h.x, h.y); ctx.stroke();
+      ctx.fillStyle = p.beam ? '#ffffff' : hex(p.color, 1 - p.p * 0.5);
+      ctx.beginPath(); ctx.arc(h.x, h.y, (p.beam ? 3.2 : 3) * Math.max(0.6, h.k), 0, TAU); ctx.fill();
+      ctx.restore();
       if (p.p >= 0.97) this.flash = Math.max(this.flash, 0.6);
     }
 
@@ -418,7 +439,22 @@ export class BrainMap {
     const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 : 1), off = s.connected === false;
     const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off && !sat ? 0.5 : 1);
     const anchor = sat ? (this.hubIndex.get(s.parent) || {}).sp || core : core;
-    if (!off || sat) { ctx.strokeStyle = sat ? hex(s.color, 0.5 * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
+    // Lines: sub-category → hub, and hub → brain core. Solid, in the hub colour, and they glow while a notification travels.
+    ctx.save(); ctx.lineCap = 'round';
+    if (s.pulse > 0.04) {
+      ctx.shadowColor = s.color; ctx.shadowBlur = 18 * s.pulse;
+      ctx.strokeStyle = hex(s.color, 0.35 * s.pulse * fog); ctx.lineWidth = (sat ? 4 : 7) * s.pulse;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    if (sat) { ctx.strokeStyle = hex(s.color, (0.5 + s.pulse * 0.4) * fog); ctx.lineWidth = 1 + s.pulse; }
+    else {
+      const lg = ctx.createLinearGradient(p.x, p.y, anchor.x, anchor.y);
+      lg.addColorStop(0, hex(s.color, ((off ? 0.35 : 0.65) + s.pulse * 0.35) * fog)); lg.addColorStop(1, `rgba(0,229,255,${(0.35 + s.pulse * 0.5) * fog})`);
+      ctx.strokeStyle = lg; ctx.lineWidth = 1.8 + s.pulse * 1.5;
+    }
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke();
+    ctx.restore(); ctx.lineWidth = 1;
     const selected = this.selectedSource === s.id;
     if (selected || s.error) { ctx.strokeStyle = s.error ? 'rgba(255,77,109,.9)' : hex(s.color, 0.9); ctx.lineWidth = 1.5; ctx.setLineDash(s.error ? [3, 3] : []); ctx.beginPath(); ctx.arc(p.x, p.y, 22 * k, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; }
     const r = (15 + s.pulse * 6) * k;
@@ -435,7 +471,7 @@ export class BrainMap {
     ctx.font = `${sat ? 400 : 600} ${Math.round(clamp((sat ? 10 : 12) * Math.sqrt(p.k), 9, 16))}px ${sat ? 'Roboto' : 'Rajdhani, Roboto'}, sans-serif`;
     ctx.fillText(s.name.replace(/ \(.*\)/, '').replace(' / Microsoft 365', ''), p.x, p.y + (sat ? 20 : 28) * k);
     ctx.globalAlpha = 1;
-    s.pulse *= 0.96;
+    s.pulse *= sat ? 0.96 : 0.975;
   }
 
   drawCore(now, c) {

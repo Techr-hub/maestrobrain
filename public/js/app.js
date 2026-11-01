@@ -142,7 +142,7 @@ function buildDashboard() {
     <div class="brain-tooltip" id="brain-tip"></div>
     <div class="brain-hud" id="brain-hud"></div>
     <div class="brain-stats" id="brain-stats"></div>
-    <div class="subtitle" id="subtitle">Brain online</div>
+    <div class="subtitle online" id="subtitle"><i class="dot"></i>Maestro Online</div>
     <div class="chat-panel" id="chat-panel">
       <div class="chat-bar" id="chat-bar" hidden><span>${icon('message-circle')} Conversation</span><button id="chat-toggle" title="Hide or show the conversation">${icon('chevron-down')} Hide</button><button id="chat-new" title="Start a new conversation">${icon('plus')} New</button></div>
       <div class="chat-log" id="chat-log" aria-live="polite"></div>
@@ -287,17 +287,19 @@ function renderSuggestions() {
   el.querySelectorAll('button').forEach((b) => b.onclick = () => ask(b.textContent));
 }
 
-function setSubtitle(text, speaking = false) {
+function setSubtitle(text, speaking = false, online = false) {
   const el = $('#subtitle', dashboardEl);
   el.textContent = text;
+  if (online) el.insertAdjacentHTML('afterbegin', '<i class="dot"></i>');
   el.classList.toggle('speaking', speaking);
+  el.classList.toggle('online', online);
 }
 
 function setBrainState(state) {
   brain.setState(state);
   // The sidebar logo stays still; only the brain core in the map reacts to voice.
-  const label = { idle: 'Brain online', listening: 'Listening…', thinking: 'Thinking…', speaking: '' }[state];
-  if (label !== '') setSubtitle(label);
+  const label = { idle: 'Maestro Online', listening: 'Listening…', thinking: 'Thinking…', speaking: '' }[state];
+  if (label !== '') setSubtitle(label, false, state === 'idle');
 }
 
 // ---------------------------------------------------------------- chat
