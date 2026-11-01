@@ -154,9 +154,25 @@ async function twilioList({ accountSid, authToken, number }, kind) {
 }
 
 // Test a live connection when the user saves it. Returns a short human message.
+// Turn low-level network errors ("fetch failed") into something a person can act on.
+function friendly(e, host) {
+  const code = (e && e.cause && (e.cause.code || e.cause.name)) || '';
+  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return new Error(`Couldn't find ${host}. Check the link and your internet connection.`);
+  if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|AbortError/.test(code)) return new Error(`Couldn't reach ${host} (${code}). Check your internet connection or VPN, then try again.`);
+  if (/CERT|SSL|TLS/.test(code)) return new Error(`Secure connection to ${host} failed (${code}). A company proxy may be blocking it.`);
+  if (e && e.message === 'fetch failed') return new Error(`Couldn't connect to ${host}${code ? ' (' + code + ')' : ''}. Check the link and your internet connection.`);
+  return e;
+}
+
 async function testLive(id, fields) {
+  const host = { slack: 'slack.com', twilio_sms: 'api.twilio.com', twilio_calls: 'api.twilio.com' }[id] || (() => { try { return new URL(String(fields.icsUrl || '').replace(/^webcal:/i, 'https:')).host; } catch { return 'the calendar server'; } })();
+  try { return await testLiveRaw(id, fields); } catch (e) { throw friendly(e, host); }
+}
+
+async function testLiveRaw(id, fields) {
   if (['icalendar', 'gcal', 'outlook'].includes(id)) {
     if (!fields.icsUrl) throw new Error('Paste the calendar link first');
+    if (!/^(https?|webcal):\/\//i.test(fields.icsUrl.trim())) throw new Error('The calendar link should start with https:// or webcal://');
     const ev = await fetchIcs(fields.icsUrl);
     return `Calendar connected: ${ev.length} events found`;
   }

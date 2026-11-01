@@ -69,6 +69,15 @@ async function main() {
   const zip = await fetch(base + '/claude-skills/download');
   const buf = Buffer.from(await zip.arrayBuffer());
   ok('Claude Skills export is a zip', buf.slice(0, 2).toString() === 'PK' && buf.length > 500);
+  const kb0 = await get('/knowledge');
+  ok('knowledge base starts unconnected so first run asks', kb0.connected === false && kb0.notes > 10);
+  const otherVault = path.join(tmp, 'Other Vault');
+  const bad = await post('/knowledge/connect', { type: 'markdown', path: otherVault });
+  ok('knowledge base rejects a missing folder', /does not exist/.test(bad.error || ''));
+  const kb1 = await post('/knowledge/connect', { type: 'markdown', path: otherVault, create: true, seed: true });
+  ok('connect a Markdown folder and seed Maestro folders', kb1.connected && fs.existsSync(path.join(otherVault, 'Memory', 'About Me.md')));
+  const kb2 = await post('/knowledge/connect', { type: 'obsidian', path: vaultCopy, seed: false });
+  ok('switch back to the Obsidian vault', kb2.connected && kb2.path === vaultCopy && kb2.isObsidian);
   const un = await post('/packs/uninstall', { id: 'product-manager' });
   ok('PM pack uninstalls', un.removed > 3);
   server.close();

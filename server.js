@@ -7,6 +7,7 @@ const { URL } = require('url');
 
 const config = require('./core/config');
 const vault = require('./core/vault');
+const knowledge = require('./core/knowledge');
 const feed = require('./core/feed');
 const calendar = require('./core/calendar');
 const tasks = require('./core/tasks');
@@ -82,6 +83,7 @@ route('GET', '/api/state', async () => {
     claudeDesktop: claudeDesktop.status(),
     vaultPath: cfg.vaultPath,
     vaultName: path.basename(cfg.vaultPath),
+    knowledge: knowledge.status(),
     unread: feed.list({ limit: 200 }).filter((i) => i.unread).length,
   };
 });
@@ -117,7 +119,8 @@ route('POST', '/api/connections', async (_q, body) => {
   const { id, profile = config.load().profile, mode = 'demo', fields = {} } = body;
   const def = connectors.get(id);
   if (!def) throw new Error('Unknown connector');
-  let message = mode === 'demo' ? 'Connected with demo data' : '';
+  if (!['demo', 'live', 'claude'].includes(mode)) throw new Error('Unknown connection mode');
+  let message = mode === 'demo' ? 'Connected with demo data' : mode === 'claude' ? 'Live in Claude Desktop' : '';
   if (mode === 'live') message = await connectors.testLive(id, fields);
   config.update((c) => {
     const prev = c.connections[profile][id];
@@ -126,7 +129,7 @@ route('POST', '/api/connections', async (_q, body) => {
     for (const [k, v] of Object.entries(fields)) if (v && !String(v).startsWith('••')) merged[k] = v;
     c.connections[profile][id] = { mode, connectedAt: Date.now(), fields: mode === 'live' ? merged : undefined, message };
   });
-  const surfaced = mode === 'demo' ? feed.surfaceSource(id, profile) : 0;
+  const surfaced = mode !== 'live' ? feed.surfaceSource(id, profile) : 0;
   if (mode === 'live') feed.pollLive().catch(() => {});
   return { ok: true, message, surfaced };
 });
@@ -134,6 +137,10 @@ route('POST', '/api/connections/disconnect', async (_q, body) => {
   config.update((c) => { delete c.connections[body.profile || c.profile][body.id]; });
   return { ok: true };
 });
+
+route('GET', '/api/knowledge', async () => ({ ...knowledge.status(), detected: knowledge.detectObsidianVaults(), starter: knowledge.STARTER, custom: knowledge.CUSTOM }));
+route('POST', '/api/knowledge/connect', async (_q, body) => knowledge.connect(body));
+route('POST', '/api/knowledge/disconnect', async () => knowledge.disconnect());
 
 route('POST', '/api/packs/install', async (_q, body) => packs.install(body.id));
 route('POST', '/api/packs/uninstall', async (_q, body) => packs.uninstall(body.id));

@@ -23,7 +23,7 @@ It is built for the **Build Your Brain** workshop: everything works out of the b
    - **Mac:** macOS blocks double-clicking downloaded scripts. Open **Terminal**, type `bash ` (with a space), drag `Start Maestro.command` into the window and press Enter. To allow double-click from then on: try to open it once, then **System Settings → Privacy & Security → Open Anyway**.
    - **Windows:** double-click `Start Maestro.bat` (if SmartScreen appears: **More info → Run anyway**).
    - **Or in a terminal:** `cd maestro-brain` then `npm start`.
-3. Your browser opens **http://localhost:4141**. Follow the 1-minute setup: your name, your role pack, and **Connect to Claude Desktop**.
+3. Your browser opens **http://localhost:4141**. Follow the 1-minute setup: connect your **knowledge base** (your Obsidian vault, any Markdown folder, or a third party like Notion; the starter vault works out of the box), your name, your role pack, and **Connect to Claude Desktop**.
 4. **Restart Claude Desktop** (fully quit, then reopen). Ask Claude: *"Use Maestro to brief me on my day."*
 5. **Open the vault in Obsidian:** *Open folder as vault* → choose the `vault` folder inside Maestro.
 
@@ -76,6 +76,10 @@ For live email, calendar and Slack inside Claude, also turn on Claude Desktop's 
 ---
 
 ## Connections: demo vs live
+
+**Knowledge base:** the first card on MCP Connections. Point Maestro at an Obsidian vault (vaults you've opened in Obsidian are detected automatically), any folder of Markdown files, or a custom third-party source that Claude reaches through its connector (Notion, Google Drive, Confluence, OneDrive or another MCP server). Maestro adds its Memory, Agents, Skills and Templates folders to your vault without overwriting anything.
+
+Each card shows a blue **Connect** button, or a green **Connected** button once it's connected. Click Connected to change settings or disconnect.
 
 Every connector works in **demo mode** instantly. Going live:
 

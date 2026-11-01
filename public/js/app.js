@@ -4,7 +4,7 @@ import { renderMarkdown, stripMarkdown, esc } from './md.js';
 import { BrainMap, avatar as makeAvatar, GROUP_COLORS } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
-import { PAGES, onboarding } from './pages.js';
+import { PAGES, onboarding, knowledgeModal } from './pages.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -39,6 +39,7 @@ async function boot() {
   setInterval(clock, 1000);
   setInterval(() => renderFeed(false), 60000); // refresh "x min ago"
   if (!S.state.config.onboarded) onboarding({ after: afterChange });
+  else if (!S.state.knowledge.connected) knowledgeModal(() => afterChange({}), { first: true });
 }
 
 export async function afterChange({ graph = true, feed = true } = {}) {

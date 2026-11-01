@@ -70,16 +70,24 @@ async function connectionsPage(el, ctx) {
   const cd = st.claudeDesktop;
   const card = (c) => {
     const s = c.status[prof];
-    const tag = s ? (s.mode === 'live' ? `<span class="tag live">● Live</span>` : `<span class="tag demo">● Demo data</span>`) : `<span class="tag off">Not connected</span>`;
+    const tag = s ? (s.mode === 'live' ? `<span class="tag live">● Live</span>` : s.mode === 'claude' ? `<span class="tag live">● Live in Claude</span>` : `<span class="tag demo">● Demo data</span>`) : `<span class="tag off">Not connected</span>`;
     const canLive = c.live && c.live.includes('dashboard');
     return `<div class="card accent" style="--c:${c.color};border-top-color:${s ? c.color : 'var(--line)'}">
       <h4><span class="agent-icon" style="--c:${c.color};width:34px;height:34px;font-size:18px">${icon(c.icon)}</span><div>${esc(c.name)}<div class="meta">${esc(CATEGORY[c.category] ? c.category : '')}</div></div></h4>
       <p>${esc(c.description)}</p>
       <div class="row">${tag}${canLive ? '<span class="tag">Live-capable</span>' : '<span class="tag">Live via Claude</span>'}</div>
       ${s && s.message ? `<div class="meta">${esc(s.message)}</div>` : ''}
-      <div class="row">${s ? `<button class="btn small ghost" data-cfg="${c.id}">${icon('settings')} Configure</button><button class="btn small danger" data-off="${c.id}">Disconnect</button>` : `<button class="btn small primary" data-cfg="${c.id}">${icon('plug')} Connect</button>`}</div>
+      <div class="row">${connectButton(!!s, `data-cfg="${c.id}"`)}</div>
     </div>`;
   };
+  const kb = st.knowledge;
+  const kbName = kb.type === 'custom' && kb.custom ? kb.custom.name : kb.type === 'markdown' ? 'Markdown folder' : 'Obsidian vault';
+  const kbCard = `<div class="card accent kb-card" style="--c:#a882ff;border-top-color:${kb.connected ? '#a882ff' : 'var(--line)'}">
+      <h4><span class="agent-icon" style="--c:#a882ff;width:34px;height:34px;font-size:18px">${icon('brain')}</span><div>Knowledge base<div class="meta">${esc(kbName)}</div></div></h4>
+      <p>${kb.connected ? `Your brain reads and writes <b>${kb.notes}</b> notes in <code>${esc(kb.path)}</code>${kb.isStarter ? ' (the Maestro starter vault)' : ''}.` : 'Choose where your notes live: an Obsidian vault, any folder of Markdown files, or a third-party source like Notion or Google Drive.'}</p>
+      <div class="row">${kb.connected ? (kb.isObsidian ? '<span class="tag live">● Obsidian</span>' : '<span class="tag live">● Markdown</span>') : '<span class="tag off">Not connected</span>'}${kb.custom ? `<span class="tag">+ ${esc(kb.custom.name)} via Claude</span>` : ''}</div>
+      <div class="row">${connectButton(kb.connected, 'id="kb-btn"')}${kb.connected && kb.isObsidian ? `<a class="btn small ghost" href="obsidian://open?path=${encodeURIComponent(kb.path)}">${icon('external-link')} Open in Obsidian</a>` : ''}</div>
+    </div>`;
   const foundation = st.connectors.filter((c) => c.group === 'foundation');
   const packIds = new Set(st.packs.filter((p) => p.installed).flatMap((p) => p.connectors || []));
   const packConns = st.connectors.filter((c) => c.group === 'pack');
@@ -89,6 +97,7 @@ async function connectionsPage(el, ctx) {
       <p>${cd.registered ? 'Claude can search your vault, read the feed, check your calendar, manage tasks, remember facts and run your skills. Restart Claude Desktop after changes.' : 'This adds Maestro as an MCP server in Claude Desktop so Claude becomes the reasoning engine for your brain. Your email, calendar and Slack connectors in Claude Desktop then work alongside it.'}</p>
       <p class="meta" style="margin-top:6px">Config: <code>${esc(cd.configPath)}</code></p></div>
       <button class="btn ${cd.registered ? 'ghost' : 'primary'}" id="cd-reg">${icon('plug')} ${cd.registered ? 'Re-connect' : 'Connect to Claude Desktop'}</button></div>
+    <div class="section-title">Knowledge base</div><div class="grid">${kbCard}</div>
     <div class="section-title">Foundation · every brain</div><div class="grid">${foundation.map(card).join('')}</div>
     <div class="section-title">Role pack tools</div>
     ${packConns.some((c) => packIds.has(c.id) || c.status[prof]) ? `<div class="grid">${packConns.filter((c) => packIds.has(c.id) || c.status[prof]).map(card).join('')}</div>` : `<p style="color:var(--muted)">Install a role pack on the <a href="#skills" id="to-skills">Skills & Packs</a> page to add Linear, Jira, Notion, Figma, Google Drive, GitHub and docs.</p>`}
@@ -98,9 +107,104 @@ async function connectionsPage(el, ctx) {
   el.querySelector('#cd-reg').onclick = () => registerClaude(() => connectionsPage(el, ctx));
   const ts = el.querySelector('#to-skills'); if (ts) ts.onclick = (e) => { e.preventDefault(); ctx.navigate('skills'); };
   el.querySelectorAll('[data-cfg]').forEach((b) => b.onclick = () => connectModal(st.connectors.find((c) => c.id === b.dataset.cfg), prof, async () => { await ctx.afterChange({ graph: false }); connectionsPage(el, ctx); }));
-  el.querySelectorAll('[data-off]').forEach((b) => b.onclick = async () => {
-    await api('/connections/disconnect', { id: b.dataset.off, profile: prof });
-    toast('Disconnected'); await ctx.afterChange({ graph: false }); connectionsPage(el, ctx);
+  el.querySelector('#kb-btn').onclick = () => knowledgeModal(async () => { await ctx.afterChange({}); connectionsPage(el, ctx); });
+}
+
+// Blue "Connect" when there's no connection; green "● Connected" (opens settings, where Disconnect lives) when there is.
+function connectButton(connected, attrs) {
+  return connected
+    ? `<button class="btn small connected" ${attrs} title="Manage this connection"><span class="dot"></span> Connected</button>`
+    : `<button class="btn small connect" ${attrs}>${icon('plug')} Connect</button>`;
+}
+
+// ================================================================ KNOWLEDGE BASE
+// Shared form used by the Knowledge base card, first-run prompt and onboarding.
+function kbFormHtml(k) {
+  const cur = k.connected ? k.type : 'obsidian';
+  const det = (k.detected || []).filter((v) => v.path !== k.starter);
+  // Which vault option starts selected: a detected vault, the starter vault, or "Another vault" with the current path.
+  const sel = det.some((v) => v.path === k.path) ? k.path : (k.isStarter || !k.connected || k.type !== 'obsidian') ? '__starter' : '__path';
+  return `
+    <div class="kb-types">
+      <button class="choice ${cur === 'obsidian' ? 'on' : ''}" data-kb="obsidian">${icon('brain')}<div><b>Obsidian vault</b><span>Recommended. Maestro and Obsidian share the same notes, links and graph.</span></div></button>
+      <button class="choice ${cur === 'markdown' ? 'on' : ''}" data-kb="markdown">${icon('file-text')}<div><b>Markdown folder</b><span>Any folder of .md files: Logseq, iA Writer, VS Code, Dropbox or a git repo.</span></div></button>
+      <button class="choice ${cur === 'custom' ? 'on' : ''}" data-kb="custom">${icon('link')}<div><b>Custom third party</b><span>Notion, Google Drive, Confluence or another MCP server, reached through Claude.</span></div></button>
+    </div>
+    <div data-pane="obsidian" ${cur === 'obsidian' ? '' : 'hidden'}>
+      ${det.length ? `<div class="field"><label>Vaults found on this computer</label>${det.map((v) => `<label class="kb-vault"><input type="radio" name="kb-det" value="${esc(v.path)}" ${sel === v.path ? 'checked' : ''}> <b>${esc(v.name)}</b> <small>${esc(v.path)}</small></label>`).join('')}</div>` : ''}
+      <label class="kb-vault"><input type="radio" name="kb-det" value="__starter" ${sel === '__starter' ? 'checked' : ''}> <b>Maestro starter vault</b> <small>${esc(k.starter)}. Open it in Obsidian with <i>Open folder as vault</i>.</small></label>
+      <label class="kb-vault"><input type="radio" name="kb-det" value="__path" ${sel === '__path' ? 'checked' : ''}> <b>Another vault</b></label>
+      <input class="input" id="kb-opath" value="${sel === '__path' ? esc(k.path) : ''}" placeholder="${navigator.platform.startsWith('Win') ? 'C:\\Users\\you\\Documents\\My Vault' : '~/Documents/My Vault'}" hidden>
+    </div>
+    <div data-pane="markdown" ${cur === 'markdown' ? '' : 'hidden'}>
+      <div class="field"><label>Folder path</label><input class="input" id="kb-mpath" value="${k.type === 'markdown' ? esc(k.path) : ''}" placeholder="${navigator.platform.startsWith('Win') ? 'C:\\Users\\you\\Notes' : '~/Notes'}">
+      <span class="help">Mac: right-click the folder, hold Option, choose <b>Copy as Pathname</b>. Windows: Shift + right-click, <b>Copy as path</b>.</span></div>
+      <label class="kb-check"><input type="checkbox" id="kb-create"> <span>Create the folder if it doesn't exist</span></label>
+    </div>
+    <div data-pane="custom" ${cur === 'custom' ? '' : 'hidden'}>
+      <div class="field"><label>Source</label><select class="input" id="kb-ckind">${Object.entries(k.custom_defs || {}).map(([id, d]) => `<option value="${id}" ${k.custom && k.custom.kind === id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
+      <div class="two-col"><div class="field"><label>Name (optional)</label><input class="input" id="kb-cname" value="${esc((k.custom && k.custom.name) || '')}" placeholder="Team wiki"></div>
+      <div class="field"><label>Link or MCP URL (optional)</label><input class="input" id="kb-curl" value="${esc((k.custom && k.custom.url) || '')}" placeholder="https://…"></div></div>
+      <p class="help" id="kb-chow"></p>
+      <p class="help">Claude reads this source through its connector. Maestro keeps your memory, agents and skills in the starter vault so every answer can use both.</p>
+    </div>
+    <label class="kb-check" id="kb-seed-row"><input type="checkbox" id="kb-seed" checked> <span>Add Maestro's <b>Memory</b>, <b>Agents</b>, <b>Skills</b> and <b>Templates</b> folders (nothing is overwritten)</span></label>`;
+}
+
+function kbWire(box, k) {
+  let type = k.connected ? k.type : 'obsidian';
+  const show = () => {
+    box.querySelectorAll('[data-kb]').forEach((b) => b.classList.toggle('on', b.dataset.kb === type));
+    box.querySelectorAll('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== type; });
+    const det = box.querySelector('input[name="kb-det"]:checked');
+    box.querySelector('#kb-opath').hidden = !(det && det.value === '__path');
+    box.querySelector('#kb-seed-row').hidden = type === 'custom' || (type === 'obsidian' && det && det.value === '__starter');
+    const kind = box.querySelector('#kb-ckind'); const how = box.querySelector('#kb-chow');
+    if (kind && how) how.textContent = 'How to connect it: ' + ((k.custom_defs[kind.value] || {}).how || '');
+  };
+  box.querySelectorAll('[data-kb]').forEach((b) => b.onclick = () => { type = b.dataset.kb; show(); });
+  box.querySelectorAll('input[name="kb-det"], #kb-ckind').forEach((i) => i.onchange = show);
+  show();
+  return () => {
+    const seed = box.querySelector('#kb-seed').checked;
+    if (type === 'obsidian') {
+      const det = box.querySelector('input[name="kb-det"]:checked');
+      if (!det || det.value === '__starter') return { type: 'starter' };
+      return { type: 'obsidian', path: det.value === '__path' ? box.querySelector('#kb-opath').value : det.value, seed };
+    }
+    if (type === 'markdown') return { type: 'markdown', path: box.querySelector('#kb-mpath').value, seed, create: box.querySelector('#kb-create').checked };
+    return { type: 'custom', customKind: box.querySelector('#kb-ckind').value, customName: box.querySelector('#kb-cname').value.trim(), customUrl: box.querySelector('#kb-curl').value.trim() };
+  };
+}
+
+async function loadKb() {
+  const k = await api('/knowledge');
+  k.custom_defs = k.custom; k.custom = k.type === 'custom' ? S.state.knowledge.custom : null;
+  return k;
+}
+
+async function connectKb(spec) {
+  const r = await api('/knowledge/connect', spec);
+  toast(`Knowledge base connected: ${r.notes} notes${r.copied && r.copied.length ? ` · added ${r.copied.length} Maestro files` : ''}`);
+  await refreshState();
+  return r;
+}
+
+export async function knowledgeModal(done, { first = false } = {}) {
+  const k = await loadKb();
+  modal(`${modalHead(first ? 'Connect your knowledge base' : 'Knowledge base', first ? 'Your brain needs somewhere to read and write notes. Pick one to start; you can change it any time on MCP Connections.' : 'Where your brain reads and writes notes.')}
+    <div id="kb-form">${kbFormHtml(k)}</div>
+    <div class="modal-foot">${k.connected ? '<button class="btn small danger" id="kb-off" style="margin-right:auto">Disconnect</button>' : ''}<button class="btn ghost" data-close>${first ? 'Later' : 'Cancel'}</button><button class="btn connect" id="kb-go">${icon('plug')} Connect</button></div>`, {
+    wide: true,
+    onMount: (m, close) => {
+      const get = kbWire(m, k);
+      m.querySelector('#kb-go').onclick = async (e) => {
+        e.target.disabled = true;
+        try { await connectKb(get()); close(); done && done(); } catch (err) { toast(err.message, 'error'); e.target.disabled = false; }
+      };
+      const off = m.querySelector('#kb-off');
+      if (off) off.onclick = async () => { await api('/knowledge/disconnect', {}); await refreshState(); toast('Knowledge base disconnected. Your notes were not touched.'); close(); done && done(); };
+    },
   });
 }
 
@@ -123,8 +227,8 @@ function connectModal(c, prof, done) {
     <button class="choice ${!s || s.mode === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>
     ${canLive ? `<button class="choice ${s && s.mode === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
       <div id="live-fields" ${s && s.mode === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => `<div class="field"><label>${esc(f.label)}</label><input class="input" data-f="${f.key}" type="${f.secret ? 'password' : 'text'}" placeholder="${esc(f.placeholder || '')}">${f.help ? `<span class="help">${esc(f.help)}</span>` : ''}</div>`).join('')}</div>` : ''}
-    ${viaClaude ? `<div class="callout" style="margin-top:6px"><span class="big-icon">${icon('sparkles')}</span><div><h4>Live in Claude Desktop</h4><p>${esc(c.claudeSetup || '')}</p></div></div>` : ''}
-    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="go">${icon('plug')} Connect</button></div>`, {
+    ${viaClaude ? `<button class="choice ${s && s.mode === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>` : ''}
+    <div class="modal-foot">${s ? '<button class="btn small danger" id="off" style="margin-right:auto">Disconnect</button>' : ''}<button class="btn ghost" data-close>Cancel</button><button class="btn connect" id="go">${icon('plug')} ${s ? 'Save' : 'Connect'}</button></div>`, {
     onMount: (m, close) => {
       let mode = s ? s.mode : 'demo';
       m.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => {
@@ -132,6 +236,8 @@ function connectModal(c, prof, done) {
         m.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
         const lf = m.querySelector('#live-fields'); if (lf) lf.hidden = mode !== 'live';
       });
+      const off = m.querySelector('#off');
+      if (off) off.onclick = async () => { await api('/connections/disconnect', { id: c.id, profile: prof }); toast(`${c.name} disconnected`); close(); done(); };
       m.querySelector('#go').onclick = async (e) => {
         const fields = {};
         m.querySelectorAll('[data-f]').forEach((i) => { if (i.value.trim()) fields[i.dataset.f] = i.value.trim(); });
@@ -140,7 +246,7 @@ function connectModal(c, prof, done) {
           const r = await api('/connections', { id: c.id, profile: prof, mode, fields });
           toast(r.message + (r.surfaced ? ` · ${r.surfaced} new items in your feed` : ''));
           close(); done();
-        } catch (err) { toast(err.message, 'error'); e.target.disabled = false; e.target.innerHTML = `${icon('plug')} Connect`; }
+        } catch (err) { toast(err.message, 'error'); e.target.disabled = false; e.target.innerHTML = `${icon('plug')} ${s ? 'Save' : 'Connect'}`; }
       };
     },
   });
@@ -402,13 +508,15 @@ async function settingsPage(el, ctx) {
 }
 
 // ================================================================ ONBOARDING
-export function onboarding({ after, afterChange }) {
+export async function onboarding({ after, afterChange }) {
   const done = after || afterChange;
   const c = cfg();
-  let step = 0, pack = null;
+  let step = 0, pack = null, getKb = null;
+  const kb = await loadKb();
   const steps = [
     () => `${modalHead('Welcome to Maestro', 'Your personal second brain: Claude + Obsidian + MCP.')}
-      <div class="md"><p>In the next minute you will:</p><ol><li>Tell the brain who you are</li><li>Pick a role pack for what you do</li><li>Connect it to Claude Desktop</li></ol><p>Everything already works with demo data, so you can explore right away.</p></div>`,
+      <div class="md"><p>In the next minute you will:</p><ol><li>Connect your knowledge base (Obsidian, Markdown or a third party)</li><li>Tell the brain who you are</li><li>Pick a role pack for what you do</li><li>Connect it to Claude Desktop</li></ol><p>Everything already works with demo data, so you can explore right away.</p></div>`,
+    () => `${modalHead('Connect your knowledge base', 'Where your brain reads and writes notes. Obsidian is recommended.')}<div id="o-kb">${kbFormHtml(kb)}</div>`,
     () => `${modalHead('Who are you?', 'This goes into your memory so every answer is about you.')}
       <div class="two-col"><div class="field"><label>Your name</label><input class="input" id="o-name" value="${esc(c.user.name)}"></div><div class="field"><label>What you do</label><input class="input" id="o-role" value="${esc(c.user.role)}"></div></div>
       <div class="field"><label>Name your assistant</label><input class="input" id="o-asst" value="${esc(c.assistantName)}"><span class="help">You'll say “Hey ${esc(c.assistantName)}” to talk to it.</span></div>`,
@@ -426,14 +534,18 @@ export function onboarding({ after, afterChange }) {
     box.querySelectorAll('[data-close]').forEach((b) => b.onclick = finish);
     box.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { pack = b.dataset.p; box.querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('on', x === b)); });
     const cd = box.querySelector('#o-cd'); if (cd) cd.onclick = () => registerClaude();
+    const kbBox = box.querySelector('#o-kb'); if (kbBox) getKb = kbWire(kbBox, kb);
     const back = box.querySelector('#o-back'); if (back) back.onclick = () => { step--; render(); };
     const skip = box.querySelector('#o-skip'); if (skip) skip.onclick = finish;
     box.querySelector('#o-next').onclick = async () => {
       if (step === 1) {
+        try { await connectKb(getKb()); } catch (err) { return toast(err.message, 'error'); }
+      }
+      if (step === 2) {
         await api('/settings', { user: { name: box.querySelector('#o-name').value.trim() || c.user.name, role: box.querySelector('#o-role').value.trim() }, assistantName: box.querySelector('#o-asst').value.trim() || 'Jarvis' });
         await refreshState();
       }
-      if (step === 2 && pack && pack !== 'none' && !S.state.packs.find((p) => p.id === pack).installed) {
+      if (step === 3 && pack && pack !== 'none' && !S.state.packs.find((p) => p.id === pack).installed) {
         await api('/packs/install', { id: pack });
         toast('Pack installed');
       }

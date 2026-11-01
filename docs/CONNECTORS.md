@@ -1,5 +1,7 @@
 # Connecting your real accounts
 
+Click the blue **Connect** button on a card to connect it; connected cards show a green **Connected** button, which opens the settings (including **Disconnect**). For Gmail and the other Claude-only connectors, connect them in Claude Desktop and then choose **I connected it in Claude Desktop**.
+
 Every connector starts in **demo mode**, so the brain is full from minute one. When you're ready, open **MCP Connections**, pick a source, choose **Connect live**, and follow the steps below. Live items replace that source's demo items in the Intelligence Feed.
 
 Maestro has two places where a connection can be live:
