@@ -85,9 +85,11 @@ async function gatherContext(message, profile) {
   const mem = memoryNotes().map((n) => ({ path: n.path, title: n.title, body: n.body.slice(0, 2500) }));
   const all = feed.list({ profile, limit: 300 });
   const items = all.slice(0, 25);
-  const events = await calendar.list({ profile, days: 7 });
+  const allEvents = await calendar.list({ profile, days: 90 }); // questions about a specific event look further ahead
+  const weekEnd = new Date(); weekEnd.setHours(0, 0, 0, 0); weekEnd.setDate(weekEnd.getDate() + 7);
+  const events = allEvents.filter((e) => new Date(e.start) <= weekEnd);
   const openTasks = tasks.list({ profile }).slice(0, 15);
-  return { notes, mem, items, all, events, openTasks };
+  return { notes, mem, items, all, events, allEvents, openTasks };
 }
 
 function contextText(ctx, cfg, profile) {
@@ -273,7 +275,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
-  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
+  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
   if (direct) return direct;
   const m = message.toLowerCase();
   const name = cfg.user.name;
@@ -474,7 +476,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
-      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.events });
+      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events });
       const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + (exact ? exact + '\n\n' : '') + contextText(ctx, cfg, profile);
       const history = conv.messages.slice(-8).map((x) => ({ role: x.role, content: x.content }));
       try {

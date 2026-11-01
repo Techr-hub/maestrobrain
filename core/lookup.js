@@ -78,8 +78,42 @@ function personIn(i) {
   return lead ? lead[1] : null;
 }
 
+// "When is board prep?", "What time is Kids soccer?", "Where is the offsite?": match the words of the question
+// against event titles, attendees and locations, best match first, then soonest.
+const EVENT_FILLER = new Set(('happening happen happens scheduled schedule event events calendar calender booked planned plan start starts starting ' +
+  'begin begins day date held going taking place appointment meeting meetings meet call is are').split(' '));
+const stem = (t) => (t.length > 4 ? t.replace(/(ing|es|s)$/, '') : t);
+function matchEvents(m, events) {
+  const words = tokens(m).filter((t) => t.length > 1 && !STOP.has(t));
+  const content = words.filter((t) => !EVENT_FILLER.has(t) && !VERB_WORDS.has(t));
+  if (!content.length) return null;
+  const scored = events.map((e) => {
+    const bag = new Set(tokens(`${e.title} ${(e.attendees || []).join(' ')} ${e.location || ''}`).map(stem));
+    const hit = (t) => bag.has(stem(t)) || (SYN[t] || []).some((x) => bag.has(x));
+    return { e, s: content.filter(hit).length * 2 + words.filter((t) => EVENT_FILLER.has(t) && hit(t)).length, c: content.filter(hit).length };
+  }).filter((x) => x.c > 0);
+  if (!scored.length) return null;
+  const best = Math.max(...scored.map((x) => x.s));
+  const top = scored.filter((x) => x.s === best).map((x) => x.e).sort((a, b) => new Date(a.start) - new Date(b.start));
+  const upcoming = top.filter((e) => new Date(e.end) > Date.now());
+  const past = top.filter((e) => new Date(e.end) <= Date.now());
+  const first = upcoming[0] || past[past.length - 1];
+  const inTitle = new Set(tokens(first.title).map(stem));
+  return { events: upcoming, past: upcoming.length ? null : past[past.length - 1], want: content, byTitle: content.some((t) => inTitle.has(stem(t))) };
+}
+
 // Find feed items and events that answer the question. Returns null when it isn't a lookup question.
-function find(message, { items, events, otherItems = [] }) {
+function find(message, ctx) {
+  const r = findBasic(message, ctx);
+  const q = parse(message);
+  const t = !q.past && /\b(when|what time|what day|which day|where|how long until)\b/.test(q.m) ? matchEvents(q.m, ctx.events || []) : null;
+  // "when is my meeting with Sarah?" keeps the person-first answer, unless the question names the event itself
+  if (r && r.kind === 'event' && ((r.subject.length && r.events.length) || r.past) && !(t && t.byTitle)) return r;
+  if (t) return { kind: 'event', q, subject: [], titleMatch: true, ...t };
+  return r;
+}
+
+function findBasic(message, { items, events, otherItems = [] }) {
   const q = parse(message);
   if (!q.question || /^who (is|are)\b/.test(q.m)) return null;
   const names = knownNames([...items, ...otherItems], events);
@@ -120,9 +154,19 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const link = peopleNote ? `\n\n_More about them: [[${peopleNote.title}]]_` : '';
 
   if (r.kind === 'event') {
+    if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 90 days.`;
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
-    if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 7 days.**`;
+    if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 90 days.**`;
     const [e, ...rest] = r.events;
+    if (r.titleMatch) {
+      const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
+      const where = /\bwhere\b/.test(r.q.m) && e.location ? ` at ${e.location}` : '';
+      const len = e.allDay ? 'all day' : mins >= 60 && mins % 60 === 0 ? `${mins / 60} h` : `${mins} min`;
+      const then = rest.find((x) => x.title === e.title);
+      return [`**${e.title} is ${e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start)}${where} · ${len}.**`,
+        e.location && !where ? `Location: ${e.location}.` : '', e.attendees && e.attendees.length ? `With ${e.attendees.join(', ')}.` : '',
+        then ? `After that, the next one is ${whenText(then.start)}.` : rest.length ? `Also matching: ${rest[0].title}, ${whenText(rest[0].start)}.` : ''].filter(Boolean).join('\n');
+    }
     const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
     return [`**${who ? `Your next meeting with ${who} is` : 'Next up:'} ${e.title}, ${whenText(e.start)} · ${mins} min.**`,
       e.attendees ? `With ${e.attendees.join(', ')}.` : '', e.location ? `Location: ${e.location}.` : '', e.notes ? `Prep notes: [[${e.notes.split('/').pop()}]]` : '',
