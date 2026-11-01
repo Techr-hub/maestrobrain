@@ -108,9 +108,87 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
     'Be proactive: point out blockers, conflicts, deadlines and the next best action. Reference vault notes as [[Note Title]].',
     'Answer the question that was asked. For a direct question (when, who, what, did) give the specific fact with its day and time in the first sentence, then stop unless more helps.',
     'Use short Markdown: a one-line answer first, then bullets. Offer to save outputs to the vault.',
+    'For broad requests that span several areas ("summarize my day", "brief me", "catch me up"), do not list everything. Give a high-level overview with counts per area (for example: 4 meetings, 3 calls, 5 priority items), then ask which area the user wants to hear more about. Go into detail only on the area they pick.',
     voice ? 'The user is talking by voice. Answer in 2 to 4 short spoken sentences with no Markdown, tables or lists.' : '',
     skill ? `\n# ACTIVE SKILL: ${skill.name}\nFollow these instructions:\n${skill.instructions}` : '',
   ].filter(Boolean).join('\n');
+}
+
+// ---------------------------------------------------------------- day overview
+const MSG_CATS = ['EMAIL', 'CONVERSATION', 'SMS'];
+function dayParts(ctx) {
+  const items = ctx.items;
+  const meetings = ctx.events.filter((e) => sameDay(e.start, Date.now()));
+  const upcoming = meetings.find((e) => new Date(e.start) > new Date());
+  const calls = items.filter((i) => i.category === 'CALL');
+  const missed = calls.filter((i) => /missed|voicemail/i.test(i.title + ' ' + (i.quote || '')));
+  const msgs = items.filter((i) => MSG_CATS.includes(i.category));
+  const msgHigh = msgs.filter((i) => i.priority === 'High');
+  const highs = items.filter((i) => i.priority === 'High');
+  const urgent = ctx.openTasks.filter((t) => t.priority === 'High' || (t.due && t.due <= isoDate()));
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  return [
+    { key: 'meetings', label: 'meetings', count: meetings.length, line: n(meetings.length, 'meeting', 'meetings') + (upcoming ? `, next is ${upcoming.title} at ${timeOf(upcoming.start)}` : '') },
+    { key: 'calls', label: 'calls', count: calls.length, line: n(calls.length, 'call', 'calls') + (missed.length ? `, ${missed.length} missed` : '') },
+    { key: 'messages', label: 'messages', count: msgs.length, line: n(msgs.length, 'message', 'messages') + (msgHigh.length ? `, ${msgHigh.length} need a reply` : '') },
+    { key: 'priority', label: 'priority items', count: highs.length, line: n(highs.length, 'priority item', 'priority items') },
+    { key: 'tasks', label: 'tasks', count: urgent.length, line: n(urgent.length, 'urgent task', 'urgent tasks') },
+  ];
+}
+
+function fullBrief(ctx, name) {
+  const today = ctx.events.filter((e) => sameDay(e.start, Date.now()));
+  const highs = ctx.items.filter((i) => i.priority === 'High');
+  const due = ctx.openTasks.filter((t) => t.priority === 'High' || (t.due && t.due <= isoDate())).slice(0, 4);
+  const insight = ctx.items.find((i) => i.category === 'INSIGHT');
+  return [
+    `**Here's everything for today, ${name}.**`, '',
+    '**Meetings**', bullets(today.map((e) => `${timeOf(e.start)} · ${e.title}`)) || '- Nothing scheduled',
+    '', '**Needs you first**', bullets(highs.slice(0, 4).map((i) => `${i.title} (${i.sourceName}${i.deadline ? ', ' + i.deadline : ''})`)) || '- Nothing urgent',
+    '', '**Top tasks**', bullets(due.map((t) => `${t.text}${t.due ? ' · due ' + t.due : ''}`)) || '- Inbox zero',
+    insight ? `\n**Insight:** ${insight.quote}. ${insight.summary}` : '',
+  ].join('\n');
+}
+
+// Follow-ups to the overview: "meetings", "tell me about the calls", "more on priority items", "everything".
+function dayDetail(message, ctx, cfg) {
+  const m = message.toLowerCase().replace(/[?!.]+$/, '').trim()
+    .replace(/^(ok(ay)?|sure|yes|yeah|yep)[, ]+/, '')
+    .replace(/^(let'?s (do|hear|go with)|tell me (more )?about|more (on|about)|go (deeper|into)|what about|what('s| is| are)|show me|give me|read( me)?|i want to (hear|know) (more )?about|just)\s+/, '')
+    .replace(/^(the|my)\s+/, '').replace(/\s+(today|please|first|then)$/, '').trim();
+  const items = ctx.items;
+  const pick = (re) => re.test(m);
+  if (pick(/^(everything|all( of (it|them))?|the lot|full brief|all of the above)$/)) return fullBrief(ctx, cfg.user.name);
+  if (pick(/^(meetings?|schedule|calendar|events?)$/)) {
+    const today = ctx.events.filter((e) => sameDay(e.start, Date.now()));
+    if (!today.length) return 'No meetings today.';
+    const next = today.find((e) => new Date(e.start) > new Date());
+    return [`**${today.length} meetings today${next ? `. Next up is ${next.title} at ${timeOf(next.start)}` : ''}.**`, '',
+      bullets(today.map((e) => `${timeOf(e.start)} · ${e.title}${e.attendees && e.attendees.length ? ` with ${e.attendees.slice(0, 3).join(', ')}` : ''}`))].join('\n');
+  }
+  if (pick(/^(calls?|phone calls?|missed calls?|voicemails?)$/)) {
+    const calls = items.filter((i) => i.category === 'CALL');
+    if (!calls.length) return 'No calls to go through.';
+    return [`**${calls.length} calls.**`, '', bullets(calls.slice(0, 6).map((i) => `${i.priority === 'High' ? '🔴 ' : ''}${i.title} · ${ago(i.ts)}${i.quote ? ` — ${i.quote}` : ''}`))].join('\n');
+  }
+  if (pick(/^(messages?|emails?|texts?|inbox|slack|conversations?)$/)) {
+    const msgs = items.filter((i) => MSG_CATS.includes(i.category));
+    if (!msgs.length) return 'No messages waiting.';
+    const need = msgs.filter((i) => i.priority === 'High').length;
+    return [`**${msgs.length} messages${need ? `, ${need} need a reply` : ''}.**`, '', bullets(msgs.slice(0, 6).map((i) => `${i.priority === 'High' ? '🔴 ' : ''}${i.title}${i.title.includes(i.sourceName) ? '' : ` (${i.sourceName})`}`))].join('\n');
+  }
+  if (pick(/^(priority( items)?|priorities|high priority( items)?|urgent( items)?|what needs me( first)?)$/)) {
+    const highs = items.filter((i) => i.priority === 'High');
+    if (!highs.length) return 'Nothing is high priority right now.';
+    return [`**${highs.length} priority items. Start with the first one.**`, '', bullets(highs.slice(0, 6).map((i) => `${i.title} (${i.sourceName}${i.deadline ? ', ' + i.deadline : ''})`))].join('\n');
+  }
+  if (pick(/^(tasks?|urgent tasks?|to-?dos?)$/)) {
+    const urgent = ctx.openTasks.filter((t) => t.priority === 'High' || (t.due && t.due <= isoDate()));
+    const list = urgent.length ? urgent : ctx.openTasks;
+    if (!list.length) return 'No open tasks.';
+    return [`**${urgent.length ? `${urgent.length} urgent tasks, ${ctx.openTasks.length} open in total` : list.length + ' open tasks'}.**`, '', bullets(list.slice(0, 6).map((t) => `${t.text}${t.due ? ' · due ' + t.due : ''}`))].join('\n');
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- demo brain (no API key needed)
@@ -138,6 +216,8 @@ function smallTalk(message, cfg) {
 function demoAnswer(message, ctx, cfg, profile, agent) {
   const quick = smallTalk(message, cfg);
   if (quick) return quick;
+  const deeper = dayDetail(message, ctx, cfg);
+  if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
   const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
@@ -216,18 +296,16 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
     ].join('\n');
   }
 
-  // Daily brief
-  if (/brief|today|morning|what's on|whats on|my day|catch me up|what did i miss|priorit/.test(m)) {
-    const due = ctx.openTasks.filter((t) => t.priority === 'High' || (t.due && t.due <= isoDate())).slice(0, 4);
-    const insight = items.find((i) => i.category === 'INSIGHT');
-    return [
-      `**Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${name}. You have ${today.length} events today, ${highs.length} high-priority items and ${due.length} urgent tasks.**`,
-      '',
-      '**Schedule**', bullets(today.map((e) => `${timeOf(e.start)} · ${e.title}`)) || '- Nothing scheduled',
-      '', '**Needs you first**', bullets(highs.slice(0, 4).map((i) => `${i.title} (${i.sourceName}${i.deadline ? ', ' + i.deadline : ''})`)) || '- Nothing urgent',
-      '', '**Top tasks**', bullets(due.map((t) => `${t.text}${t.due ? ' · due ' + t.due : ''}`)) || '- Inbox zero',
-      insight ? `\n**Insight:** ${insight.quote}. ${insight.summary}` : '',
-    ].join('\n');
+  // Daily brief: a high-level overview first, then ask which part to go deeper on.
+  const topical = /email|inbox|slack|text|call|meeting|calendar|task|project|sprint|note/.test(m) && !/my day|today|morning|catch me up/.test(m);
+  if (!topical && /brief|today|morning|what's on|whats on|my day|catch me up|what did i miss|priorit|summar|overview|rundown/.test(m)) {
+    const parts = dayParts(ctx);
+    const live = parts.filter((p) => p.count > 0);
+    if (live.length <= 1 || /everything|full brief|all of it|in detail|detailed/.test(m)) return fullBrief(ctx, name);
+    const hello = `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${name}.`;
+    const list = live.map((p) => p.label);
+    return [`**${hello} Here's your day at a glance:**`, '', bullets(live.map((p) => p.line)), '',
+      `Which do you want to hear more about: ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}?`].join('\n');
   }
 
   // Inbox / messages triage

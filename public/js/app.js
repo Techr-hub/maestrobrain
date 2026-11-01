@@ -374,6 +374,16 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   tools.className = 'tools';
   tools.innerHTML = res.sources.slice(0, 5).map((p) => `<button data-src="${esc(p)}">${icon('file-text')} ${esc(p.split('/').pop().replace('.md', ''))}</button>`).join('') +
     `<button data-act="speak">${icon('volume-2')} Speak</button><button data-act="save">${icon('save')} Save to vault</button><button data-act="copy">${icon('copy')} Copy</button>`;
+  // Overview replies end with "Which do you want to hear more about: a, b or c?" Offer those as one-tap follow-ups.
+  const follow = res.reply.match(/hear more about: ([^?\n]+)\?/i);
+  if (follow) {
+    const opts = follow[1].split(/,\s*|\s+or\s+/).map((s) => s.trim()).filter(Boolean);
+    const row = document.createElement('div');
+    row.className = 'suggestions followups';
+    row.innerHTML = opts.map((o) => `<button class="suggestion" data-q="${esc(o)}">${esc(o[0].toUpperCase() + o.slice(1))}</button>`).join('') + '<button class="suggestion" data-q="everything">Everything</button>';
+    row.querySelectorAll('[data-q]').forEach((b) => b.onclick = () => { row.remove(); ask(b.dataset.q, { voice: viaVoice }); });
+    pending.appendChild(row);
+  }
   pending.appendChild(tools);
   tools.querySelectorAll('[data-src]').forEach((b) => b.onclick = () => openNote(b.dataset.src));
   tools.querySelector('[data-act=speak]').onclick = () => {

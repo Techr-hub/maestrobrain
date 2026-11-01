@@ -96,10 +96,13 @@ export class Voice {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     speechSynthesis.cancel();
     // Speak in sentence-sized chunks: long utterances get cut off in Chrome.
-    const chunks = text.match(/[^.!?]+[.!?]*/g) || [text];
+    // Each chunk is cleaned so the voice never reads punctuation or symbols aloud
+    // (some voices say "dot", "end" or "point" for a trailing full stop).
+    const chunks = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(speakable).filter(Boolean);
+    if (!chunks.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.voices().find((v) => /en[-_]GB/i.test(v.lang) && /male|daniel|arthur|george/i.test(v.name)) || null;
     chunks.forEach((chunk, i) => {
-      const u = new SpeechSynthesisUtterance(chunk.trim());
+      const u = new SpeechSynthesisUtterance(chunk);
       if (voice) u.voice = voice;
       u.rate = rate; u.lang = this.lang;
       if (i === 0) u.onstart = () => onStart && onStart();
@@ -110,3 +113,19 @@ export class Voice {
 
   stopSpeaking() { if (voiceSupported.tts) speechSynthesis.cancel(); }
 }
+
+// Turn a chunk of reply text into something a speech engine reads naturally.
+export function speakable(s = '') {
+  return s
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '') // emoji
+    .replace(/\s+[·•|]\s+/g, ', ').replace(/\s+[—–]\s+/g, ', ').replace(/[·•|—–]/g, ' ')
+    .replace(/(\w)\/(\w)/g, '$1 or $2').replace(/\s\/\s/g, ' or ')
+    .replace(/[()[\]{}"“”«»_*#>~^=<+]/g, ' ')
+    .replace(/(^|\s)#(\w)/g, '$1$2')
+    .replace(/\.{2,}|…/g, '.')
+    .replace(/\s+([,;:])/g, '$1').replace(/([,;:])\1+/g, '$1')
+    .replace(/\s+/g, ' ').trim()
+    .replace(/[\s.,;:!-]+$/, '') // no trailing full stop: the pause between chunks is enough
+    .replace(/^[\s.,;:!-]+/, '');
+}
+

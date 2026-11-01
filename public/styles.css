@@ -153,6 +153,8 @@ a:hover { text-decoration: underline; }
 .mentions .hint { margin-left: auto; color: var(--dim); font-size: 11px; }
 .suggestions { display: flex; gap: 6px; flex-wrap: wrap; }
 .suggestion { background: transparent; border: 1px dashed var(--line); color: var(--muted); border-radius: 14px; padding: 4px 10px; font-size: 12px; }
+.followups { margin-top: 10px; }
+.followups .suggestion { border-style: solid; color: var(--cyan); border-color: var(--cyan-deep); }
 .suggestion:hover { color: var(--cyan); border-color: var(--cyan-deep); }
 
 /* ---------------- Intelligence feed ---------------- */
