@@ -118,7 +118,9 @@ function parseIcs(text) {
 }
 
 async function fetchIcs(url) {
-  const res = await fetch(url.replace(/^webcal:/i, 'https:'), { headers: { 'User-Agent': 'Maestro-Brain' } });
+  const u = url.replace(/^webcal:/i, 'https:');
+  let res;
+  try { res = await fetch(u, { headers: { 'User-Agent': 'Maestro-Brain' } }); } catch (e) { let host = 'the calendar server'; try { host = new URL(u).host; } catch { /* bad link */ } throw friendly(e, host); }
   if (!res.ok) throw new Error('Calendar link returned HTTP ' + res.status);
   const text = await res.text();
   if (!text.includes('BEGIN:VCALENDAR')) throw new Error('That link did not return an iCalendar file');

@@ -219,7 +219,7 @@ export async function registerClaude(done) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-function connectModal(c, prof, done) {
+export function connectModal(c, prof, done) {
   const s = c.status[prof];
   const canLive = c.live && c.live.includes('dashboard');
   const viaClaude = c.live && c.live.includes('claude');

@@ -115,6 +115,24 @@ route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(bod
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7) }));
 
+// Everything about one source for the feed panel: its schedule (calendars), recent items, and whether it's connected or failing.
+route('GET', '/api/source', async (q) => {
+  const id = q.get('id');
+  const def = connectors.get(id);
+  if (!def) throw new Error('Unknown source');
+  const cfg = config.load();
+  const conn = (cfg.connections[cfg.profile] || {})[id];
+  const isCal = ['icalendar', 'gcal', 'outlook'].includes(id);
+  const out = { id, name: def.name, color: def.color, icon: def.icon, kind: isCal ? 'calendar' : 'feed', connected: !!conn, mode: conn ? conn.mode : null, error: null, events: [], items: [] };
+  if (!conn) return out;
+  out.error = conn.lastError || null;
+  if (isCal || id === 'gmail') {
+    out.events = (await calendar.list({ days: 7 })).filter((e) => e.source === id);
+    if (conn.mode === 'live' && conn.fields && conn.fields.icsUrl) out.error = calendar.errorFor(conn.fields.icsUrl) || out.error;
+  }
+  out.items = feed.list({ source: id, limit: 40 });
+  return out;
+});
 route('POST', '/api/connections', async (_q, body) => {
   const { id, profile = config.load().profile, mode = 'demo', fields = {} } = body;
   const def = connectors.get(id);

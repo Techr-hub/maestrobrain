@@ -12,8 +12,8 @@ export const GROUP_COLORS = {
 
 const TAU = Math.PI * 2;
 const WR = 220;          // world radius of the knowledge cloud
-const ORBIT = 380;       // world radius of the source orbit
-const CAM_D = 760;       // camera distance (perspective strength)
+const ORBIT = 310;       // world radius of the source orbit
+const CAM_D = 1300;      // camera distance (perspective strength)
 const VIEW0 = { yaw: -0.5, pitch: 0.32, zoom: 1.12, panX: 0, panY: 0 };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -47,6 +47,7 @@ export class BrainMap {
     this.flash = 0;
     this.view = { ...VIEW0 };
     this.goal = { ...VIEW0 };
+    this.touched = false;
     this.autoRotate = true;
     this.lastInteract = -1e9;
     this.pointers = new Map();
@@ -77,6 +78,9 @@ export class BrainMap {
       this.R = Math.max(110, Math.min(this.w * 0.36, this.h * 0.36));
     }
     this.base = this.R / WR; // screen pixels per world unit at zoom 1
+    // Default zoom that keeps the whole source orbit on screen.
+    this.fitZoom = clamp(Math.min((this.w / 2 - 55) / (ORBIT * this.base * 1.22), (this.h * (this.compact ? 0.3 : 0.55)) / (ORBIT * this.base * 0.62)), 0.35, 1.12);
+    if (this.view && !this.touched) { this.view.zoom = this.goal.zoom = this.fitZoom; this.view.panX = this.goal.panX = 0; this.view.panY = this.goal.panY = 0; }
   }
 
   // When the conversation is open, the brain moves up and shrinks so the core stays visible.
@@ -100,13 +104,14 @@ export class BrainMap {
     return { x: this.cx + v.panX + x1 * s, y: this.cy + v.panY + y2 * s, z: z2, k: v.zoom * f, f };
   }
 
-  resetView() { Object.assign(this.goal, VIEW0); this.lastInteract = performance.now(); }
+  resetView() { Object.assign(this.goal, VIEW0, { zoom: this.fitZoom || VIEW0.zoom }); this.touched = false; this.lastInteract = performance.now(); }
   zoomBy(m, mx = this.cx, my = this.cy) {
     const g = this.goal, nz = clamp(g.zoom * m, 0.35, 5), r = nz / g.zoom;
     // keep the point under the cursor where it is
     g.panX = (g.panX + this.cx - mx) * r - (this.cx - mx);
     g.panY = (g.panY + this.cy - my) * r - (this.cy - my);
     g.zoom = nz;
+    this.touched = true;
     this.lastInteract = performance.now();
   }
 
@@ -139,6 +144,7 @@ export class BrainMap {
       prev.x = e.clientX; prev.y = e.clientY;
       this.drag.moved += Math.abs(dx) + Math.abs(dy);
       if (this.drag.moved < 4) return;
+      this.touched = true;
       if (this.drag.pan) { g.panX += dx; g.panY += dy; }
       else { g.yaw += dx * 0.006; g.pitch = clamp(g.pitch + dy * 0.006, -1.35, 1.35); }
       this.lastInteract = performance.now();
@@ -147,7 +153,7 @@ export class BrainMap {
     });
     const end = (e) => {
       this.pointers.delete(e.pointerId);
-      if (this.drag && this.drag.moved < 4 && this.pointers.size === 0) { this.onMove(e); if (this.hover && this.onNodeClick) this.onNodeClick(this.hover); }
+      if (this.drag && this.drag.moved < 4 && this.pointers.size === 0) { this.onMove(e); if (this.hover) { if (this.hover.kind === 'source') this.selectedSource = this.hover.id; if (this.onNodeClick) this.onNodeClick(this.hover); } }
       if (this.pointers.size === 0) { this.drag = null; c.style.cursor = this.hover ? 'pointer' : 'grab'; }
     };
     c.addEventListener('pointerup', end);
@@ -250,7 +256,7 @@ export class BrainMap {
     this.hover = best;
     this.c.style.cursor = best ? 'pointer' : 'grab';
     if (this.tooltip) {
-      if (best) { this.tooltip.style.display = 'block'; this.tooltip.style.left = mx + 'px'; this.tooltip.style.top = my + 'px'; this.tooltip.textContent = best.kind === 'note' ? `${best.label} · ${best.group}` : `${best.label} · connected`; }
+      if (best) { this.tooltip.style.display = 'block'; this.tooltip.style.left = mx + 'px'; this.tooltip.style.top = my + 'px'; this.tooltip.textContent = best.kind === 'note' ? `${best.label} · ${best.group}` : `${best.label} · ${best.connected === false ? 'not connected · click to connect' : best.error ? 'connection error' : 'click to open'}`; }
       else this.tooltip.style.display = 'none';
     }
   }
@@ -393,16 +399,19 @@ export class BrainMap {
   }
 
   drawSource(s, core) {
-    const ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2), fog = clamp(1 - p.z / 1200, 0.45, 1);
-    ctx.strokeStyle = `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`;
-    ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(core.x, core.y); ctx.stroke(); ctx.setLineDash([]);
+    const ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2), off = s.connected === false;
+    const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off ? 0.45 : 1);
+    if (!off) { ctx.strokeStyle = `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(core.x, core.y); ctx.stroke(); ctx.setLineDash([]); }
+    const selected = this.selectedSource === s.id;
+    if (selected || s.error) { ctx.strokeStyle = s.error ? 'rgba(255,77,109,.9)' : hex(s.color, 0.9); ctx.lineWidth = 1.5; ctx.setLineDash(s.error ? [3, 3] : []); ctx.beginPath(); ctx.arc(p.x, p.y, 22 * k, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; }
     const r = (15 + s.pulse * 6) * k;
     const g = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, r * 2.2);
     g.addColorStop(0, hex(s.color, (0.45 + s.pulse * 0.4) * fog)); g.addColorStop(1, hex(s.color, 0));
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r * 2.2, 0, TAU); ctx.fill();
     ctx.globalAlpha = fog;
     ctx.fillStyle = '#01060e'; ctx.strokeStyle = s.color; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 15 * k, 0, TAU); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1;
+    if (off) ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 15 * k, 0, TAU); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1; ctx.setLineDash([]);
     ctx.fillStyle = s.color; ctx.font = `600 ${Math.round(11 * k)}px Rajdhani, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(s.short || s.name.slice(0, 2).toUpperCase(), p.x, p.y + 1);
     ctx.fillStyle = 'rgba(157,178,215,.85)'; ctx.font = `${Math.round(clamp(11 * k, 9, 16))}px Roboto, sans-serif`;

@@ -35,6 +35,9 @@ async function list({ profile, days = 7 } = {}) {
     if (c && c.mode === 'live' && c.fields && c.fields.icsUrl) {
       const ev = await liveEvents(c.fields.icsUrl);
       events.push(...ev.map((e) => ({ ...e, source: s, live: true })));
+      // remember failures so the brain map and feed can show them
+      const err = errorFor(c.fields.icsUrl) || undefined;
+      if (err !== c.lastError) config.update((x) => { const k = x.connections[prof][s]; if (k) { if (err) k.lastError = err; else delete k.lastError; } });
     }
   }
   events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to);
@@ -42,4 +45,6 @@ async function list({ profile, days = 7 } = {}) {
   return events;
 }
 
-module.exports = { list };
+function errorFor(url) { const hit = icsCache.get(url); return hit && hit.error ? hit.error : null; }
+
+module.exports = { list, errorFor, CAL_SOURCES };

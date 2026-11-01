@@ -4,7 +4,7 @@ import { renderMarkdown, stripMarkdown, esc } from './md.js';
 import { BrainMap, avatar as makeAvatar, GROUP_COLORS } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
-import { PAGES, onboarding, knowledgeModal } from './pages.js';
+import { PAGES, onboarding, knowledgeModal, connectModal } from './pages.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -146,9 +146,10 @@ function buildDashboard() {
 
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
-    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : navigate('connections')),
+    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)),
     onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
+  window.maestroBrain = brain; // handy for debugging in the browser console
   av = makeAvatar($('#avatar-canvas'));
   $('#brand-avatar').onclick = () => { navigate('dashboard'); toggleMic(); };
 
@@ -196,7 +197,9 @@ async function loadGraph() {
 function updateBrainSources() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
-  brain && brain.setSources(S.state.connectors.filter((c) => conns[c.id]).map((c) => ({ id: c.id, name: c.name, color: c.color, short: SHORT[c.id] })));
+  const packConns = new Set(S.state.packs.filter((p) => p.installed).flatMap((p) => p.connectors || []));
+  brain && brain.setSources(S.state.connectors.filter((c) => conns[c.id] || c.group === 'foundation' || packConns.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name, color: c.color, short: SHORT[c.id], connected: !!conns[c.id], error: !!(conns[c.id] && conns[c.id].lastError) })));
   updateStats();
 }
 
@@ -414,7 +417,7 @@ function fillSourceFilter() {
   const sel = $('#source-filter');
   const opts = [['all', 'All Sources'], ...S.state.connectors.filter((c) => conns[c.id]).map((c) => [c.id, c.name.replace(/ \(.*\)/, '')]), ['system', 'Maestro']];
   sel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${S.source === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
-  sel.onchange = () => { S.source = sel.value; renderFeed(false); };
+  sel.onchange = () => { S.sourceView = null; S.source = sel.value; renderFeed(false); };
 }
 
 function feedItemHtml(i, isNew) {
@@ -435,6 +438,7 @@ function feedItemHtml(i, isNew) {
 }
 
 function renderFeed(animateFirst) {
+  if (S.sourceView) return renderSourceView();
   const list = $('#feed-list');
   const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source) && (S.category === 'all' || i.category === S.category));
   if (!items.length) {
@@ -457,6 +461,75 @@ function renderFeed(animateFirst) {
   });
   const unread = S.feed.some((i) => i.unread);
   $('#bell-dot').hidden = !unread;
+}
+
+// ---------------------------------------------------------------- source view (click a source on the brain map)
+async function showSource(id) {
+  S.sourceView = id;
+  $('#feed').classList.add('open');
+  $('#feed-list').innerHTML = '<div class="feed-empty">Loading…</div>';
+  try { S.sourceData = await api('/source?id=' + encodeURIComponent(id)); } catch (e) { S.sourceData = { id, name: id, connected: false, error: e.message, events: [], items: [] }; }
+  if (S.sourceView === id) { renderSourceView(); $('#feed-list').scrollTop = 0; }
+}
+
+function closeSource() { S.sourceView = null; S.sourceData = null; if (brain) brain.selectedSource = null; renderFeed(false); }
+
+function dayLabel(d) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  const diff = Math.round((x - t) / 86400000);
+  return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : new Date(d).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+function renderSourceView() {
+  const d = S.sourceData; if (!d) return;
+  const list = $('#feed-list');
+  const conn = S.state.connectors.find((c) => c.id === d.id) || { name: d.name, color: '#00e5ff', icon: 'plug' };
+  const mode = !d.connected ? '<span class="tag off">Not connected</span>' : d.error ? '<span class="tag err">● Error</span>' : d.mode === 'live' ? '<span class="tag live">● Live</span>' : d.mode === 'claude' ? '<span class="tag live">● Live in Claude</span>' : '<span class="tag demo">● Demo data</span>';
+  let html = `<div class="src-head" style="--c:${conn.color}"><button class="src-back" id="src-back" title="Back to all activity">${icon('arrow-right')}</button><span class="agent-icon">${icon(conn.icon)}</span><div><b>${esc(conn.name)}</b><div>${mode}</div></div></div>`;
+  // Not connected or failing: show it as a notification with a button to fix it.
+  if (!d.connected || d.error) {
+    html += `<div class="activity notice ${d.error ? 'err' : ''}" style="--c:${d.error ? '#ff4d6d' : '#3d8bff'}">
+      <div class="agent-icon">${icon('plug')}</div>
+      <div class="activity-details">
+        <span class="a-time">just now · Maestro</span>
+        <div class="a-title">${d.error ? `${esc(conn.name)} connection failed` : `${esc(conn.name)} isn't connected`}</div>
+        <div class="a-cat"><span class="pill" style="--pill:${d.error ? '#4a0f1c' : '#0d2a55'};--pill-text:${d.error ? '#ff8095' : '#8bb8ff'}">CONNECTION</span></div>
+        <div class="a-quote">${d.error ? esc(d.error) : d.kind === 'calendar' ? `Connect ${esc(conn.name)} to see your schedule here.` : `Connect ${esc(conn.name)} to stream its notifications into your feed.`}</div>
+        <div class="a-actions"><button class="btn small connect" id="src-connect">${icon('plug')} Make Connection</button></div>
+      </div></div>`;
+  }
+  if (d.connected && d.kind === 'calendar') {
+    const byDay = new Map();
+    for (const e of d.events) { const k = dayLabel(e.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(e); }
+    const now = Date.now();
+    html += `<div class="section-title" style="margin:14px 4px 6px">Schedule · next 7 days</div>`;
+    html += byDay.size ? [...byDay].map(([day, evs]) => `<div class="sched-day"><div class="sched-label">${esc(day)}</div>${evs.map((e) => {
+      const st = new Date(e.start), en = new Date(e.end), past = en < now, nowOn = st <= now && en >= now;
+      return `<div class="sched-ev ${past ? 'past' : ''} ${nowOn ? 'now' : ''}" style="--c:${conn.color}" ${e.notes ? `data-note="${esc(e.notes)}"` : ''}>
+        <div class="sched-time">${st.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}<small>${Math.round((en - st) / 60000)} min</small></div>
+        <div class="sched-body"><b>${esc(e.title)}</b>${nowOn ? ' <span class="tag live">Now</span>' : ''}
+          ${e.attendees ? `<small>${icon('users-round')} ${esc(e.attendees.join(', '))}</small>` : ''}${e.location ? `<small>${icon('home')} ${esc(e.location)}</small>` : ''}${e.notes ? `<small class="lnk">${icon('file-text')} Prep notes</small>` : ''}</div></div>`;
+    }).join('')}</div>`).join('') : `<div class="feed-empty" style="padding:18px">Nothing on this calendar in the next 7 days.</div>`;
+  }
+  const items = d.connected ? S.feed.filter((i) => i.source === d.id) : [];
+  if (d.connected) {
+    html += `<div class="section-title" style="margin:14px 4px 6px">Recent activity</div>`;
+    html += items.length ? items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">No recent activity from ${esc(conn.name)}.</div>`;
+  }
+  list.innerHTML = html;
+  list.querySelector('#src-back').onclick = closeSource;
+  const mk = list.querySelector('#src-connect');
+  if (mk) mk.onclick = () => {
+    const c = S.state.connectors.find((x) => x.id === d.id);
+    connectModal(c, S.state.config.profile, async () => { await afterChange({ graph: false }); showSource(d.id); });
+  };
+  list.querySelectorAll('[data-note]').forEach((el) => el.onclick = () => openNote(el.dataset.note));
+  list.querySelectorAll('.activity[data-id]').forEach((el) => {
+    const item = S.feed.find((x) => x.id === el.dataset.id);
+    el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+  });
 }
 
 async function markRead(item) {
@@ -518,7 +591,7 @@ $('#bell').onclick = async () => {
 };
 $('#prefs').onclick = () => navigate('settings');
 $('#feed-toggle').onclick = () => $('#feed').classList.toggle('open');
-$('#feed-all').onclick = () => { S.source = 'all'; S.category = 'all'; fillSourceFilter(); renderFeed(false); $('#feed-list').scrollTop = 0; };
+$('#feed-all').onclick = () => { S.sourceView = null; S.source = 'all'; S.category = 'all'; fillSourceFilter(); renderFeed(false); $('#feed-list').scrollTop = 0; };
 $('#live-toggle').onclick = async () => {
   S.livePaused = !S.livePaused;
   await api('/settings', { demo: { liveFeed: !S.livePaused } });

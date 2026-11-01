@@ -358,3 +358,27 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 }
 
 [hidden] { display: none !important; }
+
+/* source view in the feed panel (click a source on the brain map) */
+.src-head { display: flex; align-items: center; gap: 10px; padding: 10px 6px 12px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.src-head .agent-icon { --c: inherit; color: var(--c); }
+.src-head b { font-family: var(--font-display); font-size: 17px; letter-spacing: .5px; }
+.src-back { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--muted); cursor: pointer; transform: rotate(180deg); flex: none; }
+.src-back:hover { color: var(--cyan); border-color: var(--cyan-deep); }
+.tag.err { color: #ff8095; border-color: #5a1020; }
+.activity.notice { border: 1px solid #1e3f73; border-radius: 10px; background: rgba(13, 42, 85, .35); }
+.activity.notice.err { border-color: #5a1020; background: rgba(74, 15, 28, .3); }
+.activity.notice .a-actions .btn { height: 30px; }
+.sched-day { margin: 0 2px 12px; }
+.sched-label { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; color: var(--muted); margin: 6px 4px; }
+.sched-ev { display: flex; gap: 12px; padding: 9px 10px; border-left: 3px solid var(--c); background: rgba(0, 34, 57, .45); border-radius: 0 8px 8px 0; margin-bottom: 6px; }
+.sched-ev[data-note] { cursor: pointer; }
+.sched-ev.past { opacity: .5; }
+.sched-ev.now { background: rgba(0, 229, 255, .1); box-shadow: inset 0 0 0 1px var(--cyan-deep); }
+.sched-time { width: 66px; flex: none; font-family: var(--font-display); font-size: 15px; color: var(--cyan); line-height: 1.1; }
+.sched-time small { display: block; color: var(--dim); font-size: 11px; font-family: var(--font); }
+.sched-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sched-body b { font-weight: 500; }
+.sched-body small { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+.sched-body small .icon { font-size: 12px; }
+.sched-body .lnk { color: var(--cyan); }

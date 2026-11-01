@@ -152,8 +152,10 @@ async function pollLive() {
           for (const c of calls) if (c.direction === 'inbound') add({ externalId: 'call:' + c.sid, ts: Date.parse(c.start_time || c.date_created), source: 'twilio_calls', profile, category: 'CALL', title: `${c.status === 'completed' ? 'Call' : 'Missed call'} from ${c.from}`, quote: `Duration ${c.duration || 0}s`, priority: c.status === 'completed' ? '' : 'Medium' });
         }
         results.push({ id, profile, ok: true });
+        if (conn.lastError) config.update((c) => { if (c.connections[profile][id]) delete c.connections[profile][id].lastError; });
       } catch (e) {
         results.push({ id, profile, ok: false, error: e.message });
+        config.update((c) => { if (c.connections[profile][id]) c.connections[profile][id].lastError = e.message; });
       }
     }
   }
