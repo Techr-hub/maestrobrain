@@ -197,8 +197,8 @@ async function loadGraph() {
 function updateBrainSources() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
-  const packConns = new Set(S.state.packs.filter((p) => p.installed).flatMap((p) => p.connectors || []));
-  brain && brain.setSources(S.state.connectors.filter((c) => conns[c.id] || c.group === 'foundation' || packConns.has(c.id))
+  // Only sources the user has connected appear on the map; each one joins the orbit as it's connected.
+  brain && brain.setSources(S.state.connectors.filter((c) => conns[c.id])
     .map((c) => ({ id: c.id, name: c.name, color: c.color, short: SHORT[c.id], connected: !!conns[c.id], error: !!(conns[c.id] && conns[c.id].lastError) })));
   updateStats();
 }
