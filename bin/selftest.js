@@ -42,7 +42,7 @@ async function main() {
   const dev = await post('/chat', { message: 'Review open pull requests and issues, then prepare a technical status report.' });
   ok('Builder challenge answered', /#412/.test(dev.reply));
   const brief = await post('/chat', { message: 'Brief me on my day' });
-  ok('daily brief: overview with counts, then a question', /up against today/.test(brief.reply) && /\d+ meetings?/.test(brief.reply) && /hear more about/.test(brief.reply));
+  ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });
   ok('daily brief follow-up: calls', /\d+ calls?\b/.test(more.reply) && /Alex Chen/.test(more.reply));
   const call = await post('/chat', { message: 'When did Alex call me?' });
