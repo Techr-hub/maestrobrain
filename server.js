@@ -115,9 +115,33 @@ route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(bod
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7) }));
 
+// A hub (Email, Calendar, Messages, Calls, Projects) gathers every connected source of that kind.
+async function hubView(hid) {
+  const hub = require('./core/hubs').HUBS.find((h) => h.id === hid);
+  if (!hub) throw new Error('Unknown hub');
+  const cfg = config.load();
+  const conns = cfg.connections[cfg.profile] || {};
+  const members = hub.members.map((m) => { const d = connectors.get(m); const c = conns[m]; return d && { id: m, name: d.name, color: d.color, icon: d.icon, connected: !!c, mode: c ? c.mode : null, error: c ? c.lastError || null : null }; }).filter(Boolean);
+  const out = { id: 'hub:' + hid, hub: true, name: hub.name, color: hub.color, kind: hub.calendar ? 'calendar' : hub.projects ? 'projects' : 'feed', categories: hub.categories, members, connected: members.some((m) => m.connected), events: [], notes: [] };
+  if (hub.calendar && out.connected) {
+    const live = members.filter((m) => m.connected).map((m) => m.id);
+    out.events = (await calendar.list({ days: 7 })).filter((e) => live.includes(e.source));
+    for (const m of members) { const c = conns[m.id]; if (c && c.mode === 'live' && c.fields && c.fields.icsUrl) m.error = calendar.errorFor(c.fields.icsUrl) || m.error; }
+  }
+  if (hub.projects) {
+    // Projects always has your vault's project notes, even before a project tool is connected.
+    out.notes = vault.loadNotes().filter((n) => n.folder === 'Projects' && !/index/i.test(n.title))
+      .map((n) => ({ path: n.path, title: n.title, status: n.frontmatter.status || '', due: n.frontmatter.due || n.frontmatter.deadline || '', progress: n.frontmatter.points_total ? Math.round((Number(n.frontmatter.points_done) / Number(n.frontmatter.points_total)) * 100) : (n.frontmatter.progress != null ? Number(n.frontmatter.progress) : null) }));
+    out.connected = out.connected || out.notes.length > 0;
+  }
+  return out;
+}
+
 // Everything about one source for the feed panel: its schedule (calendars), recent items, and whether it's connected or failing.
+route('GET', '/api/hubs', async () => require('./core/hubs').HUBS);
 route('GET', '/api/source', async (q) => {
   const id = q.get('id');
+  if (id && id.startsWith('hub:')) return hubView(id.slice(4));
   const def = connectors.get(id);
   if (!def) throw new Error('Unknown source');
   const cfg = config.load();

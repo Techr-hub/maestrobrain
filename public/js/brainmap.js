@@ -153,7 +153,7 @@ export class BrainMap {
     });
     const end = (e) => {
       this.pointers.delete(e.pointerId);
-      if (this.drag && this.drag.moved < 4 && this.pointers.size === 0) { this.onMove(e); if (this.hover) { if (this.hover.kind === 'source') this.selectedSource = this.hover.id; if (this.onNodeClick) this.onNodeClick(this.hover); } }
+      if (this.drag && this.drag.moved < 4 && this.pointers.size === 0) { this.onMove(e); if (this.hover) { if (this.hover.kind !== 'note') this.selectedSource = this.hover.id; if (this.onNodeClick) this.onNodeClick(this.hover); } }
       if (this.pointers.size === 0) { this.drag = null; c.style.cursor = this.hover ? 'pointer' : 'grab'; }
     };
     c.addEventListener('pointerup', end);
@@ -213,18 +213,34 @@ export class BrainMap {
     this.alpha = 1;
   }
 
+  // list: hubs ({ id, name, color, short, hub: true, connected }) sit on the orbit; connected sources
+  // ({ id, ..., parent: hubId }) circle their hub as satellites.
   setSources(list) {
-    const old = new Map(this.sources.map((s) => [s.id, s]));
-    this.sources = list.map((s, i) => ({ ...s, angle: (i / Math.max(1, list.length)) * TAU, pulse: old.get(s.id) ? old.get(s.id).pulse : 0 }));
+    const old = new Map(this.sources.map((s) => [s.id + '|' + (s.parent || ''), s]));
+    const hubs = list.filter((s) => !s.parent);
+    this.sources = list.map((s) => {
+      const prev = old.get(s.id + '|' + (s.parent || ''));
+      const sibs = s.parent ? list.filter((x) => x.parent === s.parent) : hubs;
+      const i = sibs.indexOf(s);
+      return { ...s, angle: (i / Math.max(1, sibs.length)) * TAU, pulse: prev ? prev.pulse : 0 };
+    });
+    this.hubIndex = new Map(this.sources.filter((s) => !s.parent).map((s) => [s.id, s]));
   }
 
   sourceWorld(s) {
+    if (s.parent) {
+      const h = this.hubIndex && this.hubIndex.get(s.parent);
+      const c = h ? this.sourceWorld(h) : { x: 0, y: 0, z: 0 };
+      const a = s.angle + this.t * 0.0003;
+      return { x: c.x + Math.cos(a) * 62, y: c.y - 46 + Math.sin(a) * 18, z: c.z + Math.sin(a) * 62 };
+    }
     const a = s.angle + this.t * 0.00005;
     return { x: Math.cos(a) * ORBIT, y: Math.sin(a * 2 + s.angle) * 38, z: Math.sin(a) * ORBIT };
   }
 
   pulseSource(id, color) {
-    const s = this.sources.find((x) => x.id === id);
+    const s = this.sources.find((x) => x.id === id && x.parent) || this.sources.find((x) => x.id === id) || this.sources.find((x) => x.members && x.members.includes(id));
+    if (s && s.parent && this.hubIndex.get(s.parent)) this.hubIndex.get(s.parent).pulse = 1;
     const from = s ? this.sourceWorld(s) : { x: (Math.random() - 0.5) * 900, y: -500, z: (Math.random() - 0.5) * 900 };
     if (s) s.pulse = 1;
     for (let k = 0; k < 3; k++) this.particles.push({ from, p: -k * 0.08, color: color || '#00e5ff' });
@@ -252,11 +268,11 @@ export class BrainMap {
       if (dx * dx + dy * dy < rad * rad && z < bz) { bz = z; best = item; }
     };
     for (const n of this.nodes) if (n.sp) consider({ ...n, kind: 'note' }, n.sp.x, n.sp.y, Math.max(9, n.sr + 5), n.sp.z);
-    for (const s of this.sources) if (s.sp) consider({ ...s, kind: 'source', label: s.name }, s.sp.x, s.sp.y, Math.max(14, 17 * s.sp.k), s.sp.z - 1000);
+    for (const s of this.sources) if (s.sp) consider({ ...s, kind: s.hub ? 'hub' : 'source', label: s.name }, s.sp.x, s.sp.y, Math.max(s.parent ? 10 : 14, (s.parent ? 11 : 17) * s.sp.k), s.sp.z - (s.parent ? 1100 : 1000));
     this.hover = best;
     this.c.style.cursor = best ? 'pointer' : 'grab';
     if (this.tooltip) {
-      if (best) { this.tooltip.style.display = 'block'; this.tooltip.style.left = mx + 'px'; this.tooltip.style.top = my + 'px'; this.tooltip.textContent = best.kind === 'note' ? `${best.label} · ${best.group}` : `${best.label} · ${best.connected === false ? 'not connected · click to connect' : best.error ? 'connection error' : 'click to open'}`; }
+      if (best) { this.tooltip.style.display = 'block'; this.tooltip.style.left = mx + 'px'; this.tooltip.style.top = my + 'px'; this.tooltip.textContent = best.kind === 'note' ? `${best.label} · ${best.group}` : `${best.label} · ${best.connected === false ? 'nothing connected yet · click to connect' : best.error ? 'connection error' : 'click to open'}`; }
       else this.tooltip.style.display = 'none';
     }
   }
@@ -399,9 +415,10 @@ export class BrainMap {
   }
 
   drawSource(s, core) {
-    const ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2), off = s.connected === false;
-    const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off ? 0.45 : 1);
-    if (!off) { ctx.strokeStyle = `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(core.x, core.y); ctx.stroke(); ctx.setLineDash([]); }
+    const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 : 1), off = s.connected === false;
+    const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off ? 0.5 : 1);
+    const anchor = sat ? (this.hubIndex.get(s.parent) || {}).sp || core : core;
+    if (!off) { ctx.strokeStyle = sat ? hex(s.color, 0.45 * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
     const selected = this.selectedSource === s.id;
     if (selected || s.error) { ctx.strokeStyle = s.error ? 'rgba(255,77,109,.9)' : hex(s.color, 0.9); ctx.lineWidth = 1.5; ctx.setLineDash(s.error ? [3, 3] : []); ctx.beginPath(); ctx.arc(p.x, p.y, 22 * k, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; }
     const r = (15 + s.pulse * 6) * k;
@@ -414,8 +431,9 @@ export class BrainMap {
     ctx.beginPath(); ctx.arc(p.x, p.y, 15 * k, 0, TAU); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1; ctx.setLineDash([]);
     ctx.fillStyle = s.color; ctx.font = `600 ${Math.round(11 * k)}px Rajdhani, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(s.short || s.name.slice(0, 2).toUpperCase(), p.x, p.y + 1);
-    ctx.fillStyle = 'rgba(157,178,215,.85)'; ctx.font = `${Math.round(clamp(11 * k, 9, 16))}px Roboto, sans-serif`;
-    ctx.fillText(s.name.replace(/ \(.*\)/, '').replace(' / Microsoft 365', ''), p.x, p.y + 28 * k);
+    ctx.fillStyle = sat ? 'rgba(157,178,215,.7)' : 'rgba(198,210,235,.9)';
+    ctx.font = `${sat ? 400 : 600} ${Math.round(clamp((sat ? 10 : 12) * Math.sqrt(p.k), 9, 16))}px ${sat ? 'Roboto' : 'Rajdhani, Roboto'}, sans-serif`;
+    ctx.fillText(s.name.replace(/ \(.*\)/, '').replace(' / Microsoft 365', ''), p.x, p.y + (sat ? 20 : 28) * k);
     ctx.globalAlpha = 1;
     s.pulse *= 0.96;
   }

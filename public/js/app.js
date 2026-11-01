@@ -146,10 +146,11 @@ function buildDashboard() {
 
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
-    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)),
+    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)), // hubs use 'hub:<id>'
     onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
-  window.maestroBrain = brain; // handy for debugging in the browser console
+  window.maestroBrain = brain;
+  api('/hubs').then((h) => { S.hubs = h; updateBrainSources(); }).catch(() => {}); // handy for debugging in the browser console
   av = makeAvatar($('#avatar-canvas'));
   $('#brand-avatar').onclick = () => { navigate('dashboard'); toggleMic(); };
 
@@ -197,9 +198,15 @@ async function loadGraph() {
 function updateBrainSources() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
-  // Only sources the user has connected appear on the map; each one joins the orbit as it's connected.
-  brain && brain.setSources(S.state.connectors.filter((c) => conns[c.id])
-    .map((c) => ({ id: c.id, name: c.name, color: c.color, short: SHORT[c.id], connected: !!conns[c.id], error: !!(conns[c.id] && conns[c.id].lastError) })));
+  // Five default hubs always sit on the orbit. Each source joins the map, next to its hub, only once it's connected.
+  const hubs = S.hubs || [];
+  const list = hubs.map((h) => ({ id: 'hub:' + h.id, name: h.name, color: h.color, short: h.short, hub: true, members: h.members,
+    connected: h.projects || h.members.some((m) => conns[m]), error: h.members.some((m) => conns[m] && conns[m].lastError) }));
+  for (const h of hubs) for (const m of h.members) {
+    const c = S.state.connectors.find((x) => x.id === m);
+    if (c && conns[m]) list.push({ id: m, name: c.name, color: c.color, short: SHORT[m], parent: 'hub:' + h.id, connected: true, error: !!conns[m].lastError });
+  }
+  brain && brain.setSources(list);
   updateStats();
 }
 
@@ -483,6 +490,7 @@ function dayLabel(d) {
 
 function renderSourceView() {
   const d = S.sourceData; if (!d) return;
+  if (d.hub) return renderHubView(d);
   const list = $('#feed-list');
   const conn = S.state.connectors.find((c) => c.id === d.id) || { name: d.name, color: '#00e5ff', icon: 'plug' };
   const mode = !d.connected ? '<span class="tag off">Not connected</span>' : d.error ? '<span class="tag err">● Error</span>' : d.mode === 'live' ? '<span class="tag live">● Live</span>' : d.mode === 'claude' ? '<span class="tag live">● Live in Claude</span>' : '<span class="tag demo">● Demo data</span>';
@@ -530,6 +538,70 @@ function renderSourceView() {
     el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
     el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
   });
+}
+
+function scheduleHtml(events, color) {
+  const byDay = new Map();
+  for (const e of events) { const k = dayLabel(e.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(e); }
+  const now = Date.now();
+  return byDay.size ? [...byDay].map(([day, evs]) => `<div class="sched-day"><div class="sched-label">${esc(day)}</div>${evs.map((e) => {
+    const st = new Date(e.start), en = new Date(e.end), past = en < now, nowOn = st <= now && en >= now;
+    const src = S.state.connectors.find((c) => c.id === e.source);
+    return `<div class="sched-ev ${past ? 'past' : ''} ${nowOn ? 'now' : ''}" style="--c:${src ? src.color : color}" ${e.notes ? `data-note="${esc(e.notes)}"` : ''}>
+      <div class="sched-time">${st.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}<small>${Math.round((en - st) / 60000)} min</small></div>
+      <div class="sched-body"><b>${esc(e.title)}</b>${nowOn ? ' <span class="tag live">Now</span>' : ''}
+        ${e.attendees ? `<small>${icon('users-round')} ${esc(e.attendees.join(', '))}</small>` : ''}${e.location ? `<small>${icon('home')} ${esc(e.location)}</small>` : ''}${src ? `<small>${icon('calendar-days')} ${esc(src.name.replace(/ \/.*$/, ''))}</small>` : ''}${e.notes ? `<small class="lnk">${icon('file-text')} Prep notes</small>` : ''}</div></div>`;
+  }).join('')}</div>`).join('') : `<div class="feed-empty" style="padding:18px">Nothing scheduled in the next 7 days.</div>`;
+}
+
+// A hub (Email, Calendar, Messages, Calls, Projects): everything from its connected sources in one place.
+function renderHubView(d) {
+  const list = $('#feed-list');
+  const on = d.members.filter((m) => m.connected), bad = d.members.filter((m) => m.error);
+  let html = `<div class="src-head" style="--c:${d.color}"><button class="src-back" id="src-back" title="Back to all activity">${icon('arrow-right')}</button><span class="agent-icon">${icon({ calendar: 'calendar-days', projects: 'folder' }[d.kind] || { 'hub:email': 'mail', 'hub:messages': 'message-square', 'hub:calls': 'phone' }[d.id] || 'plug')}</span><div><b>${esc(d.name)}</b><div class="hub-chips">${d.members.map((m) => `<button class="hub-chip ${m.connected ? (m.error ? 'err' : 'on') : ''}" data-member="${m.id}" title="${m.connected ? 'Manage' : 'Connect'} ${esc(m.name)}">${m.connected ? '● ' : '+ '}${esc(m.name.replace(/ \(.*\)/, '').replace(' / Microsoft 365', ''))}</button>`).join('')}</div></div></div>`;
+  const notice = (title, text, err, member) => `<div class="activity notice ${err ? 'err' : ''}" style="--c:${err ? '#ff4d6d' : '#3d8bff'}">
+      <div class="agent-icon">${icon('plug')}</div><div class="activity-details">
+      <span class="a-time">just now · Maestro</span><div class="a-title">${title}</div>
+      <div class="a-cat"><span class="pill" style="--pill:${err ? '#4a0f1c' : '#0d2a55'};--pill-text:${err ? '#ff8095' : '#8bb8ff'}">CONNECTION</span></div>
+      <div class="a-quote">${text}</div>
+      <div class="a-actions"><button class="btn small connect" data-make="${member || ''}">${icon('plug')} Make Connection</button></div></div></div>`;
+  if (!on.length && d.kind !== 'projects') html += notice(`No ${esc(d.name.toLowerCase())} connected yet`, `Connect ${d.members.map((m) => esc(m.name)).join(', ').replace(/, ([^,]*)$/, ' or $1')} to ${d.kind === 'calendar' ? 'see your schedule here' : 'stream it into your feed'}.`, false, '');
+  for (const m of bad) html += notice(`${esc(m.name)} connection failed`, esc(m.error), true, m.id);
+  if (d.kind === 'calendar' && on.length) html += `<div class="section-title" style="margin:14px 4px 6px">Schedule · next 7 days</div>` + scheduleHtml(d.events, d.color);
+  if (d.kind === 'projects') {
+    html += `<div class="section-title" style="margin:14px 4px 6px">Projects in your vault</div>` + (d.notes.length ? d.notes.map((n) => `<div class="sched-ev" style="--c:${d.color}" data-note="${esc(n.path)}"><div class="sched-body" style="flex:1"><b>${esc(n.title)}</b>${n.status ? `<small>${esc(n.status)}${n.due ? ' · due ' + esc(n.due) : ''}</small>` : ''}${typeof n.progress === 'number' && !isNaN(n.progress) ? `<div class="progress"><div class="track"><div class="bar" style="width:${n.progress}%"></div></div><span>${n.progress}%</span></div>` : ''}</div></div>`).join('') : '<div class="feed-empty" style="padding:18px">No project notes yet. Add notes to the Projects folder.</div>');
+    if (!on.length) html += notice('Connect a project tool', 'Install a role pack, then connect Linear, Jira, Notion, GitHub or Figma to stream updates here.', false, '');
+  }
+  const ids = new Set(on.map((m) => m.id));
+  const items = S.feed.filter((i) => d.categories.includes(i.category) && (ids.has(i.source) || (d.kind === 'projects' && i.source === 'system')));
+  if (on.length || d.kind === 'projects') {
+    html += `<div class="section-title" style="margin:14px 4px 6px">Recent activity</div>`;
+    html += items.length ? items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">Nothing new.</div>`;
+  }
+  list.innerHTML = html;
+  list.querySelector('#src-back').onclick = closeSource;
+  const prof = S.state.config.profile;
+  const openConnect = (mid) => {
+    const c = S.state.connectors.find((x) => x.id === mid);
+    connectModal(c, prof, async () => { await afterChange({ graph: false }); showSource(d.id); });
+  };
+  list.querySelectorAll('[data-member]').forEach((b) => b.onclick = () => openConnect(b.dataset.member));
+  list.querySelectorAll('[data-make]').forEach((b) => b.onclick = () => b.dataset.make ? openConnect(b.dataset.make) : pickConnection(d, openConnect));
+  list.querySelectorAll('[data-note]').forEach((el) => el.onclick = () => openNote(el.dataset.note));
+  list.querySelectorAll('.activity[data-id]').forEach((el) => {
+    const item = S.feed.find((x) => x.id === el.dataset.id);
+    el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+  });
+}
+
+// "Make Connection" on a hub: pick which service to connect.
+function pickConnection(d, openConnect) {
+  const m = modal(`${modalHead(`Connect ${esc(d.name.toLowerCase())}`, 'Choose a service. You can connect more than one.')}
+    ${d.members.map((x) => { const c = S.state.connectors.find((y) => y.id === x.id); return `<button class="choice" data-pick="${x.id}"><span class="agent-icon" style="--c:${c.color};width:30px;height:30px;font-size:16px">${icon(c.icon)}</span><div><b>${esc(c.name)}</b><span>${esc(c.description)}</span></div>${x.connected ? '<span class="tag live" style="margin-left:auto">● Connected</span>' : ''}</button>`; }).join('')}`, {
+    onMount: (el, close) => el.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { close(); openConnect(b.dataset.pick); }),
+  });
+  return m;
 }
 
 async function markRead(item) {

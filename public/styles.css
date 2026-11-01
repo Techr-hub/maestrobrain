@@ -382,3 +382,9 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .sched-body small { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
 .sched-body small .icon { font-size: 12px; }
 .sched-body .lnk { color: var(--cyan); }
+.hub-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.hub-chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px dashed var(--line-2, #1e4a66); background: transparent; color: var(--dim); cursor: pointer; }
+.hub-chip:hover { color: var(--text); border-color: var(--cyan-deep); }
+.hub-chip.on { border-style: solid; border-color: var(--green-line); color: var(--green); background: var(--green-bg); }
+.hub-chip.err { border-style: solid; border-color: #5a1020; color: #ff8095; }
+.sched-ev .progress { margin-top: 4px; }
