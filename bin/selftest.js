@@ -43,6 +43,12 @@ async function main() {
   ok('Builder challenge answered', /#412/.test(dev.reply));
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief', /events today/.test(brief.reply));
+  const call = await post('/chat', { message: 'When did Alex call me?' });
+  ok('direct question: when did Alex call', /Alex Chen called you today at/.test(call.reply));
+  const meet = await post('/chat', { message: 'When is my meeting with Sarah?' });
+  ok('direct question: next meeting with a person', /next meeting with Sarah/.test(meet.reply));
+  const none = await post('/chat', { message: 'When did Bob call me?' });
+  ok('direct question: says when nothing matches', /No calls from Bob/.test(none.reply));
   const mem = await post('/chat', { message: 'Remember that the workshop is on Thursday' });
   ok('memory protocol writes to Memory Log', fs.readFileSync(path.join(vaultCopy, 'Memory', 'Memory Log.md'), 'utf8').includes('workshop is on Thursday'));
   await post('/chat', { message: 'Add a task to send the survey' });

@@ -59,7 +59,7 @@ Facilitator check: run `npm test` on a clean machine the day before. It should p
 - **Make a skill:** Skills & Packs → New skill, add triggers. Then **Download all (.zip)** under Claude Skills and upload to Claude → Settings → Capabilities → Skills.
 - **Go live with one source:** paste your Google Calendar secret iCal address (see `docs/CONNECTORS.md`).
 - **Change the engine:** Settings → AI engine → Claude with an API key, or Hermes via Ollama.
-- **Voice:** press the mic (Alt+V). The logo pulses while you talk and spins while Jarvis answers. Try hands-free mode.
+- **Voice:** press the mic (Alt+V). The brain core in the map pulses while you talk and spins while Jarvis answers. Try hands-free mode.
 
 ### 5. Share (5 min)
 Two or three volunteers screen-share their brain and one thing they built.

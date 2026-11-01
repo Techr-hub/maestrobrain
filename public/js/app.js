@@ -244,7 +244,7 @@ function setSubtitle(text, speaking = false) {
 
 function setBrainState(state) {
   brain.setState(state);
-  av.setState(state);
+  // The sidebar logo stays still; only the brain core in the map reacts to voice.
   const label = { idle: 'Brain online', listening: 'Listening…', thinking: 'Thinking…', speaking: '' }[state];
   if (label !== '') setSubtitle(label);
 }
@@ -378,7 +378,7 @@ function setupVoice() {
     lang: S.state.config.voice.lang || 'en-US',
     onInterim: (t) => { setSubtitle(t, true); $('#chat-input', dashboardEl).value = t; },
     onFinal: (t) => { $('#chat-input', dashboardEl).value = ''; if (!voice.handsFree) voice.stop(); ask(t, { voice: true }); },
-    onLevel: (v) => { brain.setLevel(v); av.setLevel(v); },
+    onLevel: (v) => { brain.setLevel(v); },
     onState: (s, err) => {
       $('#mic', dashboardEl).classList.toggle('listening', s === 'listening');
       if (s === 'error') { toast('Microphone: ' + err, 'error'); setBrainState('idle'); }

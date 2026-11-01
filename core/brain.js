@@ -9,6 +9,7 @@ const calendar = require('./calendar');
 const tasks = require('./tasks');
 const agentsMod = require('./agents');
 const llm = require('./llm');
+const lookup = require('./lookup');
 
 const CONV_FILE = path.join(config.DATA_DIR, 'conversations.json');
 
@@ -81,17 +82,18 @@ async function gatherContext(message, profile) {
   const hits = vault.search(message, { limit: 8, profile }).filter((h) => h.folder !== 'Daily').slice(0, 5);
   const notes = hits.map((h) => ({ ...h, body: vault.readNote(h.path).body.slice(0, 1800) }));
   const mem = memoryNotes().map((n) => ({ path: n.path, title: n.title, body: n.body.slice(0, 2500) }));
-  const items = feed.list({ profile, limit: 25 });
+  const all = feed.list({ profile, limit: 300 });
+  const items = all.slice(0, 25);
   const events = await calendar.list({ profile, days: 7 });
   const openTasks = tasks.list({ profile }).slice(0, 15);
-  return { notes, mem, items, events, openTasks };
+  return { notes, mem, items, all, events, openTasks };
 }
 
 function contextText(ctx, cfg, profile) {
   const parts = [];
   parts.push(`# MEMORY (who the user is, preferences, standing facts)\n` + ctx.mem.map((m) => `## [[${m.title}]]\n${m.body}`).join('\n\n'));
   parts.push(`# RELEVANT NOTES FROM THE OBSIDIAN VAULT\n` + (ctx.notes.length ? ctx.notes.map((n) => `## [[${n.title}]] (${n.path})\n${n.body}`).join('\n\n') : '(no matching notes)'));
-  parts.push(`# INTELLIGENCE FEED (newest first)\n` + ctx.items.map((i) => `- [${i.category}] ${i.sourceName} · ${ago(i.ts)} · ${i.title}${i.quote ? ' — ' + i.quote : ''}${i.summary ? ' (' + i.summary + ')' : ''}${i.priority ? ' · priority ' + i.priority : ''}${i.deadline ? ' · ' + i.deadline : ''}`).join('\n'));
+  parts.push(`# INTELLIGENCE FEED (newest first)\n` + ctx.items.map((i) => `- [${i.category}] ${i.sourceName} · ${lookup.whenText(i.ts)} · ${i.title}${i.quote ? ' — ' + i.quote : ''}${i.summary ? ' (' + i.summary + ')' : ''}${i.priority ? ' · priority ' + i.priority : ''}${i.deadline ? ' · ' + i.deadline : ''}`).join('\n'));
   parts.push(`# CALENDAR (next 7 days)\n` + (ctx.events.map((e) => `- ${dayName(e.start)} ${timeOf(e.start)}–${timeOf(e.end)} · ${e.title}${e.attendees ? ' · with ' + e.attendees.join(', ') : ''}`).join('\n') || '(nothing scheduled)'));
   parts.push(`# OPEN TASKS\n` + (ctx.openTasks.map((t) => `- ${t.text}${t.priority ? ' · ' + t.priority : ''}${t.due ? ' · due ' + t.due : ''} (in [[${t.note}]])`).join('\n') || '(none)'));
   return parts.join('\n\n');
@@ -104,6 +106,7 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
     `You are speaking as ${name}. Today is ${new Date().toLocaleString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })}. Active profile: ${profile.toUpperCase()} (only use ${profile} context unless asked).`,
     'Ground every answer in the context below: memory, vault notes, the intelligence feed, the calendar and tasks. If something is not in the context, say so instead of inventing it.',
     'Be proactive: point out blockers, conflicts, deadlines and the next best action. Reference vault notes as [[Note Title]].',
+    'Answer the question that was asked. For a direct question (when, who, what, did) give the specific fact with its day and time in the first sentence, then stop unless more helps.',
     'Use short Markdown: a one-line answer first, then bullets. Offer to save outputs to the vault.',
     voice ? 'The user is talking by voice. Answer in 2 to 4 short spoken sentences with no Markdown, tables or lists.' : '',
     skill ? `\n# ACTIVE SKILL: ${skill.name}\nFollow these instructions:\n${skill.instructions}` : '',
@@ -114,6 +117,10 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
 function bullets(arr) { return arr.map((s) => `- ${s}`).join('\n'); }
 
 function demoAnswer(message, ctx, cfg, profile, agent) {
+  // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
+  const other = profile === 'business' ? 'personal' : 'business';
+  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
+  if (direct) return direct;
   const m = message.toLowerCase();
   const name = cfg.user.name;
   const items = ctx.items;
@@ -297,7 +304,8 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
-      const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + contextText(ctx, cfg, profile);
+      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.events });
+      const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + (exact ? exact + '\n\n' : '') + contextText(ctx, cfg, profile);
       const history = conv.messages.slice(-8).map((x) => ({ role: x.role, content: x.content }));
       try {
         reply = await llm.complete(provider, system, [...history, { role: 'user', content: text }], agent || {});

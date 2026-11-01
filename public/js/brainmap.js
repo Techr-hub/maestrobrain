@@ -413,8 +413,11 @@ export class BrainMap {
 
   drawCore(now, c) {
     const ctx = this.ctx, cx = c.x, cy = c.y, K = clamp(c.k, 0.35, 4) * (this.compact ? 0.72 : 1);
-    const speed = this.state === 'thinking' ? 4 : this.state === 'listening' ? 2 : this.state === 'speaking' ? 2.5 : 1;
-    const t = now * 0.001 * speed;
+    // The core only moves while the brain is listening, thinking or talking. Idle, it holds still.
+    const speed = this.state === 'thinking' ? 4 : this.state === 'listening' ? 2 : this.state === 'speaking' ? 2.5 : 0;
+    const dt = this.coreLast ? Math.min(50, now - this.coreLast) : 16; this.coreLast = now;
+    this.spin = (this.spin || 0) + dt * 0.001 * speed;
+    const t = this.spin, active = speed > 0;
     const lvl = this.state === 'listening' ? this.level : this.state === 'speaking' ? 0.3 + 0.3 * Math.sin(now * 0.02) : 0;
     const base = (52 + lvl * 14 + this.flash * 8) * K;
     const glow = ctx.createRadialGradient(cx, cy, 4, cx, cy, base * 2.4);
@@ -441,7 +444,7 @@ export class BrainMap {
     }
     const ig = ctx.createRadialGradient(cx - 6 * K, cy - 6 * K, 2, cx, cy, 26 * K);
     ig.addColorStop(0, '#ffffff'); ig.addColorStop(0.3, `rgba(${col},.95)`); ig.addColorStop(1, `rgba(${col},.05)`);
-    ctx.fillStyle = ig; ctx.beginPath(); ctx.arc(cx, cy, (24 + lvl * 8 + Math.sin(now * 0.003) * 1.5) * K, 0, TAU); ctx.fill();
+    ctx.fillStyle = ig; ctx.beginPath(); ctx.arc(cx, cy, (24 + lvl * 8 + (active ? Math.sin(now * 0.003) * 1.5 : 0)) * K, 0, TAU); ctx.fill();
     ctx.lineCap = 'butt';
     this.flash *= 0.94;
   }
@@ -465,7 +468,7 @@ export function avatar(canvas) {
   let state = 'idle', level = 0, spin = 0, last = 0, pulse = 0;
   const draw = (now) => {
     const dt = last ? Math.min(50, now - last) : 16; last = now;
-    const speed = state === 'speaking' ? 5 : state === 'thinking' ? 3.5 : state === 'listening' ? 1.4 : 1;
+    const speed = state === 'speaking' ? 5 : state === 'thinking' ? 3.5 : state === 'listening' ? 1.4 : 0;
     spin += dt * 0.001 * speed;
     const target = state === 'listening' ? 0.15 + level * 0.9 : state === 'speaking' ? 0.25 + 0.2 * Math.abs(Math.sin(now * 0.012)) : 0;
     pulse += (target - pulse) * 0.25;
@@ -486,7 +489,7 @@ export function avatar(canvas) {
     });
     const ig = ctx.createRadialGradient(c - 3, c - 3, 1, c, c, c * 0.28);
     ig.addColorStop(0, '#fff'); ig.addColorStop(0.35, `rgba(${col},1)`); ig.addColorStop(1, `rgba(${col},.05)`);
-    ctx.fillStyle = ig; ctx.beginPath(); ctx.arc(c, c, c * (0.26 + pulse * 0.08) + Math.sin(now * 0.003) * 1.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = ig; ctx.beginPath(); ctx.arc(c, c, c * (0.26 + pulse * 0.08) + (state === 'idle' ? 0 : Math.sin(now * 0.003) * 1.5), 0, TAU); ctx.fill();
     if (pulse > 0.05) { // expanding ripple
       ctx.strokeStyle = `rgba(${col},${0.5 * pulse})`; ctx.lineWidth = 2;
       const rr = c * (0.3 + ((now * 0.0012) % 1) * 0.65);
