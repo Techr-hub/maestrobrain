@@ -310,18 +310,20 @@ async function tasksPage(el, ctx) {
 }
 
 // ================================================================ CALENDAR
-const SRC_COLOR = { gcal: '#3d7bff', icalendar: '#00e5ff', outlook: '#2f8cff', gmail: '#ff5a4e' };
+const SRC_COLOR = { gcal: '#3d7bff', icalendar: '#00e5ff', outlook: '#2f8cff', gmail: '#ff5a4e', maestro: '#00f2af', calendly: '#4d9bff' };
 async function calendarPage(el, ctx) {
   const events = await api('/calendar?days=7');
   const days = [];
   const start = new Date(); start.setHours(0, 0, 0, 0);
   for (let i = 0; i < 7; i++) { const d = new Date(start.getTime() + i * 86400000); days.push({ d, ev: events.filter((e) => new Date(e.start).toDateString() === d.toDateString()) }); }
   const t = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  el.innerHTML = head('Calendar', `Next 7 days from your connected calendars (${profileName()}). Connect Google Calendar, iCloud or Outlook with an ICS link on the MCP Connections page to see real events.`,
-    `<button class="btn" id="prep">${icon('sparkles')} Prep my next meeting</button>`) +
+  const feedUrl = `${location.origin}/calendar.ics`;
+  el.innerHTML = head('Calendar', `Next 7 days from your connected calendars (${profileName()}). Ask “Hey Maestro, create a meeting tomorrow at 2pm with John” to add one. Maestro writes to iCloud (or any CalDAV calendar) when you add sign-in details to its card; otherwise events go to your Maestro calendar, which Apple Calendar or Outlook on this computer can subscribe to at <code>${esc(feedUrl)}</code>.`,
+    `<button class="btn" id="new-ev">${icon('plus')} New event</button><button class="btn" id="prep">${icon('sparkles')} Prep my next meeting</button>`) +
     `<div class="week">${days.map(({ d, ev }, i) => `<div class="day ${i === 0 ? 'today' : ''}"><h4>${i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' })}<small>${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></h4>
-      ${ev.map((e) => `<div class="event" style="--c:${SRC_COLOR[e.source] || '#00e5ff'}"><b>${esc(e.title)}</b><span>${e.allDay ? 'All day' : t(e.start) + ' – ' + t(e.end)}${e.location ? ' · ' + esc(e.location) : ''}</span>${e.attendees ? `<br><span>${esc(e.attendees.join(', '))}</span>` : ''}${e.live ? '<br><span class="tag live" style="font-size:10px">live</span>' : ''}</div>`).join('') || '<span style="color:var(--dim);font-size:12px">Free</span>'}</div>`).join('')}</div>`;
+      ${ev.map((e) => `<div class="event" style="--c:${SRC_COLOR[e.source] || '#00e5ff'}"><b>${esc(e.title)}</b><span>${e.allDay ? 'All day' : t(e.start) + ' – ' + t(e.end)}${e.location ? ' · ' + esc(e.location) : ''}</span>${e.attendees ? `<br><span>${esc(e.attendees.join(', '))}</span>` : ''}${e.live ? '<br><span class="tag live" style="font-size:10px">live</span>' : ''}${e.created ? '<br><span class="tag" style="font-size:10px">created by Maestro</span>' : ''}</div>`).join('') || '<span style="color:var(--dim);font-size:12px">Free</span>'}</div>`).join('')}</div>`;
   el.querySelector('#prep').onclick = () => ctx.ask('Prep me for my next meeting');
+  el.querySelector('#new-ev').onclick = () => ctx.ask('Create a new meeting');
 }
 
 // ================================================================ KNOWLEDGE (VAULT)
@@ -544,7 +546,7 @@ async function settingsPage(el, ctx) {
 // ================================================================ ONBOARDING
 // Sources offered in the "connect your real accounts" step, grouped like the hubs on the brain map.
 const SETUP_GROUPS = [
-  ['Calendar', ['icalendar', 'gcal', 'outlook']],
+  ['Calendar', ['icalendar', 'gcal', 'outlook', 'calendly']],
   ['Email', ['gmail', 'outlook', 'email']],
   ['Messages', ['slack', 'twilio_sms', 'whatsapp']],
   ['Calls', ['twilio_calls', 'google_meet', 'teams', 'zoom']],

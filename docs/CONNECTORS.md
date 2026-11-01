@@ -22,6 +22,21 @@ You can use both at once. Tokens are never written into the vault.
 
 > A public link can be read by anyone who has it. Keep it private, or make a separate calendar for the brain.
 
+### Creating events ("Hey Maestro, create a meeting tomorrow at 2pm with John")
+Maestro asks for anything missing (day, time, length, topic, which calendar), then creates the event.
+- **iCloud (and any CalDAV calendar: Fastmail, Nextcloud…):** on the iCalendar card, also enter your Apple ID and an **app-specific password** (appleid.apple.com → Sign-In and Security → App-Specific Passwords). Maestro finds your calendars and can write to any of them. For other CalDAV servers, fill in the server address too.
+- **Google Calendar and Outlook** only allow writing through a sign-in app (OAuth). Connect them in Claude Desktop (Settings → Connectors) and ask Claude there; Claude can use Maestro's `create_event` tool or the Google/Microsoft connector.
+- Without any of these, events go to your **Maestro calendar**. It shows everywhere in Maestro, and Apple Calendar or Outlook on the same computer can subscribe to `http://localhost:4141/calendar.ics`.
+
+### New events in the feed
+Maestro checks every live calendar once a minute. New, moved and cancelled events appear in the Intelligence Feed (the first check only takes a snapshot, so connecting doesn't flood the feed). Calendly bookings are labelled **Booked through Calendly**.
+> iCloud and Calendly show changes within a minute or two. Google's secret iCal address is refreshed by Google itself and can lag by up to several hours; for instant Google updates, connect Calendly (if bookings come from there) or use Claude Desktop's Google Calendar connector.
+
+### Calendly
+1. calendly.com → **Integrations & apps** → **API and webhooks** → **Personal access tokens** → Generate new token.
+2. In Maestro: **Calendly** → Connect live → paste the token → **Connect**.
+3. New bookings appear in the feed within a minute, with the invitee's name, and on the Calendar page.
+
 ### Google Calendar
 1. Google Calendar on the web → ⚙ **Settings** → choose your calendar under *Settings for my calendars* → **Integrate calendar** → copy **Secret address in iCal format**.
 2. In Maestro: **Google Calendar** → Connect live → paste it (use **Add another calendar** for each extra calendar) → **Connect**.

@@ -3,6 +3,7 @@
 const config = require('./config');
 const demo = require('./demo');
 const connectors = require('./connectors');
+const created = require('./events');
 
 const CAL_SOURCES = ['gcal', 'icalendar', 'outlook', 'gmail'];
 const icsCache = new Map(); // url -> { at, events, error }
@@ -43,6 +44,14 @@ async function list({ profile, days = 7 } = {}) {
       if (err !== c.lastError) config.update((x) => { const k = x.connections[prof][s]; if (k) { if (err) k.lastError = err; else delete k.lastError; } });
     }
   }
+  // Calendly bookings (fetched by the calendar watcher)
+  if (conns.calendly && conns.calendly.mode === 'live') {
+    const seen = new Set(events.map((e) => `${e.title}|${e.start}`));
+    for (const e of require('./calwatch').calendlyUpcoming(prof)) if (!seen.has(`${e.title}|${new Date(e.start).toISOString()}`)) events.push({ ...e, start: new Date(e.start).toISOString(), end: new Date(e.end).toISOString(), source: 'calendly', live: true });
+  }
+  // events Maestro created (skip ones already coming back through a live calendar link)
+  const liveUids = new Set(events.filter((e) => e.uid).map((e) => e.uid));
+  for (const e of created.list({ profile: prof })) if (!liveUids.has(e.uid)) events.push({ ...e, source: 'maestro', created: true });
   events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to);
   events.sort((a, b) => new Date(a.start) - new Date(b.start));
   return events;

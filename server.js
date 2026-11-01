@@ -9,6 +9,7 @@ const config = require('./core/config');
 const vault = require('./core/vault');
 const knowledge = require('./core/knowledge');
 const feed = require('./core/feed');
+const calwatch = require('./core/calwatch');
 const calendar = require('./core/calendar');
 const tasks = require('./core/tasks');
 const agents = require('./core/agents');
@@ -180,7 +181,7 @@ route('POST', '/api/connections', async (_q, body) => {
   });
   if (mode === 'live') calendar.forget(connectors.calendarUrls(fields));
   const surfaced = mode !== 'live' ? feed.surfaceSource(id, profile) : 0;
-  if (mode === 'live') feed.pollLive().catch(() => {});
+  if (mode === 'live') { feed.pollLive().catch(() => {}); calwatch.check().catch(() => {}); }
   return { ok: true, message, surfaced };
 });
 route('POST', '/api/connections/disconnect', async (_q, body) => {
@@ -288,6 +289,13 @@ function createServer() {
       return;
     }
 
+    // Events Maestro created, as a feed Apple Calendar or Outlook on this computer can subscribe to.
+    if (p === '/calendar.ics') {
+      const prof = url.searchParams.get('profile') || config.load().profile;
+      const ev = require('./core/events');
+      return send(res, 200, ev.toIcs(ev.list({ profile: prof }), `Maestro (${prof})`), { 'content-type': 'text/calendar; charset=utf-8' });
+    }
+
     if (p === '/api/claude-skills/download') {
       const all = agents.claudeSkillFiles();
       const folder = url.searchParams.get('folder');
@@ -326,6 +334,9 @@ function start(port) {
   setTimeout(tickDemo, 20000);
   setInterval(() => workflows.tick().catch(() => {}), 60000);
   setInterval(() => feed.pollLive().catch(() => {}), 120000);
+  // calendars are checked every minute so new events reach the feed quickly
+  setInterval(() => calwatch.check().catch(() => {}), 60000);
+  calwatch.check().catch(() => {});
   feed.pollLive().catch(() => {});
 
   return new Promise((resolve, reject) => {

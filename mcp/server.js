@@ -97,6 +97,24 @@ const TOOLS = [
     },
   },
   {
+    name: 'create_event',
+    description: "Create a calendar event for the user. Saves it to Maestro's calendar and, when the user's iCloud/CalDAV calendar has sign-in details in Maestro, writes it there too. Ask the user for any missing detail (day, time, length, title) before calling. For Google Calendar or Outlook, prefer those Claude connectors if they are available.",
+    inputSchema: { type: 'object', properties: { title: { type: 'string' }, start: { type: 'string', description: 'ISO 8601 start, e.g. 2026-11-02T14:00:00 (local time if no offset)' }, duration_minutes: { type: 'number' }, attendees: { type: 'array', items: { type: 'string' } }, location: { type: 'string' }, calendar: { type: 'string', description: 'Calendar name from list_calendars; defaults to the first writable calendar' } }, required: ['title', 'start'], additionalProperties: false },
+    run: async ({ title, start, duration_minutes, attendees, location, calendar: calName }) => {
+      const ev = require('../core/events');
+      const { targets } = await ev.targets();
+      const t = (calName && targets.find((x) => x.name.toLowerCase() === String(calName).toLowerCase())) || targets[0];
+      const r = await ev.create({ title, start, minutes: duration_minutes || 30, attendees: attendees || [], location }, { target: t.id });
+      return `Created "${r.event.title}" ${new Date(r.event.start).toLocaleString()} – ${new Date(r.event.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} in ${t.id === 'maestro' ? 'the Maestro calendar' : `${t.name} (${t.via})`}.${r.warning ? ' ' + r.warning : ''}`;
+    },
+  },
+  {
+    name: 'list_calendars',
+    description: 'List the calendars Maestro can create events in.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => { const { targets, notes } = await require('../core/events').targets(); return targets.map((t) => `- ${t.name} (${t.via})`).join('\n') + (notes.length ? '\n\n' + notes.join('\n') : ''); },
+  },
+  {
     name: 'list_tasks',
     description: 'List open tasks from the vault (Obsidian checkboxes), highest priority first.',
     inputSchema: { type: 'object', properties: { include_done: { type: 'boolean' } }, additionalProperties: false },

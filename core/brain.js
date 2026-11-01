@@ -10,6 +10,7 @@ const tasks = require('./tasks');
 const agentsMod = require('./agents');
 const llm = require('./llm');
 const lookup = require('./lookup');
+const scheduler = require('./scheduler');
 
 const CONV_FILE = path.join(config.DATA_DIR, 'conversations.json');
 
@@ -440,10 +441,22 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
 
   let reply, sources = [], providerUsed = cfg.llm.provider, actions = [];
 
+  // Creating calendar events: asks for what's missing, then creates it (works with every model).
+  const sched = await scheduler.handle(text, conv, { profile, name: firstName(cfg) });
+  if (sched) {
+    reply = sched.reply; providerUsed = 'calendar';
+    if (sched.event) {
+      actions.push({ type: 'event', event: sched.event });
+      try { feed.add({ source: 'system', category: 'MEETING', profile, title: `New: ${sched.event.title}`, quote: `${new Date(sched.event.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${sched.event.attendees.length ? ' · with ' + sched.event.attendees.join(', ') : ''}`, summary: 'Created by Maestro', priority: '' }); } catch { /* feed is best-effort */ }
+    }
+  }
+
   // Built-in memory protocol commands work with every model.
   const rememberMatch = text.match(/^(?:please\s+)?(?:remember(?: that)?|note that|don'?t forget(?: that)?)\s+(.+)/i);
   const taskMatch = text.match(/^(?:please\s+)?(?:add (?:a )?task(?: to)?|remind me to|todo:?)\s+(.+)/i);
-  if (rememberMatch) {
+  if (sched) {
+    // handled above
+  } else if (rememberMatch) {
     const rel = remember(rememberMatch[1], agent ? '@' + agent.handle : 'chat');
     reply = `Got it. I saved that to [[Memory Log]] and will use it from now on.`;
     sources = [rel]; providerUsed = 'memory'; actions.push({ type: 'memory', path: rel });

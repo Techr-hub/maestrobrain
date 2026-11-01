@@ -21,7 +21,7 @@ const NAV = [
   ['settings', 'Settings', 'settings'],
 ];
 
-const SHORT = { gmail: 'GM', outlook: 'OL', email: '@', icalendar: 'iC', gcal: 'GC', slack: '#', twilio_sms: 'TX', whatsapp: 'WA', twilio_calls: 'PH', google_meet: 'MT', teams: 'TM', zoom: 'ZM', linear: 'LN', jira: 'JR', notion: 'N', figma: 'FG', gdrive: 'GD', github: 'GH', docs: 'DC' };
+const SHORT = { gmail: 'GM', outlook: 'OL', email: '@', icalendar: 'iC', gcal: 'GC', calendly: 'CY', slack: '#', twilio_sms: 'TX', whatsapp: 'WA', twilio_calls: 'PH', google_meet: 'MT', teams: 'TM', zoom: 'ZM', linear: 'LN', jira: 'JR', notion: 'N', figma: 'FG', gdrive: 'GD', github: 'GH', docs: 'DC' };
 
 let brain, av, voice, dashboardEl;
 
@@ -360,6 +360,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   if (res.sources.length) brain.highlightNotes(res.sources);
   brain.flashCore();
   if (res.actions.some((a) => a.type === 'memory' || a.type === 'task')) loadGraph();
+  if (res.actions.some((a) => a.type === 'event')) brain.pulseSource('hub:calendar', '#00e5ff');
 
   // "Talking back": the logo spins while the answer is written out and/or spoken.
   setBrainState('speaking');

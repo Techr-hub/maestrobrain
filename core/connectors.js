@@ -28,7 +28,16 @@ const CONNECTORS = [
     id: 'icalendar', name: 'iCalendar', icon: 'calendar-days', color: '#00e5ff', group: 'foundation', category: 'MEETING',
     description: 'Apple iCloud calendar or any .ics feed.',
     live: 'dashboard',
-    liveFields: [{ key: 'icsUrls', type: 'list', addLabel: 'Add another calendar', label: 'Calendar ICS / webcal links', placeholder: 'webcal://p01-caldav.icloud.com/published/2/…', help: 'Apple Calendar → right-click a calendar → Share → Public Calendar → copy link.' }],
+    liveFields: [{ key: 'icsUrls', type: 'list', addLabel: 'Add another calendar', label: 'Calendar ICS / webcal links', placeholder: 'webcal://p01-caldav.icloud.com/published/2/…', help: 'Apple Calendar → right-click a calendar → Share → Public Calendar → copy link.' },
+      { key: 'caldavUser', label: 'Create events: Apple ID email (optional)', placeholder: 'you@icloud.com', help: 'To let Maestro add events to your iCloud calendars, also enter your Apple ID and an app-specific password (appleid.apple.com → Sign-In and Security → App-Specific Passwords). Leave blank for read-only.' },
+      { key: 'caldavPassword', label: 'App-specific password', placeholder: 'xxxx-xxxx-xxxx-xxxx', secret: true },
+      { key: 'caldavUrl', label: 'CalDAV server (only if not iCloud)', placeholder: 'https://caldav.fastmail.com/  ·  https://cloud.example.com/remote.php/dav/', advanced: true }],
+  },
+  {
+    id: 'calendly', name: 'Calendly', icon: 'calendar-days', color: '#4d9bff', group: 'foundation', category: 'MEETING',
+    description: 'New bookings the moment someone schedules time with you.',
+    live: 'dashboard',
+    liveFields: [{ key: 'token', label: 'Personal access token', placeholder: 'eyJraWQiOi…', secret: true, help: 'calendly.com → Integrations & apps → API and webhooks → Personal access tokens → Generate new token.' }],
   },
   {
     id: 'gcal', name: 'Google Calendar', icon: 'calendar-days', color: '#3d7bff', group: 'foundation', category: 'MEETING',
@@ -243,16 +252,16 @@ function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new 
     if (rid) { if (!overrides.has(uid)) overrides.set(uid, new Set()); overrides.get(uid).add(rid.getTime()); }
     const exdates = new Set();
     for (const ex of all('EXDATE')) { const head = ex.slice(0, ex.lastIndexOf(':') + 1); for (const part of ex.slice(ex.lastIndexOf(':') + 1).split(',')) { const d = parseIcsDate(head + part); if (d) exdates.add(d.getTime()); } }
-    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 400) });
+    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 400), organizer: val('ORGANIZER').replace(/^mailto:/i, '') });
   }
   for (const e of parsed) {
-    const base = { title: e.title, location: e.location, description: e.description, allDay: e.allDay };
+    const base = { uid: e.uid, title: e.title, location: e.location, description: e.description, organizer: e.organizer, allDay: e.allDay };
     const dur = e.end - e.start;
     if (e.rrule && !e.rid) {
       const skip = overrides.get(e.uid) || new Set();
       for (const d of expandRule(e.start, e.rrule, new Date(from.getTime() - dur), to, e.exdates)) {
         if (skip.has(d.getTime())) continue;
-        events.push({ ...base, start: d.toISOString(), end: new Date(d.getTime() + dur).toISOString() });
+        events.push({ ...base, recurring: true, start: d.toISOString(), end: new Date(d.getTime() + dur).toISOString() });
       }
     } else {
       events.push({ ...base, start: e.start.toISOString(), end: e.end.toISOString() });
@@ -275,6 +284,25 @@ async function fetchIcs(url) {
   const text = await res.text();
   if (!text.includes('BEGIN:VCALENDAR')) throw new Error('That link did not return an iCalendar file');
   return parseIcs(text);
+}
+
+// ---------------- Calendly (personal access token) ----------------
+const CALENDLY_API = process.env.MAESTRO_CALENDLY_API || 'https://api.calendly.com';
+async function calendlyGet(token, url) {
+  if (!token) throw new Error('Paste your Calendly personal access token first');
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (res.status === 401) throw new Error('Calendly rejected the token. Generate a new personal access token and paste it again.');
+  if (!res.ok) throw new Error('Calendly returned HTTP ' + res.status);
+  return res.json();
+}
+async function calendlyMe(token) { const r = await calendlyGet(token, `${CALENDLY_API}/users/me`); return { uri: r.resource.uri, name: r.resource.name }; }
+async function calendlyEvents(token, userUri) {
+  const q = new URLSearchParams({ user: userUri, min_start_time: new Date(Date.now() - 86400000).toISOString(), status: 'active', count: '50', sort: 'start_time:asc' });
+  const r = await calendlyGet(token, CALENDLY_API + '/scheduled_events?' + q);
+  return (r.collection || []).map((e) => ({ uid: e.uri, title: e.name, start: e.start_time, end: e.end_time, created: e.created_at, location: (e.location && (e.location.join_url || e.location.location || e.location.type)) || '' }));
+}
+async function calendlyInvitees(token, eventUri) {
+  try { const r = await calendlyGet(token, eventUri + '/invitees?count=5'); return (r.collection || []).map((i) => i.name || i.email).filter(Boolean); } catch { return []; }
 }
 
 async function slackHistory({ token, channels }) {
@@ -333,7 +361,20 @@ async function testLiveRaw(id, fields) {
       try { ev = await fetchIcs(u); } catch (e) { let host = 'the calendar server'; try { host = new URL(u.replace(/^webcal:/i, 'https:')).host; } catch { /* bad link */ } const f = friendly(e, host); f.message = label(i) + f.message; throw f; }
       total += ev.length; upcoming += ev.filter((x) => new Date(x.end) >= new Date() && new Date(x.start) <= new Date(Date.now() + 7 * 86400000)).length;
     }
-    return `${urls.length === 1 ? 'Calendar' : urls.length + ' calendars'} connected: ${upcoming} events in the next 7 days`;
+    let write = '';
+    if (fields.caldavUser || fields.caldavPassword) {
+      const ev = require('./events');
+      const creds = ev.caldavCreds(id, { fields });
+      if (!creds) throw new Error('To create events, fill in both the Apple ID and the app-specific password.');
+      const cals = await ev.discover(creds);
+      write = `. Maestro can create events in ${cals.length === 1 ? `"${cals[0].name}"` : `${cals.length} calendars (${cals.map((c) => c.name).join(', ')})`}`;
+    }
+    return `${urls.length === 1 ? 'Calendar' : urls.length + ' calendars'} connected: ${upcoming} events in the next 7 days${write}`;
+  }
+  if (id === 'calendly') {
+    const me = await calendlyMe(fields.token);
+    const ev = await calendlyEvents(fields.token, me.uri);
+    return `Calendly connected for ${me.name}: ${ev.length} upcoming bookings`;
   }
   if (id === 'slack') {
     const r = await slackHistory(fields);
@@ -345,4 +386,4 @@ async function testLiveRaw(id, fields) {
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }
 
-module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, slackHistory, twilioList, testLive };
+module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, slackHistory, twilioList, testLive };

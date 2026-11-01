@@ -48,6 +48,19 @@ async function main() {
   ok('Design challenge answered', /handoff/i.test(design.reply));
   const dev = await post('/chat', { message: 'Review open pull requests and issues, then prepare a technical status report.' });
   ok('Builder challenge answered', /#412/.test(dev.reply));
+  {
+    const m1 = await post('/chat', { message: 'Hey Maestro, create a new meeting for tomorrow at 2pm with John.' });
+    const m2 = await post('/chat', { message: '45 minutes', conversationId: m1.conversationId });
+    const m3 = await post('/chat', { message: 'Pricing follow-up', conversationId: m1.conversationId });
+    ok('create meeting: asks what is missing, then creates it', /How long/.test(m1.reply) && /about/.test(m2.reply) && /^Creating "Pricing follow-up" for tomorrow .*2:00 PM to 2:45 PM, with John/.test(m3.reply));
+    const cal = await (await fetch(base + '/calendar?days=3')).json();
+    ok('create meeting: event shows on the calendar', cal.some((e) => e.title === 'Pricing follow-up' && e.created));
+    const w = require('../core/calwatch');
+    const st = {}, ev = (uid, h, title) => ({ uid, title, start: new Date(Date.now() + h * 3600e3).toISOString(), end: new Date(Date.now() + (h + 1) * 3600e3).toISOString() });
+    w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 5, 'A')]));
+    const n = w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 7, 'A'), ev('b', 9, 'B')]));
+    ok('calendar watcher: posts new and moved events', n === 2);
+  }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });
