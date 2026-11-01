@@ -1,0 +1,149 @@
+# 🧠 Maestro: your AI second brain
+
+**Claude + Obsidian + MCP, in one download.** Maestro is a personal, Jarvis-style second brain that runs on your own computer. It reads your notes, listens to your email, calendars, Slack, texts and calls, remembers what matters about you, and answers by chat or voice from a browser dashboard and from Claude Desktop.
+
+It is built for the **Build Your Brain** workshop: everything works out of the box with demo data, so you can see the whole brain in action in under five minutes, then connect your real accounts when you're ready.
+
+![Maestro Control Centre](docs/screenshot.png)
+
+---
+
+## Quick start (5 minutes)
+
+**You need:** [Node.js 18.17+](https://nodejs.org) (LTS), Chrome or Edge, and ideally [Obsidian](https://obsidian.md/download) and [Claude Desktop](https://claude.ai/download).
+
+1. **Download** the ZIP: [github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip](https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.zip) and unzip it somewhere you'll keep it (e.g. `Documents/maestro-brain`).
+2. **Start it:**
+   - **Mac:** double-click `Start Maestro.command`. (First time: right-click → **Open** → **Open**, because it was downloaded.)
+   - **Windows:** double-click `Start Maestro.bat`.
+   - **Or in a terminal:** `cd maestro-brain` then `npm start`.
+3. Your browser opens **http://localhost:4141**. Follow the 1-minute setup: your name, your role pack, and **Connect to Claude Desktop**.
+4. **Restart Claude Desktop** (fully quit, then reopen). Ask Claude: *"Use Maestro to brief me on my day."*
+5. **Open the vault in Obsidian:** *Open folder as vault* → choose the `vault` folder inside Maestro.
+
+There is nothing to `npm install`: Maestro has zero dependencies, so it works on locked-down laptops and bad conference Wi-Fi. Run `npm test` to check your install.
+
+---
+
+## The 5 pillars
+
+| Pillar | In Maestro |
+|---|---|
+| **1. Interaction layer** | Browser dashboard with chat and voice, plus Claude Desktop |
+| **2. AI reasoning engine** | Claude (default), or ChatGPT, Gemini, Hermes / any OpenAI-compatible model. An offline **demo brain** needs no key |
+| **3. Integration layer (MCP)** | Email, Gmail, Outlook, iCalendar, Google Calendar, Slack, texts and calls (Twilio), plus role tools (Linear, Jira, Notion, Figma, Drive, GitHub, docs) |
+| **4. Knowledge sources** | An Obsidian vault of plain Markdown: projects, people, meetings, decisions, tasks |
+| **5. Memory protocol** | `Memory/About Me`, `Preferences`, `Memory Log` and the rules in `Memory Protocol`. Say "remember that…" and it's written to the vault |
+
+---
+
+## What's on the dashboard
+
+- **Brain map (centre):** the reasoning core surrounded by your knowledge (vault notes linked by `[[wikilinks]]`, grouped into lobes by folder) and an orbit of connected sources. Notifications fly in as particles; notes the brain used for an answer light up.
+- **Chat + voice:** type, or press the mic (or **Alt+V**) and talk. The avatar **pulses while you speak** and **spins while the brain answers**. Replies can be read aloud. Hands-free mode listens for *"Hey Jarvis…"*.
+- **@agents:** `@Jarvis`, `@Research`, `@Coach`, plus `@Product`, `@Design`, `@Dev` from role packs.
+- **Intelligence Feed (right):** every notification normalised into one card: category, source, priority, deadline, progress and suggested actions (click an action to make it a task).
+- **Business / Personal switch (top):** each profile has its own connections, feed and notes (`Personal/` notes are only used in Personal mode).
+- **Pages:** Agents · MCP Connections · Tasks · Calendar · Knowledge · Skills & Packs · Conversations · Workflows · Settings.
+
+---
+
+## Connect Claude Desktop
+
+The dashboard button (MCP Connections → **Connect to Claude Desktop**) or `npm run connect-claude` adds Maestro to `claude_desktop_config.json` (a backup is saved first):
+
+```json
+{
+  "mcpServers": {
+    "maestro": {
+      "command": "/path/to/node",
+      "args": ["/path/to/maestro-brain/mcp/server.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Claude now has these tools: `maestro_brief`, `search_brain`, `read_note`, `write_note`, `remember`, `get_memory`, `get_feed`, `get_calendar`, `list_tasks`, `add_task`, `complete_task`, `log_decision`, `list_skills`, `get_skill`, `list_agents`, `get_agent`, `create_skill`, `create_agent`, `list_connections`, `switch_profile`. Every skill and agent also appears in Claude's **+** menu as a prompt.
+
+For live email, calendar and Slack inside Claude, also turn on Claude Desktop's own connectors (Settings → Connectors: Gmail, Google Calendar, Slack, Microsoft 365, Notion, Linear, Figma, GitHub…). Claude uses them together with Maestro's memory and notes.
+
+---
+
+## Connections: demo vs live
+
+Every connector works in **demo mode** instantly. Going live:
+
+| Connector | Live in the dashboard | Live in Claude Desktop |
+|---|---|---|
+| iCalendar (iCloud) | ✅ paste the public ICS link | |
+| Google Calendar | ✅ paste the *secret address in iCal format* | ✅ Google Calendar connector |
+| Outlook / Microsoft 365 | ✅ calendar via published ICS link | ✅ Microsoft 365 connector |
+| Slack | ✅ bot token + channel IDs | ✅ Slack connector |
+| Text messages / Calls | ✅ Twilio Account SID, auth token, number | |
+| Gmail, other email | demo | ✅ Gmail connector / an IMAP MCP server |
+| Linear, Jira, Notion, Figma, Drive, GitHub, docs | demo | ✅ their Claude connectors |
+
+Details and step-by-step setup: [docs/CONNECTORS.md](docs/CONNECTORS.md).
+
+---
+
+## Build out your brain: packs, agents and skills
+
+- **Role packs** (Skills & Packs page): *Product Manager*, *Design & Marketing*, *Entrepreneur & Builder*. A pack adds connectors, a specialist agent, skills and a playbook note. Packs live in `packs/<name>/` and you can write your own (a `pack.json` and a `vault/` folder).
+- **Agents** are Markdown files in `vault/Agents/`: frontmatter (`handle`, `role`, `color`, `provider`, `model`, `baseUrl`) and the body is the agent's instructions. Create them in the dashboard, in Obsidian, by importing a `.md`, or by asking Claude ("create a Maestro agent that…").
+- **Skills** are Markdown playbooks in `vault/Skills/` with `description` and `triggers`. The dashboard runs a skill when your message matches a trigger.
+- **Load into Claude:** with Maestro connected, Claude sees every agent and skill automatically. You can also **download them as Claude Skills** (Skills & Packs → *Download all*) and upload them in Claude (Settings → Capabilities → Skills) or unzip them into `~/.claude/skills` for Claude Code. Each one points Claude at your Maestro knowledge base, so every agent and skill shares the same brain.
+
+---
+
+## AI engines (Settings → AI engine)
+
+| Engine | What you need |
+|---|---|
+| Demo brain | Nothing. Offline answers from your vault, feed and calendar |
+| Claude | Anthropic API key (default model `claude-opus-5-5`) |
+| ChatGPT | OpenAI API key |
+| Gemini | Google AI Studio key |
+| Hermes / open models | [Ollama](https://ollama.com) (`ollama pull hermes3`, base URL `http://localhost:11434/v1`), or OpenRouter / Nous Portal / LM Studio / any OpenAI-compatible endpoint |
+
+Individual agents can use a different engine from the rest of the brain (e.g. `@Research` on Gemini, a `@Hermes` agent on Ollama).
+
+---
+
+## Proactive workflows
+
+Morning brief, meeting prep (before each meeting), inbox triage (hourly) and end-of-day wrap-up run on their own while the dashboard is running. They write into today's `Daily/` note and push a card into the feed. Press **Run now** on the Workflows page to demo them.
+
+---
+
+## Project layout
+
+```
+maestro-brain/
+├── Start Maestro.command / .bat   one-click start (Mac / Windows)
+├── bin/maestro.js                 CLI: start | setup | connect-claude | reset
+├── server.js                      dashboard server + API (Node built-ins only)
+├── mcp/server.js                  MCP server for Claude Desktop (stdio)
+├── core/                          the brain: vault, memory, feed, connectors, LLMs, agents, packs, workflows
+├── public/                        the browser dashboard (no build step)
+├── vault/                         starter Obsidian vault
+├── packs/                         role packs
+└── data/                          your settings, feed and chat history (created on first run, never shared)
+```
+
+## Privacy
+
+Everything runs on `localhost`. Your notes stay in the vault folder, settings and keys stay in `data/config.json` on your machine, and nothing is sent anywhere unless you connect an AI engine or a live source. `npm run package` builds a shareable ZIP that leaves out `data/` and your Daily and Inbox notes.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "node is not recognized" / "command not found" | Install Node.js LTS from nodejs.org, then reopen the terminal |
+| Mac says the app is from an unidentified developer | Right-click `Start Maestro.command` → Open → Open |
+| Port 4141 in use | Maestro picks the next free port automatically, so check the terminal for the URL |
+| Claude Desktop doesn't show *maestro* | Fully quit Claude Desktop (not just close the window) and reopen; check Settings → Developer for MCP logs |
+| Mic button does nothing | Use Chrome or Edge, allow microphone access for localhost |
+| Want a fresh demo | Settings → Demo → Reset demo feed, or `npm run reset-demo` |
+
+MIT licence.

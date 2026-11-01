@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maestro · Control Centre</title>
+  <meta name="description" content="Maestro: your personal AI second brain built on Claude, Obsidian and MCP.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Roboto+Condensed:wght@400&family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <svg class="orbital" viewBox="0 0 475 77" aria-hidden="true">
+        <defs><linearGradient id="og" x1="0" x2="1"><stop offset="0" stop-color="#00e5ff" stop-opacity="0"/><stop offset=".5" stop-color="#00e5ff" stop-opacity=".6"/><stop offset="1" stop-color="#00e5ff" stop-opacity="0"/></linearGradient></defs>
+        <g fill="none" stroke="url(#og)" stroke-width="1">
+          <ellipse cx="237" cy="38" rx="230" ry="30"/><ellipse cx="237" cy="38" rx="170" ry="22"/><ellipse cx="237" cy="38" rx="110" ry="14"/>
+          <path d="M7 38h460M237 0v77" stroke-dasharray="2 6"/>
+        </g>
+      </svg>
+      <div class="greeting"><h1 id="greet">Good morning</h1><p id="greet-sub">Let's make today extraordinary.</p></div>
+      <div class="clock"><div class="date" id="clock-date"></div><div class="time" id="clock-time"></div></div>
+      <div class="actions">
+        <div class="profile-switch" id="profile-switch" role="tablist" aria-label="Profile">
+          <button data-profile="business" role="tab"></button>
+          <button data-profile="personal" role="tab"></button>
+        </div>
+        <button class="icon-btn" id="bell" title="Notifications"><span id="bell-icon"></span><span class="dot" id="bell-dot" hidden></span></button>
+        <button class="icon-btn feed-toggle" id="feed-toggle" title="Intelligence feed"></button>
+        <button class="icon-btn settings-btn" id="prefs" title="Settings"></button>
+        <div class="operator" title="Operator">
+          <span class="status-dot" id="op-dot"></span>
+          <div class="presence"><b id="op-name">Ryan</b><small id="op-status">ONLINE</small></div>
+          <div class="avatar" id="op-avatar">R</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace" id="workspace">
+      <nav class="sidebar" aria-label="Primary">
+        <div class="brand">
+          <div class="jarvis-avatar" id="brand-avatar" title="Talk to Maestro"><canvas id="avatar-canvas"></canvas></div>
+          <div class="brand-name">MAESTRO</div>
+          <div class="brand-desc">Second Brain Command</div>
+        </div>
+        <div id="nav"></div>
+      </nav>
+
+      <main class="main" id="main"></main>
+
+      <aside class="feed" id="feed">
+        <div class="feed-head">
+          <h3>INTELLIGENCE FEED</h3>
+          <div class="feed-controls">
+            <button class="live" id="live-toggle" title="Pause or resume the live feed"></button>
+            <select class="select" id="source-filter" aria-label="Filter by source"><option value="all">All Sources</option></select>
+            <button class="ctrl" id="cat-filter" title="Filter by category">☷</button>
+          </div>
+        </div>
+        <div class="feed-list" id="feed-list"></div>
+        <div class="feed-foot"><button id="feed-all">View all activity <span id="arrow"></span></button></div>
+      </aside>
+    </div>
+  </div>
+  <div class="toasts" id="toasts"></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

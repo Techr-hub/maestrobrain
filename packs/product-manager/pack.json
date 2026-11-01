@@ -1,0 +1,6 @@
+{ "name": "Product Manager", "order": 1, "icon": "clipboard-check", "color": "#00e5ff",
+  "description": "Sprint briefings, stakeholder updates, requirements, decisions and backlog prioritisation.",
+  "connectors": ["linear", "jira", "notion"],
+  "agents": ["Product"],
+  "skills": ["Sprint Briefing", "Stakeholder Update", "Requirements Generation", "Decision Tracking", "Backlog Prioritization", "Meeting Preparation"],
+  "challenge": "Review my current sprint, identify blockers, and prepare an update for stakeholders." }

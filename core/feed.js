@@ -1,0 +1,163 @@
+// The intelligence feed: every notification from every connected source, normalised into one shape:
+// { id, ts, source, profile, category, title, quote, summary, priority, deadline, progress, actions, unread }
+const fs = require('fs');
+const path = require('path');
+const { EventEmitter } = require('events');
+const config = require('./config');
+const demo = require('./demo');
+const connectors = require('./connectors');
+
+const FEED_FILE = path.join(config.DATA_DIR, 'feed.json');
+const MAX_ITEMS = 400;
+const bus = new EventEmitter();
+bus.setMaxListeners(50);
+
+let idCounter = 0;
+const newId = () => Date.now().toString(36) + '-' + (idCounter++).toString(36) + Math.random().toString(36).slice(2, 6);
+
+function readAll() {
+  if (!fs.existsSync(FEED_FILE)) return seed();
+  try { return JSON.parse(fs.readFileSync(FEED_FILE, 'utf8')); } catch { return seed(); }
+}
+
+function writeAll(items) {
+  fs.mkdirSync(config.DATA_DIR, { recursive: true });
+  const tmp = FEED_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(items.slice(0, MAX_ITEMS), null, 1));
+  fs.renameSync(tmp, FEED_FILE);
+}
+
+function seed() {
+  const now = Date.now();
+  const items = demo.SEED.map((s) => normalize({ ...s, ts: now - s.minutesAgo * 60000, demo: true }));
+  items.sort((a, b) => b.ts - a.ts);
+  writeAll(items);
+  return items;
+}
+
+function normalize(raw) {
+  const c = connectors.get(raw.source);
+  const { minutesAgo, ...rest } = raw;
+  return {
+    id: raw.id || newId(),
+    ts: raw.ts || Date.now(),
+    sourceName: c ? c.name : raw.source === 'system' ? 'Maestro' : raw.source,
+    unread: raw.unread !== undefined ? raw.unread : true,
+    priority: raw.priority || '',
+    deadline: raw.deadline || '',
+    actions: raw.actions || [],
+    ...rest,
+  };
+}
+
+// Which items does the user see right now? Only sources connected in the active profile,
+// system items, and pack items for installed packs.
+function visible(items, cfg, profile) {
+  const conns = (cfg.connections && cfg.connections[profile]) || {};
+  return items.filter((i) => {
+    if (i.profile !== profile && i.profile !== 'both') return false;
+    if (i.pack && !cfg.packs.includes(i.pack)) return false;
+    if (i.source === 'system') return true;
+    const conn = conns[i.source];
+    if (!conn) return false;
+    if (i.demo && conn.mode === 'live') return false; // live sources hide their demo data
+    return true;
+  });
+}
+
+function list({ profile, source, category, limit = 60 } = {}) {
+  const cfg = config.load();
+  const prof = profile || cfg.profile;
+  let items = visible(readAll(), cfg, prof);
+  if (source && source !== 'all') items = items.filter((i) => i.source === source);
+  if (category && category !== 'all') items = items.filter((i) => i.category === category);
+  items.sort((a, b) => b.ts - a.ts);
+  return items.slice(0, limit);
+}
+
+function add(raw, { emit = true } = {}) {
+  const items = readAll();
+  if (raw.externalId && items.some((i) => i.externalId === raw.externalId)) return null;
+  const item = normalize(raw);
+  items.unshift(item);
+  writeAll(items);
+  if (emit) bus.emit('item', item);
+  return item;
+}
+
+function markRead(id) {
+  const items = readAll();
+  const it = items.find((i) => i.id === id);
+  if (it) { it.unread = false; writeAll(items); }
+  return it;
+}
+
+// When a source is connected, surface its demo items as brand new so people see them arrive.
+function surfaceSource(sourceId, profile) {
+  const items = readAll();
+  const now = Date.now();
+  const mine = items.filter((i) => i.source === sourceId && i.profile === profile && i.demo);
+  mine.forEach((it, idx) => { it.ts = now - idx * 45000; it.unread = true; });
+  items.sort((a, b) => b.ts - a.ts);
+  writeAll(items);
+  for (const it of mine.slice().reverse()) bus.emit('item', it);
+  return mine.length;
+}
+
+function surfacePack(packId) {
+  const items = readAll();
+  const now = Date.now();
+  const mine = items.filter((i) => i.pack === packId);
+  mine.forEach((it, idx) => { it.ts = now - idx * 30000; it.unread = true; });
+  items.sort((a, b) => b.ts - a.ts);
+  writeAll(items);
+  for (const it of mine.slice().reverse()) bus.emit('item', it);
+}
+
+function reset() {
+  if (fs.existsSync(FEED_FILE)) fs.unlinkSync(FEED_FILE);
+  return seed();
+}
+
+// ---------------- Demo stream ----------------
+let streamIdx = 0;
+function nextDemoItem() {
+  const cfg = config.load();
+  const pool = demo.STREAM.filter((s) => {
+    if (s.pack && !cfg.packs.includes(s.pack)) return false;
+    const conns = cfg.connections[s.profile] || {};
+    return s.source === 'system' || (conns[s.source] && conns[s.source].mode === 'demo');
+  });
+  if (!pool.length) return null;
+  const tpl = pool[streamIdx++ % pool.length];
+  return add({ ...tpl, ts: Date.now(), demo: true, streamed: true });
+}
+
+// ---------------- Live polling ----------------
+async function pollLive() {
+  const cfg = config.load();
+  const results = [];
+  for (const profile of Object.keys(cfg.connections)) {
+    for (const [id, conn] of Object.entries(cfg.connections[profile])) {
+      if (conn.mode !== 'live' || !conn.fields) continue;
+      try {
+        if (id === 'slack') {
+          const { messages } = await connectors.slackHistory(conn.fields);
+          for (const m of messages) add({ externalId: m.externalId, ts: m.ts, source: 'slack', profile, category: 'CONVERSATION', title: `Slack message in ${m.channel}`, quote: '"' + m.text.slice(0, 220) + '"', summary: m.text.includes('?') ? 'Question waiting for a reply' : '' });
+        } else if (id === 'twilio_sms') {
+          const msgs = await connectors.twilioList(conn.fields, 'messages');
+          for (const m of msgs) if (m.direction === 'inbound') add({ externalId: 'sms:' + m.sid, ts: Date.parse(m.date_sent || m.date_created), source: 'twilio_sms', profile, category: 'SMS', title: `Text from ${m.from}`, quote: '"' + (m.body || '').slice(0, 220) + '"' });
+        } else if (id === 'twilio_calls') {
+          const calls = await connectors.twilioList(conn.fields, 'calls');
+          for (const c of calls) if (c.direction === 'inbound') add({ externalId: 'call:' + c.sid, ts: Date.parse(c.start_time || c.date_created), source: 'twilio_calls', profile, category: 'CALL', title: `${c.status === 'completed' ? 'Call' : 'Missed call'} from ${c.from}`, quote: `Duration ${c.duration || 0}s`, priority: c.status === 'completed' ? '' : 'Medium' });
+        }
+        results.push({ id, profile, ok: true });
+      } catch (e) {
+        results.push({ id, profile, ok: false, error: e.message });
+      }
+    }
+  }
+  return results;
+}
+
+module.exports = { list, add, markRead, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

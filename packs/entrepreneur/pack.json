@@ -1,0 +1,6 @@
+{ "name": "Entrepreneur & Builder", "order": 3, "icon": "rocket", "color": "#00f2af",
+  "description": "Code review, bug triage, technical docs, sprint planning and release summaries.",
+  "connectors": ["github", "linear", "docs"],
+  "agents": ["Dev"],
+  "skills": ["Code Review", "Bug Triage", "Technical Documentation", "Sprint Planning", "Release Summary"],
+  "challenge": "Review open pull requests and issues, then prepare a technical status report." }

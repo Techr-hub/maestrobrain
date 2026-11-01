@@ -1,0 +1,12 @@
+{
+  "showTags": false, "showAttachments": false, "hideUnresolved": true, "showOrphans": true,
+  "colorGroups": [
+    { "query": "path:Memory", "color": { "a": 1, "rgb": 65535 } },
+    { "query": "path:Projects", "color": { "a": 1, "rgb": 62127 } },
+    { "query": "path:People", "color": { "a": 1, "rgb": 12856575 } },
+    { "query": "path:Agents", "color": { "a": 1, "rgb": 16756768 } },
+    { "query": "path:Skills", "color": { "a": 1, "rgb": 4029439 } },
+    { "query": "path:Personal", "color": { "a": 1, "rgb": 16731533 } }
+  ],
+  "showArrow": false, "textFadeMultiplier": 0, "nodeSizeMultiplier": 1.2, "lineSizeMultiplier": 1, "centerStrength": 0.5, "repelStrength": 12, "linkStrength": 1, "linkDistance": 160, "scale": 1
+}

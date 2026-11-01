@@ -1,0 +1,6 @@
+{ "name": "Design & Marketing", "order": 2, "icon": "pen-tool", "color": "#c42cff",
+  "description": "Design critique, research synthesis, design system docs, usability analysis and handoff.",
+  "connectors": ["figma", "notion", "gdrive", "linear"],
+  "agents": ["Design"],
+  "skills": ["Design Critique", "Research Synthesis", "Design System Documentation", "Usability Test Analysis", "Handoff Preparation"],
+  "challenge": "Review the latest design feedback and identify changes needed before developer handoff." }

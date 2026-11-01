@@ -1,0 +1,11 @@
+node_modules/
+data/
+dist/
+.DS_Store
+Thumbs.db
+*.log
+# personal content created while using the brain
+vault/Daily/*.md
+vault/Inbox/*.md
+vault/.obsidian/workspace*.json
+vault/.obsidian/cache

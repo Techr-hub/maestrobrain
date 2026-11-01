@@ -1,0 +1,20 @@
+{
+  "name": "maestro-brain",
+  "version": "1.0.0",
+  "description": "Maestro: a personal AI second brain built on Claude, Obsidian and MCP. Workshop starter kit.",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node bin/maestro.js start",
+    "setup": "node bin/maestro.js setup",
+    "connect-claude": "node bin/maestro.js connect-claude",
+    "mcp": "node mcp/server.js",
+    "reset-demo": "node bin/maestro.js reset",
+    "test": "node bin/selftest.js",
+    "package": "node bin/package.js"
+  },
+  "license": "MIT"
+}
