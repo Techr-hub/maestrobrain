@@ -2,7 +2,7 @@
 name: Inbox Triage
 description: Group email, Slack, texts and calls; flag what needs a reply and draft quick responses.
 triggers: [triage, inbox, what needs a reply, messages]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # Inbox Triage

@@ -9,7 +9,7 @@ export class Voice {
     Object.assign(this, { onInterim, onFinal, onState, onLevel, lang });
     this.listening = false;
     this.handsFree = false;
-    this.wakeName = 'jarvis';
+    this.wakeName = 'maestro';
   }
 
   async startMeter() {
@@ -61,7 +61,7 @@ export class Voice {
       if (final) {
         let text = final.trim();
         if (this.handsFree) {
-          const re = new RegExp(`^(?:hey |ok |okay )?${this.wakeName}[,.!]?\\s*`, 'i');
+          const re = new RegExp(`^(?:hey |hi |ok |okay )?(?:${this.wakeName}|maestro|mistro|maestra|my stro)[,.!]?\\s*`, 'i');
           if (!re.test(text)) return; // ignore speech without the wake word
           text = text.replace(re, '');
           if (!text) return;
@@ -98,13 +98,20 @@ export class Voice {
     // Speak in sentence-sized chunks: long utterances get cut off in Chrome.
     // Each chunk is cleaned so the voice never reads punctuation or symbols aloud
     // (some voices say "dot", "end" or "point" for a trailing full stop).
-    const chunks = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(speakable).filter(Boolean);
+    // Sentences are cleaned, then joined back into a few longer utterances (Chrome cuts off very long ones).
+    const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(speakable).filter(Boolean);
+    const chunks = [];
+    for (const s of sentences) {
+      const last = chunks.length - 1;
+      if (last >= 0 && chunks[last].length + s.length < 220) chunks[last] += (/[?!]$/.test(chunks[last]) ? ' ' : '. ') + s;
+      else chunks.push(s);
+    }
     if (!chunks.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.voices().find((v) => /en[-_]GB/i.test(v.lang) && /male|daniel|arthur|george/i.test(v.name)) || null;
     chunks.forEach((chunk, i) => {
       const u = new SpeechSynthesisUtterance(chunk);
       if (voice) u.voice = voice;
-      u.rate = rate; u.lang = this.lang;
+      u.rate = rate; u.lang = voice ? voice.lang : this.lang;
       if (i === 0) u.onstart = () => onStart && onStart();
       if (i === chunks.length - 1) { u.onend = () => onEnd && onEnd(); u.onerror = () => onEnd && onEnd(); }
       speechSynthesis.speak(u);

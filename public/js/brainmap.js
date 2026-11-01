@@ -484,7 +484,7 @@ function hex(h, a) {
 }
 
 
-// Small animated "Jarvis" avatar for the sidebar brand.
+// Small avatar for the sidebar brand (never animates).
 export function avatar(canvas) {
   const ctx = canvas.getContext('2d');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);

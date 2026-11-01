@@ -2,7 +2,7 @@
 name: Meeting Prep
 description: "Prepare for a meeting: attendees, context, related messages and talking points."
 triggers: [prep me, prepare for, meeting prep, before my meeting]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # Meeting Prep

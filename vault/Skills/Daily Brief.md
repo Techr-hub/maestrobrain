@@ -2,7 +2,7 @@
 name: Daily Brief
 description: "Morning briefing: schedule, what needs you first, top tasks and one insight."
 triggers: [brief me, my day, morning brief, what did i miss, catch me up]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # Daily Brief

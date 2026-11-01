@@ -2,7 +2,7 @@
 name: Decision Record
 description: Capture a decision with context, options and rationale so the brain remembers why.
 triggers: [log decision, record decision, we decided, decision record]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # Decision Record

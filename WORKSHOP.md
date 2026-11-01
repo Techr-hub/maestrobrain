@@ -17,7 +17,7 @@ ZIP fallback: https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.
 4. Use **Chrome or Edge** for the dashboard (needed for voice).
 5. Optional: run the install command in advance. It's small and needs no `npm install`, so conference Wi-Fi is fine.
 
-Facilitator check: run `npm test` on a clean machine the day before. It should print `34 passed, 0 failed`.
+Facilitator check: run `npm test` on a clean machine the day before. It should print `36 passed, 0 failed`.
 
 ---
 
@@ -25,7 +25,7 @@ Facilitator check: run `npm test` on a clean machine the day before. It should p
 
 | Block | Time | Maestro moment |
 |---|---|---|
-| Intro | 10 min | Show the dashboard on the projector: brain map, feed, say "Hey Jarvis, brief me on my day" |
+| Intro | 10 min | Show the dashboard on the projector: brain map, feed, say "Hey Maestro, brief me on my day" |
 | The 5 pillars | 25 min | Point at each pillar live: chat/voice (1), Settings → AI engine (2), MCP Connections (3), Knowledge page / Obsidian (4), Memory notes + "remember that…" (5) |
 | Use cases | 35 min | Install each pack on screen and run its challenge (below) |
 | **Build Your Brain** | 45 min | Everyone installs and customises (below) |
@@ -59,7 +59,7 @@ Facilitator check: run `npm test` on a clean machine the day before. It should p
 - **Make a skill:** Skills & Packs → New skill, add triggers. Then **Download all (.zip)** under Claude Skills and upload to Claude → Settings → Capabilities → Skills.
 - **Go live with one source:** paste your Google Calendar secret iCal address (see `docs/CONNECTORS.md`).
 - **Change the engine:** Settings → AI engine → Claude with an API key, or Hermes via Ollama.
-- **Voice:** press the mic (Alt+V). The brain core in the map pulses while you talk and spins while Jarvis answers. Try hands-free mode.
+- **Voice:** press the mic (Alt+V). The brain core in the map pulses while you talk and spins while Maestro answers. Try hands-free mode.
 
 ### 5. Share (5 min)
 Two or three volunteers screen-share their brain and one thing they built.

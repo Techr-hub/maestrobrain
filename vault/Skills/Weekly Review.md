@@ -2,7 +2,7 @@
 name: Weekly Review
 description: "Friday review: wins, slips, decisions, next week's priorities, memory cleanup."
 triggers: [weekly review, review my week, week in review]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # Weekly Review

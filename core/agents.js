@@ -30,6 +30,8 @@ function agents() {
       prompt: n.body.trim(),
     };
   });
+  // Vaults from before the rename still have Agents/Jarvis.md: show it as Maestro.
+  for (const a of list) if (/^jarvis$/i.test(a.handle)) Object.assign(a, { name: 'Maestro', handle: 'Maestro', prompt: a.prompt.replace(/\bJarvis\b/g, 'Maestro') });
   list.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   return list;
 }

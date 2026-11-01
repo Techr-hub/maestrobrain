@@ -2,7 +2,7 @@
 name: My Skill
 description: One sentence on what it produces
 triggers: [phrase one, phrase two]
-agent: Jarvis
+agent: Maestro
 tags: [skill]
 ---
 # My Skill

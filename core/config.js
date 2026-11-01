@@ -15,7 +15,7 @@ function defaultConfig() {
   return {
     version: 1,
     user: { name: 'Ryan', role: 'Product Manager', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    assistantName: 'Jarvis',
+    assistantName: 'Maestro',
     profile: 'business',
     vaultPath: path.join(ROOT, 'vault'),
     llm: {
@@ -70,6 +70,8 @@ function load() {
   const cfg = deepMerge(defaultConfig(), saved);
   // connections are replaced wholesale, not merged, so disconnecting sticks
   if (saved.connections) cfg.connections = { business: {}, personal: {}, ...saved.connections };
+  // The assistant used to be called Jarvis; older installs move to Maestro.
+  if (!cfg.assistantName || /^jarvis$/i.test(cfg.assistantName)) cfg.assistantName = 'Maestro';
   if (!path.isAbsolute(cfg.vaultPath)) cfg.vaultPath = path.resolve(ROOT, cfg.vaultPath);
   return cfg;
 }

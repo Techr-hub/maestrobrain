@@ -1,6 +1,6 @@
 # 🧠 Maestro: your AI second brain
 
-**Claude + Obsidian + MCP, in one download.** Maestro is a personal, Jarvis-style second brain that runs on your own computer. It reads your notes, listens to your email, calendars, Slack, texts and calls, remembers what matters about you, and answers by chat or voice from a browser dashboard and from Claude Desktop.
+**Claude + Obsidian + MCP, in one download.** Maestro is a personal AI second brain that runs on your own computer. It reads your notes, listens to your email, calendars, Slack, texts and calls, remembers what matters about you, and answers by chat or voice from a browser dashboard and from Claude Desktop.
 
 It is built for the **Build Your Brain** workshop: everything works out of the box with demo data, so you can see the whole brain in action in under five minutes, then connect your real accounts when you're ready.
 
@@ -46,8 +46,8 @@ There is nothing to `npm install`: Maestro has zero dependencies, so it works on
 ## What's on the dashboard
 
 - **Brain map (centre):** a 3D world you can explore: drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset (it slowly auto-rotates when idle). The reasoning core is surrounded by your knowledge (vault notes linked by `[[wikilinks]]`, grouped into lobes by folder) and an orbit of connected sources. Notifications fly in as particles; notes the brain used for an answer light up.
-- **Chat + voice:** type, or press the mic (or **Alt+V**) and talk. The brain core in the map **pulses while you speak** and **spins while the brain answers**, and holds still otherwise. Replies can be read aloud. Hands-free mode listens for *"Hey Jarvis…"*. Ask straight questions too: *"When did Alex call me?"*, *"Did Priya email me?"*, *"When is my meeting with Sarah?"*.
-- **@agents:** `@Jarvis`, `@Research`, `@Coach`, plus `@Product`, `@Design`, `@Dev` from role packs.
+- **Chat + voice:** type, or press the mic (or **Alt+V**) and talk. The brain core in the map **pulses while you speak** and **spins while the brain answers**, and holds still otherwise. Replies can be read aloud. Start with *"Hey Maestro…"*; hands-free mode listens for it. Ask straight questions too: *"When did Alex call me?"*, *"Did Priya email me?"*, *"When is my meeting with Sarah?"*.
+- **@agents:** `@Maestro`, `@Research`, `@Coach`, plus `@Product`, `@Design`, `@Dev` from role packs.
 - **Five default hubs** orbit the brain: **Email, Calendar, Messages, Calls and Projects**. Each service you connect (Gmail, Outlook, iCalendar, Slack, Linear…) appears next to its hub. **Calls** always shows Google Meet, Phone, Teams and Zoom, and **Messages** always shows Text and WhatsApp, as smaller nodes in shades of the hub's colour (dimmed until connected). Click a hub or a service to open it in the feed panel: Calendar shows your schedule for the next 7 days, Projects shows your project notes, and the others show recent activity. A hub with nothing connected (dimmed), or a service with an error, shows a notification with a **Make Connection** button.
 - **Intelligence Feed (right):** every notification normalised into one card: category, source, priority, deadline, progress and suggested actions (click an action to make it a task).
 - **Business / Personal switch (top):** each profile has its own connections, feed and notes (`Personal/` notes are only used in Personal mode).

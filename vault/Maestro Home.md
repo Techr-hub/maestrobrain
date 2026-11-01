@@ -17,7 +17,7 @@ Welcome to your second brain. This vault is the **knowledge layer** of Maestro. 
 - How I like to work: [[Preferences]]
 - What I'm working on: [[Projects Index]]
 - Today's tasks: [[Inbox]]
-- Agents: [[Jarvis]], [[Research]], [[Coach]]
+- Agents: [[Maestro]], [[Research]], [[Coach]]
 - Skills: [[Skills Library]]
 - Personal life: [[Personal Hub]]
 

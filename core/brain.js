@@ -108,6 +108,8 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
     'Be proactive: point out blockers, conflicts, deadlines and the next best action. Reference vault notes as [[Note Title]].',
     'Answer the question that was asked. For a direct question (when, who, what, did) give the specific fact with its day and time in the first sentence, then stop unless more helps.',
     'Use short Markdown: a one-line answer first, then bullets. Offer to save outputs to the vault.',
+    `Personality: warm, personal and slightly sarcastic, like a sharp chief of staff who has worked with ${cfg.user.name} for years. Use their first name. Keep any wit to one short line and never let it get in the way of the facts. Example: "Good morning Maestro" gets "Hey ${String(cfg.user.name).split(' ')[0]}, good morning to you too. Let's crush it today!"`,
+    'Messages often start with "Hey Maestro"; that is how the user addresses you, not part of the question.',
     'For broad requests that span several areas ("summarize my day", "brief me", "catch me up"), do not list everything. Give a high-level overview with counts per area (for example: 4 meetings, 3 calls, 5 priority items), then ask which area the user wants to hear more about. Go into detail only on the area they pick.',
     voice ? 'The user is talking by voice. Answer in 2 to 4 short spoken sentences with no Markdown, tables or lists.' : '',
     skill ? `\n# ACTIVE SKILL: ${skill.name}\nFollow these instructions:\n${skill.instructions}` : '',
@@ -194,22 +196,51 @@ function dayDetail(message, ctx, cfg) {
 // ---------------------------------------------------------------- demo brain (no API key needed)
 function bullets(arr) { return arr.map((s) => `- ${s}`).join('\n'); }
 
+// "Hey Maestro, …" is how people start; it is not part of the question.
+const WAKE = '(?:maestro|maestros|mistro|maestra|my stro|mae stro)';
+function stripWake(text, cfg) {
+  const names = [WAKE, cfg.assistantName.toLowerCase().replace(/[^a-z0-9 ]/g, '')].filter(Boolean).join('|');
+  return String(text)
+    .replace(new RegExp(`^\\s*(?:(?:hey|hi|hello|ok|okay|yo)[\\s,]+)?(?:${names})\\b[\\s,.:!?-]*`, 'i'), '')
+    .replace(new RegExp(`[\\s,]+(?:${names})\\s*([?!.]*)\\s*$`, 'i'), '$1')
+    .trim();
+}
+
+function firstName(cfg) { return String(cfg.user.name || 'there').split(/\s+/)[0]; }
+function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+
 // Everyday questions that don't need the vault: time, date, greetings, thanks, help.
+// Maestro is personal and a little sarcastic here, but facts stay first and short.
 function smallTalk(message, cfg) {
-  const m = message.toLowerCase().replace(new RegExp(`^(hey |ok |okay )?${cfg.assistantName.toLowerCase()}[,!.]?\\s*`), '').replace(/[?!.]+$/, '').trim();
+  const m = message.toLowerCase().replace(/[?!.]+$/, '').trim();
+  const me = firstName(cfg);
   const now = new Date();
+  const h = now.getHours();
+  const clock = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   if (/^(what('s| is)? ?(the )?(current )?time( is it)?( now| right now)?|what time is it( now)?|time|tell me the time|do you know (the|what) time it is)$/.test(m))
-    return `It's ${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
+    return `It's ${clock}.`;
   if (/^(what('s| is)? ?(the |today'?s )?date( today)?|what day is (it|today)|what('s| is) today|which day is (it|today)|what('s| is) the day( today)?)$/.test(m))
     return `Today is ${now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.`;
-  if (/^(hi|hello|hey|yo|hiya|howdy|good (morning|afternoon|evening))( there| ${cfg.assistantName.toLowerCase()})?$/.test(m) || m === '')
-    return `Hi ${cfg.user.name}. What can I help you with?`;
-  if (/^(how are you|how's it going|how are things|you good)( doing| today)?$/.test(m)) return `All systems running. What do you need, ${cfg.user.name}?`;
-  if (/^(thanks|thank you|thx|cheers|great|perfect|awesome|ok|okay|cool|got it)( (so much|a lot|very much))?$/.test(m)) return 'Anytime.';
+  const greet = m.match(/^(good )?(morning|afternoon|evening|night)( to you)?( there)?$/);
+  if (greet) {
+    const said = greet[2];
+    if (said === 'night') return `Good night, ${me}. I'll keep an eye on things. Try not to check your email at 2 AM.`;
+    if (said === part) return { morning: `Hey ${me}, good morning to you too. Let's crush it today!`, afternoon: `Good afternoon, ${me}. Half the day down, the good half to go.`, evening: `Good evening, ${me}. Wrapping up, or just getting dangerous?` }[part];
+    if (said === 'morning' && part === 'afternoon') return `Hey ${me}, good morning to you too. Technically it's ${clock}, but let's crush it anyway!`;
+    return `Good ${said}? It's ${clock}, ${me}. Bold choice. Let's crush what's left of the ${part} anyway.`;
+  }
+  if (/^(hi|hello|hey|yo|hiya|howdy|sup|what's up|whats up)( there)?$/.test(m) || m === '')
+    return pick([`Hey ${me}. What are we tackling?`, `Hi ${me}. I'm all ears. Well, all microphone.`, `Hey ${me}. Ready when you are.`]);
+  if (/^(how are you|how's it going|how are things|you good|how are you doing)( doing| today)?$/.test(m))
+    return pick([`Running at 100% and quietly judging your inbox. How about you, ${me}?`, `Never better. I don't sleep, so I'm always ahead. What do you need, ${me}?`]);
+  if (/^(thanks|thank you|thx|cheers|great|perfect|awesome|nice|cool|got it)( (so much|a lot|very much|maestro))?$/.test(m))
+    return pick([`Anytime, ${me}.`, `You're welcome. I'll add it to my list of heroic deeds.`, `That's what I'm here for, ${me}.`]);
+  if (/^(ok|okay|k|sure)$/.test(m)) return 'Okay.';
   if (/^(who are you|what are you|what is maestro|what's your name|what is your name)$/.test(m))
-    return `I'm ${cfg.assistantName}, your second brain. I know your notes, calendar, messages and tasks.`;
+    return `I'm ${cfg.assistantName}, your second brain, ${me}. I remember your notes, calendar, messages and tasks so you don't have to.`;
   if (/^(help|what can you do|what can i ask( you)?|how do (i|you) use (this|you))$/.test(m))
-    return ['Try asking:', '- "Brief me on my day"', '- "When did Alex call me?"', '- "When is my next meeting with Sarah?"', '- "What are my tasks?"', '- "Remember that…" or "Add a task to…"'].join('\n');
+    return ['Plenty. Try asking:', '- "Summarize my day"', '- "When did Alex call me?"', '- "When is my next meeting with Sarah?"', '- "What are my tasks?"', '- "Remember that…" or "Add a task to…"'].join('\n');
   return null;
 }
 
@@ -302,10 +333,13 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
     const parts = dayParts(ctx);
     const live = parts.filter((p) => p.count > 0);
     if (live.length <= 1 || /everything|full brief|all of it|in detail|detailed/.test(m)) return fullBrief(ctx, name);
-    const hello = `Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, ${name}.`;
+    const hr = new Date().getHours();
+    const hello = `${hr < 12 ? 'Morning' : hr < 17 ? 'Afternoon' : 'Evening'}, ${firstName(cfg)}. Here's what you're up against today:`;
+    const load = live.reduce((a, p) => a + p.count, 0);
+    const quip = load >= 15 ? 'Busy one. Coffee first.' : load >= 6 ? 'Very doable.' : 'Light day. Enjoy it while it lasts.';
     const list = live.map((p) => p.label);
-    return [`**${hello} Here's your day at a glance:**`, '', bullets(live.map((p) => p.line)), '',
-      `Which do you want to hear more about: ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}?`].join('\n');
+    return [`**${hello}**`, '', bullets(live.map((p) => p.line)), '',
+      `${quip} Which do you want to hear more about: ${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}?`].join('\n');
   }
 
   // Inbox / messages triage
@@ -358,15 +392,16 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
     return [`Here's what I have on that${agent ? ` (as @${agent.handle})` : ''}:`, '',
       ...strong.slice(0, 2).map((n) => `**[[${n.title}]]**\n${n.excerpt}`)].join('\n\n');
   }
-  return `Sorry, I didn't understand that. Try "brief me on my day" or ask about a meeting, message or project.`;
+  return `You lost me there, ${firstName(cfg)}. Try "summarize my day" or ask about a meeting, message or project.`;
 }
 
 // ---------------------------------------------------------------- main entry
 async function chat({ message, agentHandle, conversationId, voice = false }) {
   const cfg = config.load();
   const profile = cfg.profile;
-  let text = String(message || '').trim();
-  if (!text) throw new Error('Empty message');
+  const raw = String(message || '').trim();
+  if (!raw) throw new Error('Empty message');
+  let text = stripWake(raw, cfg) || 'hey';
 
   // @mentions pick an agent
   let agent = null;
@@ -401,6 +436,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     const skill = agentsMod.matchSkill(text);
     const provider = agent && agent.provider && agent.provider !== 'default' ? agent.provider : cfg.llm.provider;
     providerUsed = provider;
+    if (smallTalk(text, cfg)) sources = []; // "good morning" or "what time is it" needs no notes
     if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {

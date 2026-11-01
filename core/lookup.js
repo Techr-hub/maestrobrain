@@ -7,7 +7,7 @@ const vault = require('./vault');
 const STOP = new Set(('when what whats who whom whose where which why how did does do doing has have had is are was were be been ' +
   'the a an to of on in at for from with about and or but me my mine i im you your our us we it its this that these those there ' +
   'last latest recent recently ever today yesterday tonight tomorrow week weekend month time ago any anything something everything ' +
-  'tell show find get give please can could would will should maestro jarvis brain hey ok okay just still yet already new next ' +
+  'tell show find get give please can could would will should maestro brain hey ok okay just still yet already new next ' +
   'up back out over again much many lot some all one first').split(' '));
 const VERB_WORDS = new Set(('whatsapp whatsapped zoom teams meet call called calls calling phone phoned rang ring voicemail voicemails missed ' +
   'text texted texts texting sms message messaged messages msg dm dmed slack slacked ping pinged mention mentioned ' +

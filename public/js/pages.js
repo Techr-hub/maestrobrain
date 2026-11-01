@@ -497,7 +497,7 @@ async function settingsPage(el, ctx) {
   };
   el.querySelector('#save-ai').onclick = saveAi;
   el.querySelector('#test-ai').onclick = async () => { await saveAi(); try { const r = await api('/llm/test', {}); toast('✓ ' + r.reply); } catch (e) { toast(e.message, 'error'); } };
-  el.querySelector('#save-you').onclick = async () => { await api('/settings', { user: { name: el.querySelector('#s-name').value.trim(), role: el.querySelector('#s-role').value.trim() }, assistantName: el.querySelector('#s-asst').value.trim() || 'Jarvis' }); toast('Saved'); ctx.afterChange({ graph: false, feed: false }); };
+  el.querySelector('#save-you').onclick = async () => { await api('/settings', { user: { name: el.querySelector('#s-name').value.trim(), role: el.querySelector('#s-role').value.trim() }, assistantName: el.querySelector('#s-asst').value.trim() || 'Maestro' }); toast('Saved'); ctx.afterChange({ graph: false, feed: false }); };
   el.querySelector('#save-voice').onclick = async () => { await api('/settings', { voice: { speakReplies: el.querySelector('#v-speak').checked, handsFree: el.querySelector('#v-hands').checked, voiceName: el.querySelector('#v-voice').value, rate: Number(el.querySelector('#v-rate').value) } }); await refreshState(); toast('Voice saved'); };
   el.querySelector('#test-voice').onclick = () => { const u = new SpeechSynthesisUtterance(`Hello ${c.user.name}. Your second brain is online.`); const v = speechSynthesis.getVoices().find((x) => x.name === el.querySelector('#v-voice').value); if (v) u.voice = v; u.rate = Number(el.querySelector('#v-rate').value); speechSynthesis.speak(u); };
   el.querySelector('#save-vault').onclick = async () => { try { await api('/settings', { vaultPath: el.querySelector('#vault-path').value.trim() }); toast('Vault updated'); ctx.afterChange(); } catch (e) { toast(e.message, 'error'); } };
@@ -542,7 +542,7 @@ export async function onboarding({ after, afterChange }) {
         try { await connectKb(getKb()); } catch (err) { return toast(err.message, 'error'); }
       }
       if (step === 2) {
-        await api('/settings', { user: { name: box.querySelector('#o-name').value.trim() || c.user.name, role: box.querySelector('#o-role').value.trim() }, assistantName: box.querySelector('#o-asst').value.trim() || 'Jarvis' });
+        await api('/settings', { user: { name: box.querySelector('#o-name').value.trim() || c.user.name, role: box.querySelector('#o-role').value.trim() }, assistantName: box.querySelector('#o-asst').value.trim() || 'Maestro' });
         await refreshState();
       }
       if (step === 3 && pack && pack !== 'none' && !S.state.packs.find((p) => p.id === pack).installed) {

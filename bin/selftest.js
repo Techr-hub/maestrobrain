@@ -42,7 +42,7 @@ async function main() {
   const dev = await post('/chat', { message: 'Review open pull requests and issues, then prepare a technical status report.' });
   ok('Builder challenge answered', /#412/.test(dev.reply));
   const brief = await post('/chat', { message: 'Brief me on my day' });
-  ok('daily brief: overview with counts, then a question', /at a glance/.test(brief.reply) && /\d+ meetings?/.test(brief.reply) && /hear more about/.test(brief.reply));
+  ok('daily brief: overview with counts, then a question', /up against today/.test(brief.reply) && /\d+ meetings?/.test(brief.reply) && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });
   ok('daily brief follow-up: calls', /\d+ calls?\b/.test(more.reply) && /Alex Chen/.test(more.reply));
   const call = await post('/chat', { message: 'When did Alex call me?' });
@@ -52,7 +52,11 @@ async function main() {
   const time = await post('/chat', { message: 'What time is it?' });
   ok('everyday question: what time is it', /^It's \d/.test(time.reply));
   const huh = await post('/chat', { message: 'tell me a joke about penguins' });
-  ok('unknown question gets a short reply', /didn't understand/.test(huh.reply) && huh.reply.length < 160);
+  const hey = await post('/chat', { message: 'Hey Maestro, what time is it?' });
+  ok('"Hey Maestro" is ignored', /^It's \d/.test(hey.reply));
+  const gm = await post('/chat', { message: 'Good morning Maestro' });
+  ok('greeting has personality', /Ryan|good morning/i.test(gm.reply) && !/understand/.test(gm.reply));
+  ok('unknown question gets a short reply', /lost me/.test(huh.reply) && huh.reply.length < 160);
   const none = await post('/chat', { message: 'When did Bob call me?' });
   ok('direct question: says when nothing matches', /No calls from Bob/.test(none.reply));
   const mem = await post('/chat', { message: 'Remember that the workshop is on Thursday' });
@@ -105,7 +109,7 @@ async function main() {
     send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search_brain', arguments: { query: 'payment sdk' } } });
     send({ jsonrpc: '2.0', id: 4, method: 'prompts/list' });
     send({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'maestro_brief', arguments: {} } });
-    send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'get_agent', arguments: { handle: 'Jarvis' } } });
+    send({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'get_agent', arguments: { handle: 'Maestro' } } });
     setTimeout(() => {
       ok('initialize handshake', replies[1] && replies[1].result && replies[1].result.serverInfo.name === 'maestro');
       ok('tools listed', replies[2] && replies[2].result.tools.length >= 15);

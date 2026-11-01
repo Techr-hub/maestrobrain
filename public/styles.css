@@ -73,8 +73,8 @@ a:hover { text-decoration: underline; }
 /* ---------------- Sidebar ---------------- */
 .sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 0 4px 8px; }
 .brand { display: flex; flex-direction: column; align-items: center; padding: 10px 0 14px; }
-.jarvis-avatar { width: 150px; height: 150px; position: relative; cursor: pointer; }
-.jarvis-avatar canvas { width: 100%; height: 100%; }
+.brand-avatar { width: 150px; height: 150px; position: relative; cursor: pointer; }
+.brand-avatar canvas { width: 100%; height: 100%; }
 .brand-name { font-family: var(--font-display); font-weight: 700; font-size: 40px; letter-spacing: 6px; margin-top: 8px; background: linear-gradient(90deg, #e9e7ff, #00e5ff); -webkit-background-clip: text; background-clip: text; color: transparent; line-height: 1.2; }
 .brand-desc { color: var(--muted); font-size: 14px; letter-spacing: 1px; text-transform: uppercase; font-family: var(--font-display); }
 .nav-item { display: flex; align-items: center; gap: 18px; height: 43px; padding: 0 17px; border: 0; border-left: 2px solid transparent; border-right: 2px solid transparent; border-radius: 4px; background: transparent; color: var(--soft); font-size: 16px; font-weight: 500; text-align: left; transition: background .15s, color .15s; width: 100%; }
@@ -333,7 +333,7 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .workspace.collapsed { grid-template-columns: 74px 1fr 463px; }
 .workspace.collapsed.no-feed { grid-template-columns: 74px 1fr; }
 .workspace.collapsed .brand-name, .workspace.collapsed .brand-desc, .workspace.collapsed .nav-item .label { display: none; }
-.workspace.collapsed .jarvis-avatar { width: 56px; height: 56px; }
+.workspace.collapsed .brand-avatar { width: 56px; height: 56px; }
 .workspace.collapsed .brand { padding: 6px 0 10px; }
 .workspace.collapsed .nav-item { justify-content: center; padding: 0; position: relative; }
 .workspace.collapsed .nav-item .badge { position: absolute; top: 4px; right: 6px; margin: 0; padding: 0 4px; font-size: 9px; line-height: 13px; }
@@ -346,13 +346,13 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
   .workspace.collapsed { grid-template-columns: 74px 1fr 380px; }
   .header .orbital { display: none; }
   .brand-name { font-size: 32px; }
-  .jarvis-avatar { width: 120px; height: 120px; }
+  .brand-avatar { width: 120px; height: 120px; }
   .a-title { padding-right: 95px; }
 }
 @media (max-width: 1180px) {
   .workspace, .workspace.no-feed, .workspace.collapsed { grid-template-columns: 74px 1fr; }
   .sidebar .brand-name, .sidebar .brand-desc, .nav-item .label, .nav-item .badge, .sidebar-toggle { display: none; }
-  .jarvis-avatar { width: 56px; height: 56px; }
+  .brand-avatar { width: 56px; height: 56px; }
   .nav-item { justify-content: center; padding: 0; }
   .feed { position: fixed; top: 0; right: 0; bottom: 0; width: min(463px, 100%); background: var(--bg); z-index: 30; transform: translateX(100%); transition: transform .25s; box-shadow: -20px 0 40px rgba(0, 0, 0, .5); }
   .feed.open { transform: none; }
