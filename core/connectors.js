@@ -48,7 +48,7 @@ const CONNECTORS = [
     claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Slack so Claude can search and post.',
   },
   {
-    id: 'twilio_sms', name: 'Text messages (Twilio)', icon: 'message-square', color: '#ff4d8d', group: 'foundation', category: 'SMS',
+    id: 'twilio_sms', name: 'Text messages (Twilio)', short: 'Text', icon: 'message-square', color: '#ff4d8d', group: 'foundation', category: 'SMS',
     description: 'SMS sent to your Twilio number.',
     live: 'dashboard',
     liveFields: [
@@ -58,14 +58,42 @@ const CONNECTORS = [
     ],
   },
   {
-    id: 'twilio_calls', name: 'Calls (Twilio)', icon: 'phone', color: '#ff7a45', group: 'foundation', category: 'CALL',
-    description: 'Incoming and missed calls with voicemail transcripts.',
+    id: 'twilio_calls', name: 'Phone calls (Twilio)', short: 'Phone', icon: 'phone', color: '#ff7a45', group: 'foundation', category: 'CALL',
+    description: 'Incoming and missed phone calls with voicemail transcripts.',
     live: 'dashboard',
     liveFields: [
       { key: 'accountSid', label: 'Account SID', placeholder: 'AC…' },
       { key: 'authToken', label: 'Auth token', placeholder: '', secret: true },
       { key: 'number', label: 'Your Twilio number', placeholder: '+15551234567' },
     ],
+  },
+  {
+    id: 'whatsapp', name: 'WhatsApp', short: 'WhatsApp', icon: 'message-circle', color: '#25d366', group: 'foundation', category: 'SMS',
+    description: 'WhatsApp messages sent to your WhatsApp Business number.',
+    live: 'dashboard',
+    liveFields: [
+      { key: 'accountSid', label: 'Twilio Account SID', placeholder: 'AC…', help: 'WhatsApp goes live through Twilio: Console → Messaging → Try WhatsApp (sandbox) or register a WhatsApp sender.' },
+      { key: 'authToken', label: 'Auth token', placeholder: '', secret: true },
+      { key: 'number', label: 'Your WhatsApp number', placeholder: 'whatsapp:+14155238886' },
+    ],
+  },
+  {
+    id: 'google_meet', name: 'Google Meet', short: 'Meet', icon: 'video', color: '#00ac47', group: 'foundation', category: 'CALL',
+    description: 'Meet calls, recordings and transcripts from Google Workspace.',
+    live: 'claude',
+    claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Google Calendar and Google Drive: Meet links live on your events and recordings and transcripts are saved to Drive.',
+  },
+  {
+    id: 'teams', name: 'Microsoft Teams', short: 'Teams', icon: 'video', color: '#6264a7', group: 'foundation', category: 'CALL',
+    description: 'Teams calls and meeting recaps.',
+    live: 'claude',
+    claudeSetup: 'In Claude Desktop open Settings → Connectors and connect Microsoft 365 (your admin may need to allow it).',
+  },
+  {
+    id: 'zoom', name: 'Zoom', short: 'Zoom', icon: 'video', color: '#2d8cff', group: 'foundation', category: 'CALL',
+    description: 'Zoom meetings, recordings and AI summaries.',
+    live: 'claude',
+    claudeSetup: 'Add the Zoom connector in Claude Desktop (Settings → Connectors), or a Zoom MCP server in claude_desktop_config.json.',
   },
 
   // ---------- Role pack connectors ----------
@@ -167,7 +195,7 @@ function friendly(e, host) {
 }
 
 async function testLive(id, fields) {
-  const host = { slack: 'slack.com', twilio_sms: 'api.twilio.com', twilio_calls: 'api.twilio.com' }[id] || (() => { try { return new URL(String(fields.icsUrl || '').replace(/^webcal:/i, 'https:')).host; } catch { return 'the calendar server'; } })();
+  const host = { slack: 'slack.com', twilio_sms: 'api.twilio.com', twilio_calls: 'api.twilio.com', whatsapp: 'api.twilio.com' }[id] || (() => { try { return new URL(String(fields.icsUrl || '').replace(/^webcal:/i, 'https:')).host; } catch { return 'the calendar server'; } })();
   try { return await testLiveRaw(id, fields); } catch (e) { throw friendly(e, host); }
 }
 
@@ -183,6 +211,7 @@ async function testLiveRaw(id, fields) {
     return `Slack workspace "${r.team}" connected: ${r.messages.length} recent messages`;
   }
   if (id === 'twilio_sms') { const r = await twilioList(fields, 'messages'); return `Twilio connected: ${r.length} recent messages`; }
+  if (id === 'whatsapp') { const r = (await twilioList(fields, 'messages')).filter((m) => /^whatsapp:/.test(m.from || m.to || '')); return `WhatsApp connected: ${r.length} recent messages`; }
   if (id === 'twilio_calls') { const r = await twilioList(fields, 'calls'); return `Twilio connected: ${r.length} recent calls`; }
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }

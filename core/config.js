@@ -7,7 +7,7 @@ const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.MAESTRO_DATA || path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
-const FOUNDATION = ['gmail', 'outlook', 'email', 'icalendar', 'gcal', 'slack', 'twilio_sms', 'twilio_calls'];
+const FOUNDATION = ['gmail', 'outlook', 'email', 'icalendar', 'gcal', 'slack', 'twilio_sms', 'whatsapp', 'twilio_calls', 'google_meet', 'teams', 'zoom'];
 
 function defaultConfig() {
   // Everything starts connected in demo mode so the brain works the moment it is installed.

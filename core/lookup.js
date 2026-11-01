@@ -9,14 +9,14 @@ const STOP = new Set(('when what whats who whom whose where which why how did do
   'last latest recent recently ever today yesterday tonight tomorrow week weekend month time ago any anything something everything ' +
   'tell show find get give please can could would will should maestro jarvis brain hey ok okay just still yet already new next ' +
   'up back out over again much many lot some all one first').split(' '));
-const VERB_WORDS = new Set(('call called calls calling phone phoned rang ring voicemail voicemails missed ' +
+const VERB_WORDS = new Set(('whatsapp whatsapped zoom teams meet call called calls calling phone phoned rang ring voicemail voicemails missed ' +
   'text texted texts texting sms message messaged messages msg dm dmed slack slacked ping pinged mention mentioned ' +
   'email emailed emails mail mailed inbox reach reached contact contacted write wrote reply replied respond ' +
   'say said says want wanted wants ask asked asks need needed send sent meet meeting meetings scheduled schedule ' +
   'happen happened talk talked speak spoke hear heard').split(' '));
 const CAT_VERBS = [
   ['CALL', /\b(call(ed|s|ing)?|phon(e|ed)|rang|ring|voicemails?|missed)\b/],
-  ['SMS', /\b(text(ed|s|ing)?|sms)\b/],
+  ['SMS', /\b(text(ed|s|ing)?|sms|whats ?app(ed)?)\b/],
   ['EMAIL', /\b(e-?mail(ed|s)?|mail(ed)?|inbox)\b/],
   ['CONVERSATION', /\b(slack(ed)?|dm(ed)?|ping(ed)?|mention(ed)?)\b/],
 ];
@@ -137,7 +137,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const person = (peopleNote && has(personIn(top) || '', r.subject[0] || '') ? peopleNote.title : null) || personIn(top) || (peopleNote && peopleNote.title) || who || top.sourceName;
   const missed = /missed/i.test(top.title);
   const via = top.sourceName ? top.sourceName.replace(/ \(.*\)/, '').replace(' / Microsoft 365', '') : '';
-  const did = { CALL: 'called you', SMS: 'texted you', EMAIL: 'emailed you', CONVERSATION: `messaged you on ${via}` }[top.category];
+  const did = { CALL: top.source === 'twilio_calls' ? 'called you' : `called you on ${via}`, SMS: top.source === 'whatsapp' ? 'messaged you on WhatsApp' : 'texted you', EMAIL: 'emailed you', CONVERSATION: `messaged you on ${via}` }[top.category];
   const lines = [did
     ? `**${person} ${did} ${whenText(top.ts)}${missed ? '. You missed it' : ''}.**`
     : `**${top.title}, ${whenText(top.ts)}.**`];

@@ -4,6 +4,14 @@
 
 // minutesAgo is relative to when the feed is seeded.
 const SEED = [
+  // Calls hub: video calls and phone
+  { source: 'zoom', profile: 'business', minutesAgo: 95, category: 'CALL', title: 'Zoom: Acme Corp discovery call summary ready', quote: 'AI summary: "Alex wants pricing for 250 seats and SSO before Friday."', summary: '2 action items identified', priority: 'High', actions: ['Draft pricing reply', 'Add SSO question to PRD'] },
+  { source: 'teams', profile: 'business', minutesAgo: 140, category: 'CALL', title: 'Missed Teams call from Priya Shah', quote: 'Priya: "Ping me when you have the roadmap numbers."', summary: 'Before the Q3 roadmap review', priority: 'Medium', actions: ['Call Priya back'] },
+  { source: 'google_meet', profile: 'business', minutesAgo: 30, category: 'CALL', title: 'Google Meet: Daily standup transcript saved', quote: 'Marcus: "Still blocked on the Payment SDK. Need a decision today."', summary: 'Blocker on Sprint 24', actions: ['Open transcript'] },
+  { source: 'zoom', profile: 'personal', minutesAgo: 300, category: 'CALL', title: 'Zoom: Family call with Mom scheduled Sunday 5 PM', quote: '"Kids want to show grandma their soccer medals."', summary: 'Added to your calendar' },
+  // Messages hub: WhatsApp
+  { source: 'whatsapp', profile: 'personal', minutesAgo: 12, category: 'SMS', title: 'WhatsApp from Sam', quote: '"Tennis Saturday 10am? I booked court 3 🎾"', summary: 'Saturday 10 AM is free', unread: true, actions: ['Reply yes'] },
+  { source: 'whatsapp', profile: 'business', minutesAgo: 75, category: 'SMS', title: 'WhatsApp from Jordan Patel', quote: '"API partner can do the demo Tuesday or Wednesday, which works?"', summary: 'Needs a reply today', priority: 'Medium', actions: ['Reply Tuesday'] },
   // ---------------- Business ----------------
   { source: 'twilio_calls', profile: 'business', minutesAgo: 4, category: 'CALL', title: 'Missed call from Alex Chen (Acme Corp)', quote: 'Voicemail: "Hey, calling about the renewal pricing, can we talk before Friday?"', summary: 'Renewal at risk if not answered this week', priority: 'High', deadline: 'Call back today', actions: ['Call Alex back', 'Draft pricing reply'] },
   { source: 'gcal', profile: 'business', minutesAgo: 6, category: 'MEETING', title: 'Sprint Review starts in 30 min', quote: 'Attendees: Priya Shah, Marcus Lee, Sarah Kim, +4', summary: 'Prep notes ready in Meetings/Sprint 24 Review', priority: 'Medium', deadline: 'Starts 10:30 AM', actions: ['Open prep notes'] },

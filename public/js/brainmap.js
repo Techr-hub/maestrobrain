@@ -232,7 +232,7 @@ export class BrainMap {
       const h = this.hubIndex && this.hubIndex.get(s.parent);
       const c = h ? this.sourceWorld(h) : { x: 0, y: 0, z: 0 };
       const a = s.angle + this.t * 0.0003;
-      return { x: c.x + Math.cos(a) * 62, y: c.y - 46 + Math.sin(a) * 18, z: c.z + Math.sin(a) * 62 };
+      return { x: c.x + Math.cos(a) * 74, y: c.y - 40 + Math.sin(a) * 18, z: c.z + Math.sin(a) * 74 };
     }
     const a = s.angle + this.t * 0.00005;
     return { x: Math.cos(a) * ORBIT, y: Math.sin(a * 2 + s.angle) * 38, z: Math.sin(a) * ORBIT };
@@ -418,7 +418,7 @@ export class BrainMap {
     const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 : 1), off = s.connected === false;
     const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off ? 0.5 : 1);
     const anchor = sat ? (this.hubIndex.get(s.parent) || {}).sp || core : core;
-    if (!off) { ctx.strokeStyle = sat ? hex(s.color, 0.45 * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
+    if (!off || sat) { ctx.strokeStyle = sat ? hex(s.color, (off ? 0.25 : 0.5) * fog) : `rgba(0,124,170,${(0.12 + s.pulse * 0.6) * fog})`; ctx.setLineDash(sat && !off ? [] : [3, 5]); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(anchor.x, anchor.y); ctx.stroke(); ctx.setLineDash([]); }
     const selected = this.selectedSource === s.id;
     if (selected || s.error) { ctx.strokeStyle = s.error ? 'rgba(255,77,109,.9)' : hex(s.color, 0.9); ctx.lineWidth = 1.5; ctx.setLineDash(s.error ? [3, 3] : []); ctx.beginPath(); ctx.arc(p.x, p.y, 22 * k, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1; }
     const r = (15 + s.pulse * 6) * k;

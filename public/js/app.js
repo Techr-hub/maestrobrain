@@ -21,7 +21,7 @@ const NAV = [
   ['settings', 'Settings', 'settings'],
 ];
 
-const SHORT = { gmail: 'GM', outlook: 'OL', email: '@', icalendar: 'iC', gcal: 'GC', slack: '#', twilio_sms: 'TX', twilio_calls: 'CL', linear: 'LN', jira: 'JR', notion: 'N', figma: 'FG', gdrive: 'GD', github: 'GH', docs: 'DC' };
+const SHORT = { gmail: 'GM', outlook: 'OL', email: '@', icalendar: 'iC', gcal: 'GC', slack: '#', twilio_sms: 'TX', whatsapp: 'WA', twilio_calls: 'PH', google_meet: 'MT', teams: 'TM', zoom: 'ZM', linear: 'LN', jira: 'JR', notion: 'N', figma: 'FG', gdrive: 'GD', github: 'GH', docs: 'DC' };
 
 let brain, av, voice, dashboardEl;
 
@@ -195,6 +195,24 @@ async function loadGraph() {
   updateStats();
 }
 
+// Shades of a hub's colour for its sub-categories: lighter to darker around the base hue.
+function shade(hexColor, i, n) {
+  const v = parseInt(hexColor.slice(1), 16);
+  let r = ((v >> 16) & 255) / 255, g = ((v >> 8) & 255) / 255, b = (v & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, sat = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  l = Math.min(0.85, Math.max(0.3, l + (n > 1 ? 0.22 - (0.44 * i) / (n - 1) : 0.12)));
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+  const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return '#' + [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+}
+
 function updateBrainSources() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
@@ -202,9 +220,14 @@ function updateBrainSources() {
   const hubs = S.hubs || [];
   const list = hubs.map((h) => ({ id: 'hub:' + h.id, name: h.name, color: h.color, short: h.short, hub: true, members: h.members,
     connected: h.projects || h.members.some((m) => conns[m]), error: h.members.some((m) => conns[m] && conns[m].lastError) }));
-  for (const h of hubs) for (const m of h.members) {
-    const c = S.state.connectors.find((x) => x.id === m);
-    if (c && conns[m]) list.push({ id: m, name: c.name, color: c.color, short: SHORT[m], parent: 'hub:' + h.id, connected: true, error: !!conns[m].lastError });
+  for (const h of hubs) {
+    // Sub-categories: the hub's "always" ones (e.g. Calls → Meet, Phone, Teams, Zoom) plus anything connected.
+    const subs = h.members.filter((m) => conns[m] || (h.always || []).includes(m));
+    subs.forEach((m, i) => {
+      const c = S.state.connectors.find((x) => x.id === m);
+      if (!c) return;
+      list.push({ id: m, name: c.short || c.name, color: shade(h.color, i, subs.length), short: SHORT[m], parent: 'hub:' + h.id, connected: !!conns[m], error: !!(conns[m] && conns[m].lastError) });
+    });
   }
   brain && brain.setSources(list);
   updateStats();

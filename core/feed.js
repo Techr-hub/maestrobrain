@@ -96,7 +96,11 @@ function markRead(id) {
 function surfaceSource(sourceId, profile) {
   const items = readAll();
   const now = Date.now();
-  const mine = items.filter((i) => i.source === sourceId && i.profile === profile && i.demo);
+  let mine = items.filter((i) => i.source === sourceId && i.profile === profile && i.demo);
+  if (!mine.length) {
+    mine = demo.SEED.filter((t) => t.source === sourceId && (t.profile === profile || t.profile === 'both')).map((t) => normalize({ ...t, demo: true }));
+    items.push(...mine);
+  }
   mine.forEach((it, idx) => { it.ts = now - idx * 45000; it.unread = true; });
   items.sort((a, b) => b.ts - a.ts);
   writeAll(items);
@@ -146,7 +150,10 @@ async function pollLive() {
           for (const m of messages) add({ externalId: m.externalId, ts: m.ts, source: 'slack', profile, category: 'CONVERSATION', title: `Slack message in ${m.channel}`, quote: '"' + m.text.slice(0, 220) + '"', summary: m.text.includes('?') ? 'Question waiting for a reply' : '' });
         } else if (id === 'twilio_sms') {
           const msgs = await connectors.twilioList(conn.fields, 'messages');
-          for (const m of msgs) if (m.direction === 'inbound') add({ externalId: 'sms:' + m.sid, ts: Date.parse(m.date_sent || m.date_created), source: 'twilio_sms', profile, category: 'SMS', title: `Text from ${m.from}`, quote: '"' + (m.body || '').slice(0, 220) + '"' });
+          for (const m of msgs) if (m.direction === 'inbound' && !/^whatsapp:/.test(m.from || '')) add({ externalId: 'sms:' + m.sid, ts: Date.parse(m.date_sent || m.date_created), source: 'twilio_sms', profile, category: 'SMS', title: `Text from ${m.from}`, quote: '"' + (m.body || '').slice(0, 220) + '"' });
+        } else if (id === 'whatsapp') {
+          const msgs = await connectors.twilioList(conn.fields, 'messages');
+          for (const m of msgs) if (m.direction === 'inbound' && /^whatsapp:/.test(m.from || '')) add({ externalId: 'wa:' + m.sid, ts: Date.parse(m.date_sent || m.date_created), source: 'whatsapp', profile, category: 'SMS', title: `WhatsApp from ${m.from.replace('whatsapp:', '')}`, quote: '"' + (m.body || '').slice(0, 220) + '"' });
         } else if (id === 'twilio_calls') {
           const calls = await connectors.twilioList(conn.fields, 'calls');
           for (const c of calls) if (c.direction === 'inbound') add({ externalId: 'call:' + c.sid, ts: Date.parse(c.start_time || c.date_created), source: 'twilio_calls', profile, category: 'CALL', title: `${c.status === 'completed' ? 'Call' : 'Missed call'} from ${c.from}`, quote: `Duration ${c.duration || 0}s`, priority: c.status === 'completed' ? '' : 'Medium' });
