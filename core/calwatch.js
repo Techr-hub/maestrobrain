@@ -69,6 +69,34 @@ function diff(state, stateKey, profile, source, fresh) {
   return n;
 }
 
+// Every event in the coming week gets its own feed card, so filtering the feed by a calendar shows that calendar.
+// Cards are keyed by event + start time, so each one is posted once. Soonest events sort to the top.
+const WEEK = 7 * 86400000;
+function upcoming(profile, source, events, skip = new Set()) {
+  const now = Date.now();
+  const list = events.filter((e) => new Date(e.end) >= now && new Date(e.start) - now <= WEEK && !/@maestro$/.test(e.uid || '') && !skip.has(e.uid))
+    .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 30);
+  let n = 0;
+  list.forEach((e) => {
+    const start = new Date(e.start);
+    const startsIn = start - now;
+    const item = feed.add({
+      externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
+      ts: now - 1000 - Math.max(0, startsIn) / 10000, // just under brand-new notifications; sooner events sort higher, across all calendars
+      source, profile, category: 'MEETING',
+      title: e.title,
+      quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
+      summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up on your calendar${e.recurring ? ' · repeats' : ''}`,
+      priority: startsIn > 0 && startsIn < 2 * 3600000 ? 'Medium' : '',
+      deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      unread: false,
+      actions: ['Prep me for this'],
+    });
+    if (item) n++;
+  });
+  return n;
+}
+
 let running = false;
 async function check() {
   if (running) return 0;
@@ -84,12 +112,18 @@ async function check() {
           if (ICS_SOURCES.includes(id)) {
             for (const url of connectors.calendarUrls(conn.fields)) {
               const events = await connectors.fetchIcs(url);
-              posted += diff(state, `${profile}|${id}|${url}`, profile, id, snapshot(events));
+              const key = `${profile}|${id}|${url}`;
+              const before = state[key] ? new Set(Object.keys(state[key].events)) : null;
+              posted += diff(state, key, profile, id, snapshot(events));
+              // brand-new events already got a "New:" card; everything else in the coming week gets an agenda card
+              const fresh = before ? new Set(Object.keys(state[key].events).filter((k) => !before.has(k))) : new Set();
+              posted += upcoming(profile, id, events, fresh);
             }
           } else if (id === 'calendly') {
             const me = await connectors.calendlyMe(conn.fields.token);
             const events = await connectors.calendlyEvents(conn.fields.token, me.uri);
             calendlyCache.set(profile, events);
+            const skipNew = state[`${profile}|calendly`] ? new Set(events.map((e) => e.uid).filter((u) => !state[`${profile}|calendly`].events[u])) : new Set();
             const key = `${profile}|calendly`;
             const fresh = snapshot(events);
             const prev = state[key];
@@ -100,6 +134,7 @@ async function check() {
               for (const [k, e] of Object.entries(fresh)) if (!prev.events[k]) { post(profile, 'calendly', 'new', k, { ...e, calendly: true }, { with: e.with }); posted++; } else if (prev.events[k].start !== e.start) { post(profile, 'calendly', 'moved', k, e, { was: prev.events[k].start }); posted++; }
               for (const [k, e] of Object.entries(prev.events)) if (!fresh[k] && new Date(e.end) > Date.now()) { post(profile, 'calendly', 'cancelled', k, e); posted++; }
             }
+            posted += upcoming(profile, 'calendly', events.map((e) => ({ ...e, description: 'calendly' })), skipNew);
           }
           if (id === 'calendly' && conn.lastError) config.update((c) => { const k = c.connections[profile][id]; if (k) delete k.lastError; });
         } catch (e) {
@@ -114,4 +149,4 @@ async function check() {
 
 function calendlyUpcoming(profile) { return calendlyCache.get(profile) || []; }
 
-module.exports = { check, diff, snapshot, calendlyUpcoming };
+module.exports = { check, diff, snapshot, upcoming, calendlyUpcoming };

@@ -471,13 +471,25 @@ async function loadFeed() {
   greet();
 }
 
+// Add items to the feed without duplicates, newest first.
+function mergeFeed(items) {
+  const ids = new Set(items.map((i) => i.id));
+  S.feed = [...items, ...S.feed.filter((x) => !ids.has(x.id))].sort((a, b) => b.ts - a.ts);
+}
+
 function fillSourceFilter() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
   const sel = $('#source-filter');
   const opts = [['all', 'All Sources'], ...S.state.connectors.filter((c) => conns[c.id]).map((c) => [c.id, c.name.replace(/ \(.*\)/, '')]), ['system', 'Maestro']];
   sel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${S.source === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
-  sel.onchange = () => { S.sourceView = null; S.source = sel.value; renderFeed(false); };
+  sel.onchange = async () => {
+    S.sourceView = null; S.source = sel.value;
+    if (S.source !== 'all') { // pull that source's own history, so older cards aren't hidden behind the 80-item window
+      try { mergeFeed(await api(`/feed?source=${encodeURIComponent(S.source)}&limit=80`)); } catch {}
+    }
+    renderFeed(false);
+  };
 }
 
 function feedItemHtml(i, isNew) {
@@ -697,7 +709,7 @@ function connectStream() {
   es.addEventListener('feed', (e) => {
     const item = JSON.parse(e.data);
     if (!visibleNow(item)) return;
-    S.feed = [item, ...S.feed.filter((x) => x.id !== item.id)];
+    mergeFeed([item]);
     renderFeed(true);
     const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;
     if (brain) brain.pulseSource(item.source, cat.c);

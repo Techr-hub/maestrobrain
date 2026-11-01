@@ -60,6 +60,8 @@ async function main() {
     w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 5, 'A')]));
     const n = w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 7, 'A'), ev('b', 9, 'B')]));
     ok('calendar watcher: posts new and moved events', n === 2);
+    const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
+    ok('calendar watcher: this week\'s events become feed cards once', w.upcoming('business', 'system', up) === 1 && w.upcoming('business', 'system', up) === 0);
   }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
