@@ -13,9 +13,12 @@ const STOP = '(?=\\s+(?:at|on|for|about|to|tomorrow|today|tonight|next|this|from
 
 function wantsEvent(text) {
   const m = text.toLowerCase();
-  return /\b(create|schedule|book|set ?up|add|make|put|arrange|plan|organi[sz]e|new)\b[\s\S]{0,40}\b(meeting|event|call|appointment|1:1|one[- ]on[- ]one|catch ?up|sync|lunch|coffee|demo|interview|review|session|standup)\b/.test(m)
-    || /\b(put|add) (it |something |that )?(on|in|to) my calendar\b/.test(m)
-    || /^(schedule|book) /.test(m);
+  if (/\b(add|create|make|new)\s+(a\s+|an\s+)?(new\s+)?(task|to-?do|note|memory)\b/.test(m)) return false; // "add a task to call John"
+  if (/^(what|when|which|how many|do i|did|show|list|tell me about)\b/.test(m) && !/\b(create|add|schedule|book|make|set up)\b/.test(m)) return false; // "what meetings do I have?"
+  return /\b(create|schedule|book|set ?up|add|make|put|arrange|plan|organi[sz]e|new|start|insert|block( off| out)?|pencil( in)?)\b[\s\S]{0,40}\b(meeting|event|call|appointment|1:1|one[- ]on[- ]one|catch ?up|sync|lunch|dinner|breakfast|coffee|demo|interview|review|session|standup|calendar (item|entry|event|invite)|item|entry|invite|booking|reservation|block|time)\b/.test(m)
+    || /\b(put|add|create|make|schedule|book|pencil)\b[\s\S]{0,60}\b(on|in|to|into) (my|the|our) (\w+ )?(calendar|cal|schedule|diary)\b/.test(m)
+    || /\bnew (calendar )?(meeting|event|item|entry|appointment)\b/.test(m)
+    || /^(schedule|book|calendar) /.test(m);
 }
 
 function parseDate(m, now = new Date()) {
@@ -93,7 +96,18 @@ function parseTitle(text) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
-function kindOf(m) { const x = m.match(/\b(call|lunch|coffee|demo|interview|review|sync|1:1|one[- ]on[- ]one|catch ?up|standup|appointment|event|meeting)\b/); return x ? x[1].replace(/one[- ]on[- ]one/, '1:1').replace(/catch ?up/, 'catch-up') : 'meeting'; }
+// "at Starbucks on King St", "in the Boardroom", "location is 100 Queen St", "on Zoom"
+function parseLocation(text) {
+  let m = text.match(/\b(?:location(?: is|:)|address(?: is|:)|venue(?: is|:))\s*(.+?)(?:[.,!?]|$)/i);
+  if (m) return m[1].trim();
+  m = text.match(/\bon (zoom|teams|google meet|meet|a call|the phone|facetime)\b/i);
+  if (m) return { zoom: 'Zoom', teams: 'Microsoft Teams', 'google meet': 'Google Meet', meet: 'Google Meet', 'a call': 'Phone call', 'the phone': 'Phone call', facetime: 'FaceTime' }[m[1].toLowerCase()];
+  m = text.match(/\b(?:at|in)\s+((?:the\s+)?[A-Z][\w'&.-]*(?:\s+(?:[A-Z][\w'&.-]*|on|of|and|&|St|Ave|Rd)){0,6})/);
+  if (m && !/^(the )?(morning|afternoon|evening|night|noon|midnight|january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(m[1])) return m[1].trim();
+  return '';
+}
+
+function kindOf(m) { if (/\b(calendar )?(item|entry|invite|booking)\b/.test(m) && !/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|standup|appointment)\b/.test(m)) return 'event'; const x = m.match(/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|1:1|one[- ]on[- ]one|catch ?up|standup|appointment|event|meeting)\b/); return x ? x[1].replace(/one[- ]on[- ]one/, '1:1').replace(/catch ?up/, 'catch-up') : 'meeting'; }
 
 // Pull every slot we can from one message.
 function extract(text, now) {
@@ -106,6 +120,7 @@ function extract(text, now) {
   if (/\b\d+(\.\d+)?\s*(minutes?|mins?|hours?|hrs?)\b|\b(half an hour|half hour|an hour|one hour|hour and a half|quarter of an hour)\b/.test(lengthy)) { const dur = parseDuration(lengthy); if (dur) out.minutes = dur; }
   const who = parseAttendees(text); if (who.length) out.attendees = who;
   const title = parseTitle(text); if (title) out.title = title;
+  const place = parseLocation(text); if (place) out.location = place;
   out.kind = kindOf(m);
   return out;
 }
@@ -119,7 +134,9 @@ function nextQuestion(s, targets, name) {
   if (!s.date) return { slot: 'date', q: 'What day should I put it on?' };
   if (s.time == null) { const day = fmtDay(s.date).replace(/ \(.*\)/, ''); return { slot: 'time', q: `What time ${/^(today|tomorrow)$/.test(day) ? day : 'on ' + day.split(',')[0]}?` }; }
   if (!s.minutes) return { slot: 'minutes', q: 'How long should it be? 30 minutes?' };
-  if (s.title == null && /^(meeting|event)$/.test(s.kind || 'meeting')) return { slot: 'title', q: `What's it about? Say "skip" and I'll call it "${defaultTitle(s)}".` };
+  if (s.title == null) return { slot: 'title', q: `What should I call it? Say "skip" and I'll call it "${defaultTitle(s)}".` };
+  if (s.location == null) return { slot: 'location', q: 'Where is it? An address, a room or a video link, or say "skip".' };
+  if (s.notes == null) return { slot: 'notes', q: 'Any description or notes to add? Or say "skip".' };
   if (!s.target && targets.length > 1) return { slot: 'target', q: `Which calendar: ${targets.map((t, i) => `${i + 1}) ${t.name}${t.via && t.id !== 'maestro' ? ` (${t.via})` : ''}`).join(', ')}?` };
   return null;
 }
@@ -127,7 +144,9 @@ function nextQuestion(s, targets, name) {
 function answer(slot, text, s, targets, now) {
   const m = text.toLowerCase().replace(/[.!?]+$/, '').trim();
   const more = extract(text, now); // people often answer with more than was asked
-  for (const k of ['date', 'time', 'minutes', 'attendees']) if (more[k] != null && s[k] == null) s[k] = more[k];
+  // free-text answers (a title, a place, notes) can still carry a date or time, but not a length or guests
+  const keys = ['title', 'location', 'notes'].includes(slot) ? ['date', 'time'] : ['date', 'time', 'minutes', 'attendees'];
+  for (const k of keys) if (more[k] != null && s[k] == null) s[k] = more[k];
   if (slot === 'date' && !s.date) { const d = parseDate(m, now); if (d) s.date = d.getTime(); }
   if (slot === 'time' && s.time == null) {
     let t = parseTime(m);
@@ -138,6 +157,9 @@ function answer(slot, text, s, targets, now) {
     const d = parseDuration(m) || (/^(yes|yeah|yep|sure|ok|okay|sounds good|that'?s fine|default|fine|perfect)\b/.test(m) ? 30 : null) || (/^\d+$/.test(m) ? Number(m) : null);
     if (d) s.minutes = d;
   }
+  const skip = /^(skip|no|nope|nothing|none|n\/a|no thanks|not needed|nah|that'?s it|that'?s all|leave it( blank)?|blank|no location|no description|no notes)\b/.test(m);
+  if (slot === 'location' && s.location == null) s.location = skip ? '' : parseLocation(text.replace(/^\s*(it'?s |it is )/i, '').replace(/^\s*(at|in)\s+(\w)/i, (x, p, c) => `${p} ${c.toUpperCase()}`)) || text.trim().replace(/^(it'?s |it is |at |in |on |the location is |location is )/i, '').replace(/^\w/, (c) => c.toUpperCase()).replace(/[.!?]+$/, '');
+  if (slot === 'notes' && s.notes == null) s.notes = skip ? '' : text.trim().replace(/^(add |notes?:? |description:? |it'?s |say |that )/i, '').replace(/^\w/, (c) => c.toUpperCase());
   if (slot === 'title' && s.title == null) s.title = /^(skip|no|nope|nothing|none|no title|that'?s fine|fine|default|just that|keep it)\b/.test(m) ? '' : text.trim().replace(/^(it'?s |it is |about |re |regarding )/i, '').replace(/[.!?]+$/, '').replace(/^\w/, (c) => c.toUpperCase());
   if (slot === 'target' && !s.target) {
     const n = Number((m.match(/\b(\d)\b/) || [])[1] || { first: 1, second: 2, third: 3, fourth: 4 }[(m.match(/\b(first|second|third|fourth)\b/) || [])[1]] || 0);
@@ -154,7 +176,7 @@ async function finish(s, targets, profile, name) {
   const title = s.title || defaultTitle(s);
   const target = s.target || targets[0].id;
   const t = targets.find((x) => x.id === target) || targets[0];
-  const r = await events.create({ title, start, end, attendees: s.attendees }, { profile, target });
+  const r = await events.create({ title, start, end, attendees: s.attendees, location: s.location || '', notes: s.notes || '' }, { profile, target });
   // heads-up on clashes
   let clash = '';
   try {
@@ -162,7 +184,7 @@ async function finish(s, targets, profile, name) {
     if (day.length) clash = ` Heads up, ${name}: it overlaps "${day[0].title}" at ${fmtTime(day[0].start)}.`;
   } catch { /* calendar read is best-effort */ }
   const where = r.warning ? 'your calendar' : t.id === 'maestro' ? 'your Maestro calendar' : `your "${t.name}" calendar (${t.via})`;
-  const line = `Creating "${title}" for ${fmtDay(start)}, ${fmtTime(start)} to ${fmtTime(end)}${s.attendees && s.attendees.length ? `, with ${s.attendees.join(' and ')}` : ''}, in ${where}.`;
+  const line = `Creating "${title}" for ${fmtDay(start)}, ${fmtTime(start)} to ${fmtTime(end)}${s.attendees && s.attendees.length ? `, with ${s.attendees.join(' and ')}` : ''}${s.location ? `, at ${s.location}` : ''}, in ${where}.`;
   return { reply: `${line} ${r.warning ? r.warning : "Done, it's on your calendar."}${clash}`, event: r.event };
 }
 
@@ -179,12 +201,14 @@ async function handle(text, conv, { profile, name }) {
   if (!s) {
     s = { ...extract(text, now), type: 'event' };
     if (s.title === undefined) s.title = null;
+    if (s.location === undefined) s.location = null;
+    s.notes = null;
     if (targets.length === 1) s.target = targets[0].id;
   } else {
     const before = JSON.stringify(s);
     answer(s.ask, text, s, targets, now);
     // they asked something else instead of answering: drop the draft and let the brain answer
-    if (JSON.stringify(s) === before && /\?$|^(what|when|who|where|why|how|did|do|does|is|are|can|could|brief|summari[sz]e)\b/i.test(text.trim()) && s.ask !== 'title') { conv.pending = null; return null; }
+    if (JSON.stringify(s) === before && /\?$|^(what|when|who|where|why|how|did|do|does|is|are|can|could|brief|summari[sz]e)\b/i.test(text.trim()) && !['title', 'location', 'notes'].includes(s.ask)) { conv.pending = null; return null; }
   }
   const q = nextQuestion(s, targets, name);
   if (q) {
@@ -200,4 +224,4 @@ async function handle(text, conv, { profile, name }) {
   return { reply: out.reply + tip, event: out.event };
 }
 
-module.exports = { handle, wantsEvent, extract, parseDate, parseTime, parseDuration, parseAttendees };
+module.exports = { handle, wantsEvent, extract, parseLocation, parseDate, parseTime, parseDuration, parseAttendees };
