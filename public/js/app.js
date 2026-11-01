@@ -52,7 +52,24 @@ export async function afterChange({ graph = true, feed = true } = {}) {
   updateStats();
 }
 
+// Collapsible sidebar: icons only when collapsed (the default), remembered per browser.
+function applySidebar() {
+  let collapsed = true;
+  try { collapsed = localStorage.getItem('maestro.sidebar') !== 'open'; } catch { /* storage blocked */ }
+  document.querySelector('.workspace').classList.toggle('collapsed', collapsed);
+  const t = $('#sidebar-toggle');
+  t.title = collapsed ? 'Expand menu' : 'Collapse menu';
+  t.querySelector('.toggle-icon').innerHTML = icon(collapsed ? 'panel-left-open' : 'panel-left');
+  if (brain) setTimeout(() => brain.resize(), 220);
+}
+$('#sidebar-toggle').onclick = () => {
+  const collapsed = document.querySelector('.workspace').classList.contains('collapsed');
+  try { localStorage.setItem('maestro.sidebar', collapsed ? 'open' : 'closed'); } catch { /* storage blocked */ }
+  applySidebar();
+};
+
 function renderShell() {
+  applySidebar();
   const st = S.state, cfg = st.config;
   $('#nav').innerHTML = NAV.map(([id, label, ic]) => `<button class="nav-item ${S.route === id ? 'active' : ''}" data-route="${id}" title="${label}">${icon(ic)}<span class="label">${label}</span>${id === 'connections' ? `<span class="badge">${Object.keys(cfg.connections[cfg.profile] || {}).length}</span>` : ''}</button>`).join('');
   $('#nav').querySelectorAll('.nav-item').forEach((b) => b.onclick = () => navigate(b.dataset.route));
