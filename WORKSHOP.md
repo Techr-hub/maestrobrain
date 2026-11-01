@@ -39,7 +39,7 @@ Facilitator check: run `npm test` on a clean machine the day before. It should p
 ### 1. Download and start (10 min)
 - Paste the one-line install command for your OS (on the slide). It downloads, installs to `~/maestro-brain` and starts Maestro.
 - ZIP users on **Mac**: macOS blocks double-clicking downloaded scripts. In Terminal type `bash ` and drag `Start Maestro.command` in, then Enter. **Windows**: double-click `Start Maestro.bat` (SmartScreen: *More info → Run anyway*).
-- The browser opens `http://localhost:4141`. Complete onboarding: name, role pack, Connect to Claude Desktop.
+- The browser opens `http://localhost:4141`. Complete onboarding. First choice: **Load demo data** (recommended for the workshop) or **Set up my real connections** (starts empty and walks through connecting calendars, email, messages and calls). Then knowledge base, name, role pack and Connect to Claude Desktop.
 - ✅ Checkpoint: everyone sees the brain map and a full Intelligence Feed.
 
 ### 2. Connect Claude Desktop (10 min)

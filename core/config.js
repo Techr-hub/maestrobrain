@@ -41,6 +41,8 @@ function defaultConfig() {
     demo: { liveFeed: true, intervalSeconds: 35 },
     port: 4141,
     onboarded: false,
+    // 'demo' fills the brain with sample data; 'real' starts empty and only shows what the user connects.
+    dataMode: 'demo',
     // Where the brain's knowledge lives. connected stays false until the user picks a source on first run.
     knowledge: { type: 'obsidian', connected: false },
   };

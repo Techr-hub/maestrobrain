@@ -56,6 +56,7 @@ function visible(items, cfg, profile) {
   const conns = (cfg.connections && cfg.connections[profile]) || {};
   return items.filter((i) => {
     if (i.profile !== profile && i.profile !== 'both') return false;
+    if (cfg.dataMode === 'real' && i.demo) return false; // real setup: no sample items at all
     if (i.pack && !cfg.packs.includes(i.pack)) return false;
     if (i.source === 'system') return true;
     const conn = conns[i.source];

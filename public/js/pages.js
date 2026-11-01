@@ -250,18 +250,19 @@ function wireListFields(m) {
   });
 }
 
-export function connectModal(c, prof, done) {
+export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real' } = {}) {
   const s = c.status[prof];
   const canLive = c.live && c.live.includes('dashboard');
   const viaClaude = c.live && c.live.includes('claude');
+  const first = s ? s.mode : noDemo ? (canLive ? 'live' : 'claude') : 'demo';
   modal(`${modalHead(`Connect ${esc(c.name)}`, `${profileName()} profile`)}
-    <button class="choice ${!s || s.mode === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>
-    ${canLive ? `<button class="choice ${s && s.mode === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
-      <div id="live-fields" ${s && s.mode === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.fields) || {})).join('')}</div>` : ''}
-    ${viaClaude ? `<button class="choice ${s && s.mode === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>` : ''}
+    ${noDemo && first !== 'demo' ? '' : `<button class="choice ${first === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>`}
+    ${canLive ? `<button class="choice ${first === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
+      <div id="live-fields" ${first === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.fields) || {})).join('')}</div>` : ''}
+    ${viaClaude ? `<button class="choice ${first === 'claude' ? 'on' : ''}" data-mode="claude">${icon('sparkles')}<div><b>I connected it in Claude Desktop</b><span>${esc(c.claudeSetup || '')}</span></div></button>` : ''}
     <div class="modal-foot">${s ? '<button class="btn small danger" id="off" style="margin-right:auto">Disconnect</button>' : ''}<button class="btn ghost" data-close>Cancel</button><button class="btn connect" id="go">${icon('plug')} ${s ? 'Save' : 'Connect'}</button></div>`, {
     onMount: (m, close) => {
-      let mode = s ? s.mode : 'demo';
+      let mode = first;
       m.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => {
         mode = b.dataset.mode;
         m.querySelectorAll('[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
@@ -541,49 +542,79 @@ async function settingsPage(el, ctx) {
 }
 
 // ================================================================ ONBOARDING
+// Sources offered in the "connect your real accounts" step, grouped like the hubs on the brain map.
+const SETUP_GROUPS = [
+  ['Calendar', ['icalendar', 'gcal', 'outlook']],
+  ['Email', ['gmail', 'outlook', 'email']],
+  ['Messages', ['slack', 'twilio_sms', 'whatsapp']],
+  ['Calls', ['twilio_calls', 'google_meet', 'teams', 'zoom']],
+];
+
 export async function onboarding({ after, afterChange }) {
   const done = after || afterChange;
   const c = cfg();
-  let step = 0, pack = null, getKb = null;
+  let i = 0, pack = null, getKb = null;
+  let path = c.dataMode === 'real' && c.onboarded ? 'real' : null; // chosen on the first screen
   const kb = await loadKb();
-  const steps = [
-    () => `${modalHead('Welcome to Maestro', 'Your personal second brain: Claude + Obsidian + MCP.')}
-      <div class="md"><p>In the next minute you will:</p><ol><li>Connect your knowledge base (Obsidian, Markdown or a third party)</li><li>Tell the brain who you are</li><li>Pick a role pack for what you do</li><li>Connect it to Claude Desktop</li></ol><p>Everything already works with demo data, so you can explore right away.</p></div>`,
-    () => `${modalHead('Connect your knowledge base', 'Where your brain reads and writes notes. Obsidian is recommended.')}<div id="o-kb">${kbFormHtml(kb)}</div>`,
-    () => `${modalHead('Who are you?', 'This goes into your memory so every answer is about you.')}
-      <div class="two-col"><div class="field"><label>Your name</label><input class="input" id="o-name" value="${esc(c.user.name)}"></div><div class="field"><label>What you do</label><input class="input" id="o-role" value="${esc(c.user.role)}"></div></div>
-      <div class="field"><label>Name your assistant</label><input class="input" id="o-asst" value="${esc(c.assistantName)}"><span class="help">You'll say “Hey ${esc(c.assistantName)}” to talk to it.</span></div>`,
-    () => `${modalHead('Pick your role pack', 'Packs add the connectors, agent and skills for your job. You can add more later.')}
+  const prof = () => cfg().profile;
+  const STEP = {
+    welcome: () => `${modalHead('Welcome to Maestro', 'Your personal second brain: Claude + Obsidian + MCP.')}
+      <div class="md"><p>How do you want to start?</p></div>
+      <button class="choice ${path === 'demo' ? 'on' : ''}" data-path="demo">${icon('zap')}<div><b>Load demo data</b><span>Fill the brain with a realistic sample week: meetings, emails, calls, messages and projects. Best for exploring and for the workshop. You can connect real accounts any time.</span></div></button>
+      <button class="choice ${path === 'real' ? 'on' : ''}" data-path="real">${icon('plug')}<div><b>Set up my real connections</b><span>Start empty and connect your own calendars, email, messages and calls now. Only what you connect shows up.</span></div></button>`,
+    kb: () => `${modalHead('Connect your knowledge base', 'Where your brain reads and writes notes. Obsidian is recommended.')}<div id="o-kb">${kbFormHtml(kb)}</div>`,
+    who: () => `${modalHead('Who are you?', 'This goes into your memory so every answer is about you.')}
+      <div class="two-col"><div class="field"><label>Your name</label><input class="input" id="o-name" value="${esc(cfg().user.name)}"></div><div class="field"><label>What you do</label><input class="input" id="o-role" value="${esc(cfg().user.role)}"></div></div>
+      <div class="field"><label>Name your assistant</label><input class="input" id="o-asst" value="${esc(cfg().assistantName)}"><span class="help">You'll say “Hey ${esc(cfg().assistantName)}” to talk to it.</span></div>`,
+    sources: () => {
+      const byId = Object.fromEntries(S.state.connectors.map((x) => [x.id, x]));
+      const row = (id) => { const x = byId[id]; if (!x) return ''; const st = x.status[prof()]; return `<div class="setup-row"><span class="setup-name">${icon(x.icon)} ${esc(x.name)}</span>${connectButton(!!st, `data-cfg="${x.id}"`)}</div>`; };
+      const connected = Object.keys(cfg().connections[prof()] || {}).length;
+      return `${modalHead('Connect your accounts', `${profileName()} profile. Connect as many as you like; you can add more later from MCP Connections.`)}
+        <div class="setup-groups">${SETUP_GROUPS.map(([g, ids]) => `<div class="setup-group"><h4>${g}</h4>${ids.map(row).join('')}</div>`).join('')}</div>
+        <p class="meta" style="margin-top:10px">${connected ? `${connected} connected so far.` : 'Nothing connected yet. Calendars connect right here with a link; Gmail, Teams and Zoom connect through Claude Desktop.'}</p>`;
+    },
+    pack: () => `${modalHead('Pick your role pack', path === 'real' ? 'Packs add the agent and skills for your job. You can add more later.' : 'Packs add the connectors, agent and skills for your job. You can add more later.')}
       ${S.state.packs.map((p) => `<button class="choice ${pack === p.id || p.installed ? 'on' : ''}" data-p="${p.id}">${icon(p.icon)}<div><b>${esc(p.name)}</b><span>${esc(p.description)}</span></div></button>`).join('')}
-      <button class="choice ${pack === 'none' ? 'on' : ''}" data-p="none">${icon('brain')}<div><b>Just the foundation</b><span>Email, calendars, Slack, texts and calls.</span></div></button>`,
-    () => `${modalHead('Connect Claude Desktop', 'Claude becomes the reasoning engine and can read and write your brain.')}
+      <button class="choice ${pack === 'none' ? 'on' : ''}" data-p="none">${icon('brain')}<div><b>Just the foundation</b><span>Email, calendars, messages and calls.</span></div></button>`,
+    claude: () => `${modalHead('Connect Claude Desktop', 'Claude becomes the reasoning engine and can read and write your brain.')}
       <div class="md"><p>Install Claude Desktop from <a href="https://claude.ai/download" target="_blank" rel="noopener">claude.ai/download</a> and sign in, then click below. You can also do this later from MCP Connections.</p></div>
       <button class="btn primary" id="o-cd">${icon('plug')} Connect to Claude Desktop</button>`,
-  ];
+  };
+  const order = () => path === 'real' ? ['welcome', 'kb', 'who', 'sources', 'pack', 'claude'] : ['welcome', 'kb', 'who', 'pack', 'claude'];
   const m = modal('<div id="onb"></div>', {});
   const render = () => {
+    const steps = order(), id = steps[i];
     const box = m.el.querySelector('#onb');
-    box.innerHTML = steps[step]() + `<div class="modal-foot">${step ? '<button class="btn ghost" id="o-back">Back</button>' : '<button class="btn ghost" id="o-skip">Skip</button>'}<button class="btn primary" id="o-next">${step === steps.length - 1 ? 'Finish' : 'Next'} ${icon('arrow-right')}</button></div>`;
+    const dots = `<span class="onb-steps">${path ? `Step ${i + 1} of ${steps.length}` : ''}</span>`;
+    box.innerHTML = STEP[id]() + `<div class="modal-foot">${dots}${i ? '<button class="btn ghost" id="o-back">Back</button>' : '<button class="btn ghost" id="o-skip">Skip</button>'}<button class="btn primary" id="o-next" ${id === 'welcome' && !path ? 'disabled' : ''}>${i === steps.length - 1 ? 'Finish' : 'Next'} ${icon('arrow-right')}</button></div>`;
     box.querySelectorAll('[data-close]').forEach((b) => b.onclick = finish);
+    box.querySelectorAll('[data-path]').forEach((b) => b.onclick = () => { path = b.dataset.path; render(); });
     box.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { pack = b.dataset.p; box.querySelectorAll('[data-p]').forEach((x) => x.classList.toggle('on', x === b)); });
+    box.querySelectorAll('[data-cfg]').forEach((b) => b.onclick = () => connectModal(S.state.connectors.find((x) => x.id === b.dataset.cfg), prof(), async () => { await refreshState(); render(); }, { noDemo: true }));
     const cd = box.querySelector('#o-cd'); if (cd) cd.onclick = () => registerClaude();
     const kbBox = box.querySelector('#o-kb'); if (kbBox) getKb = kbWire(kbBox, kb);
-    const back = box.querySelector('#o-back'); if (back) back.onclick = () => { step--; render(); };
+    const back = box.querySelector('#o-back'); if (back) back.onclick = () => { i--; render(); };
     const skip = box.querySelector('#o-skip'); if (skip) skip.onclick = finish;
     box.querySelector('#o-next').onclick = async () => {
-      if (step === 1) {
+      if (id === 'welcome') {
+        await api('/data-mode', { mode: path });
+        await refreshState();
+        toast(path === 'demo' ? 'Demo data loaded' : 'Starting fresh: only what you connect will show');
+      }
+      if (id === 'kb') {
         try { await connectKb(getKb()); } catch (err) { return toast(err.message, 'error'); }
       }
-      if (step === 2) {
-        await api('/settings', { user: { name: box.querySelector('#o-name').value.trim() || c.user.name, role: box.querySelector('#o-role').value.trim() }, assistantName: box.querySelector('#o-asst').value.trim() || 'Maestro' });
+      if (id === 'who') {
+        await api('/settings', { user: { name: box.querySelector('#o-name').value.trim() || cfg().user.name, role: box.querySelector('#o-role').value.trim() }, assistantName: box.querySelector('#o-asst').value.trim() || 'Maestro' });
         await refreshState();
       }
-      if (step === 3 && pack && pack !== 'none' && !S.state.packs.find((p) => p.id === pack).installed) {
+      if (id === 'pack' && pack && pack !== 'none' && !S.state.packs.find((p) => p.id === pack).installed) {
         await api('/packs/install', { id: pack });
         toast('Pack installed');
       }
-      if (step === steps.length - 1) return finish();
-      step++; render();
+      if (i === steps.length - 1) return finish();
+      i++; render();
     };
   };
   const finish = async () => { await api('/settings', { onboarded: true }); m.close(); done && done(); };

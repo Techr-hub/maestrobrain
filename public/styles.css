@@ -413,3 +413,13 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .list-row .icon-btn.small { width: 34px; height: 34px; flex: none; }
 .add-row { align-self: flex-start; margin-top: 2px; }
 
+/* onboarding: connect-your-accounts step */
+.setup-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+.setup-group h4 { margin: 0 0 6px; font-family: var(--font-display); font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--soft); font-weight: 600; }
+.setup-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.setup-row:last-child { border-bottom: 0; }
+.setup-name { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.setup-name svg { width: 16px; height: 16px; flex: none; }
+.onb-steps { margin-right: auto; font-size: 12px; color: var(--soft); align-self: center; }
+@media (max-width: 640px) { .setup-groups { grid-template-columns: 1fr; } }
+

@@ -242,6 +242,21 @@ route('POST', '/api/llm/test', async () => {
 
 route('GET', '/api/claude-desktop', async () => claudeDesktop.status());
 route('POST', '/api/claude-desktop/register', async () => claudeDesktop.register());
+// First-run choice: sample data, or start empty and connect real sources.
+route('POST', '/api/data-mode', async (_q, body) => {
+  const mode = body.mode === 'real' ? 'real' : 'demo';
+  const fresh = config.defaultConfig();
+  config.update((c) => {
+    c.dataMode = mode;
+    for (const prof of ['business', 'personal']) {
+      const conns = c.connections[prof] || (c.connections[prof] = {});
+      if (mode === 'real') { for (const [id, k] of Object.entries(conns)) if (k.mode === 'demo') delete conns[id]; }
+      else for (const [id, k] of Object.entries(fresh.connections[prof])) if (!conns[id]) conns[id] = k;
+    }
+    c.demo.liveFeed = mode === 'demo';
+  });
+  return { ok: true, mode };
+});
 route('POST', '/api/reset-demo', async () => { feed.reset(); for (const it of feed.readAll()) seenIds.add(it.id); return { ok: true }; });
 
 // ---------------------------------------------------------------- server

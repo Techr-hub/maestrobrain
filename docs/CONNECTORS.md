@@ -17,14 +17,14 @@ You can use both at once. Tokens are never written into the vault.
 
 ### iCalendar (Apple iCloud or any .ics feed)
 1. Apple Calendar (Mac): right-click the calendar → **Share Calendar** → tick **Public Calendar** → copy the link. On iCloud.com: Calendar → share icon → **Public Calendar**.
-2. In Maestro: MCP Connections → **iCalendar** → Connect live → paste the link (`webcal://` is fine) → **Connect**.
-3. Events appear on the Calendar page and as MEETING cards. Maestro refreshes every 10 minutes.
+2. In Maestro: MCP Connections → **iCalendar** → Connect live → paste the link (`webcal://` is fine). Have more than one calendar (work, family, shared)? Click **Add another calendar** for each link, then **Connect**. Open the card again any time to see, edit or remove the saved links.
+3. Events appear on the Calendar page, including repeating meetings. Maestro refreshes every 10 minutes.
 
 > A public link can be read by anyone who has it. Keep it private, or make a separate calendar for the brain.
 
 ### Google Calendar
 1. Google Calendar on the web → ⚙ **Settings** → choose your calendar under *Settings for my calendars* → **Integrate calendar** → copy **Secret address in iCal format**.
-2. In Maestro: **Google Calendar** → Connect live → paste it → **Connect**.
+2. In Maestro: **Google Calendar** → Connect live → paste it (use **Add another calendar** for each extra calendar) → **Connect**.
 3. Optional, for creating events from Claude: Claude Desktop → Settings → Connectors → **Google Calendar**.
 
 ### Outlook / Microsoft 365
