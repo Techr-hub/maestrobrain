@@ -94,4 +94,4 @@ Stretch goal for fast finishers: ask the agent to **save the answer to the vault
 | Messy demo after playing | Settings → Demo → Reset demo feed |
 
 ## Resetting a machine after the workshop
-Delete the `data/` folder to forget settings, keys and chat history. The vault is just Markdown: keep it, or delete the folder.
+Settings and connections are also saved in your knowledge base (`.maestro/settings.json`) and in `~/.maestro/`, so unzipping a newer version keeps them. To forget settings, keys and chat history, delete the `data/` folder, the `.maestro` folder in your vault and `~/.maestro`. The vault is just Markdown: keep it, or delete the folder.

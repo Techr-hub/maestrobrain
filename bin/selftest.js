@@ -11,6 +11,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-test-'));
 const vaultCopy = path.join(tmp, 'vault');
 fs.cpSync(path.join(ROOT, 'vault'), vaultCopy, { recursive: true });
 process.env.MAESTRO_DATA = path.join(tmp, 'data');
+process.env.MAESTRO_HOME = path.join(tmp, 'home');
 fs.mkdirSync(process.env.MAESTRO_DATA, { recursive: true });
 fs.writeFileSync(path.join(process.env.MAESTRO_DATA, 'config.json'), JSON.stringify({ vaultPath: vaultCopy }));
 

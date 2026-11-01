@@ -99,7 +99,11 @@ function connect({ type = 'obsidian', path: p, seed = true, create = false, cust
   if (!fs.statSync(dir).isDirectory()) throw new Error('That path is a file, not a folder');
   try { fs.accessSync(dir, fs.constants.W_OK); } catch { throw new Error('Maestro cannot write to that folder. Check its permissions.'); }
   const copied = seed && path.resolve(dir) !== path.resolve(STARTER) ? seedInto(dir) : [];
+  // A knowledge base Maestro used before brings its settings and connections with it.
+  const prior = config.readKbSettings(dir);
   config.update((c) => {
+    const hasOwn = Object.values(c.connections || {}).some((p) => Object.values(p).some((x) => x.mode === 'live' || x.mode === 'claude'));
+    if (prior && !hasOwn) for (const k of ['user', 'assistantName', 'profile', 'llm', 'voice', 'connections', 'packs', 'workflows', 'dataMode']) if (prior[k] !== undefined) c[k] = prior[k];
     c.vaultPath = dir;
     c.knowledge = {
       type: type === 'starter' ? 'obsidian' : type, connected: true, connectedAt: Date.now(),
@@ -107,7 +111,7 @@ function connect({ type = 'obsidian', path: p, seed = true, create = false, cust
     };
   });
   vault.invalidate();
-  return { ...status(), copied };
+  return { ...status(), copied, restored: !!prior };
 }
 
 function disconnect() {

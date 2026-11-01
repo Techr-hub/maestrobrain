@@ -185,7 +185,7 @@ async function loadKb() {
 
 async function connectKb(spec) {
   const r = await api('/knowledge/connect', spec);
-  toast(`Knowledge base connected: ${r.notes} notes${r.copied && r.copied.length ? ` · added ${r.copied.length} Maestro files` : ''}`);
+  toast(r.restored ? `Welcome back. Your connections and settings were restored from this knowledge base.` : `Knowledge base connected: ${r.notes} notes${r.copied && r.copied.length ? ` · added ${r.copied.length} Maestro files` : ''}`);
   await refreshState();
   return r;
 }

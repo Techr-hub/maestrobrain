@@ -147,7 +147,7 @@ maestro-brain/
 
 ## Privacy
 
-Everything runs on `localhost`. Your notes stay in the vault folder, settings and keys stay in `data/config.json` on your machine, and nothing is sent anywhere unless you connect an AI engine or a live source. `npm run package` builds a shareable ZIP that leaves out `data/` and your Daily and Inbox notes.
+Everything runs on `localhost`. Your notes stay in the vault folder, settings and keys stay in `data/config.json` on your machine, with a copy in your knowledge base (`.maestro/settings.json`, hidden from Obsidian) and in `~/.maestro/settings.json`, so a new download or a new computer pointed at the same vault keeps your connections, and nothing is sent anywhere unless you connect an AI engine or a live source. `npm run package` builds a shareable ZIP that leaves out `data/` and your Daily and Inbox notes.
 
 ## Troubleshooting
 

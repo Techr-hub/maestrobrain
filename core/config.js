@@ -1,11 +1,16 @@
 // Maestro configuration: one JSON file in ./data that every part of the brain shares
 // (dashboard server, Claude Desktop MCP server, CLI).
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.MAESTRO_DATA || path.join(ROOT, 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+// Settings are also kept in the knowledge base (<vault>/.maestro/settings.json, hidden from Obsidian) and in
+// ~/.maestro/settings.json, so a fresh download or a new folder picks up your connections instead of starting over.
+const HOME_DIR = process.env.MAESTRO_HOME || path.join(os.homedir(), '.maestro');
+const PERSIST = ['user', 'assistantName', 'profile', 'llm', 'voice', 'connections', 'packs', 'workflows', 'demo', 'dataMode', 'onboarded', 'knowledge', 'vaultPath', 'port'];
 
 const FOUNDATION = ['gmail', 'outlook', 'email', 'icalendar', 'gcal', 'calendly', 'slack', 'twilio_sms', 'whatsapp', 'twilio_calls', 'google_meet', 'teams', 'zoom'];
 
@@ -63,11 +68,54 @@ function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const kbSettingsFile = (vaultPath) => path.join(vaultPath, '.maestro', 'settings.json');
+
+// The newest copy of your settings from the knowledge base or your home folder (null if there is none).
+function findBackup() {
+  const home = readJson(path.join(HOME_DIR, 'settings.json'));
+  const kb = home && home.vaultPath ? readJson(kbSettingsFile(home.vaultPath)) : null;
+  return [kb, home].filter(Boolean).sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0] || null;
+}
+
+function snapshot(cfg) {
+  const out = { savedAt: Date.now() };
+  for (const k of PERSIST) if (cfg[k] !== undefined) out[k] = cfg[k];
+  return out;
+}
+
+// Copy settings to the knowledge base and home folder. Only rewrites a file when something changed.
+function backup(cfg) {
+  const snap = snapshot(cfg);
+  const body = (o) => JSON.stringify({ ...o, savedAt: 0 });
+  const write = (file) => {
+    try {
+      const old = readJson(file);
+      if (old && body(old) === body(snap)) return;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file + '.tmp', JSON.stringify(snap, null, 2), { mode: 0o600 });
+      fs.renameSync(file + '.tmp', file);
+    } catch { /* read-only folder: the data/ copy still works */ }
+  };
+  if (cfg.vaultPath && fs.existsSync(cfg.vaultPath)) write(kbSettingsFile(cfg.vaultPath));
+  write(path.join(HOME_DIR, 'settings.json'));
+}
+
+// Settings saved in a knowledge base folder, used when you point a fresh install at your existing vault.
+function readKbSettings(vaultPath) { return readJson(kbSettingsFile(vaultPath)); }
+
 function load() {
   ensureDataDir();
   let saved = {};
   if (fs.existsSync(CONFIG_FILE)) {
     try { saved = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { saved = {}; }
+  } else {
+    const b = findBackup(); // fresh download: bring back your connections and settings
+    if (b) {
+      delete b.savedAt;
+      saved = b;
+      try { fs.writeFileSync(CONFIG_FILE, JSON.stringify(b, null, 2)); } catch {}
+    }
   }
   const cfg = deepMerge(defaultConfig(), saved);
   // connections are replaced wholesale, not merged, so disconnecting sticks
@@ -83,6 +131,7 @@ function save(cfg) {
   const tmp = CONFIG_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2));
   fs.renameSync(tmp, CONFIG_FILE);
+  backup(cfg);
   return cfg;
 }
 
@@ -106,4 +155,4 @@ function publicView(cfg) {
   return copy;
 }
 
-module.exports = { ROOT, DATA_DIR, CONFIG_FILE, FOUNDATION, load, save, update, publicView, defaultConfig };
+module.exports = { ROOT, DATA_DIR, CONFIG_FILE, HOME_DIR, FOUNDATION, load, save, update, publicView, defaultConfig, readKbSettings };
