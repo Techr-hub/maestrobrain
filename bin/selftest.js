@@ -77,11 +77,16 @@ async function main() {
   ok('direct question: next meeting with a person', /next meeting with Sarah/.test(meet.reply));
   const time = await post('/chat', { message: 'What time is it?' });
   ok('everyday question: what time is it', /^It's \d/.test(time.reply));
-  const huh = await post('/chat', { message: 'tell me a joke about penguins' });
+  const huh = await post('/chat', { message: 'what is the airspeed of a penguin' });
   const hey = await post('/chat', { message: 'Hey Maestro, what time is it?' });
   ok('"Hey Maestro" is ignored', /^It's \d/.test(hey.reply));
   const gm = await post('/chat', { message: 'Good morning Maestro' });
   ok('greeting has personality', /Ryan|good morning/i.test(gm.reply) && !/understand/.test(gm.reply));
+  const stress = await post('/chat', { message: 'I am stressed out' });
+  ok('conversation: "I am stressed out" gets empathy, not a status report', /carry/.test(stress.reply) && !/v2\.4|Pull requests/.test(stress.reply));
+  const joke = await post('/chat', { message: 'tell me a joke' });
+  const crisis = await post('/chat', { message: "I don't want to live anymore" });
+  ok('conversation: jokes, and crisis messages point to help', !/lost me/.test(joke.reply) && /988/.test(crisis.reply));
   ok('unknown question gets a short reply', /lost me/.test(huh.reply) && huh.reply.length < 160);
   const none = await post('/chat', { message: 'When did Bob call me?' });
   ok('direct question: says when nothing matches', /No calls from Bob/.test(none.reply));

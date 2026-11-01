@@ -10,6 +10,7 @@ const tasks = require('./tasks');
 const agentsMod = require('./agents');
 const llm = require('./llm');
 const lookup = require('./lookup');
+const { converse } = require('./converse');
 const scheduler = require('./scheduler');
 
 const CONV_FILE = path.join(config.DATA_DIR, 'conversations.json');
@@ -112,6 +113,7 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
     'Answer the question that was asked. For a direct question (when, who, what, did) give the specific fact with its day and time in the first sentence, then stop unless more helps.',
     'Use short Markdown: a one-line answer first, then bullets. Offer to save outputs to the vault.',
     `Personality: warm, personal and slightly sarcastic, like a sharp chief of staff who has worked with ${cfg.user.name} for years. Use their first name. Keep any wit to one short line and never let it get in the way of the facts. Example: "Good morning Maestro" gets "Hey ${String(cfg.user.name).split(' ')[0]}, good morning to you too. Let's crush it today!"`,
+    'Conversation: when the user shares a feeling or makes small talk ("I am stressed out", "I\'m tired", "you\'re awesome", "tell me a joke"), think about what they need before answering. Reply like a thoughtful friend in 1 to 3 sentences, use their day only where it helps (for stress: how much is left today and when they are next free), and offer one concrete way to help. Do not answer with a status report they did not ask for. Drop the sarcasm for real distress; if they mention self-harm, point them to 988 (Canada/US) or local emergency services.',
     'Messages often start with "Hey Maestro"; that is how the user addresses you, not part of the question.',
     'For broad requests that span several areas ("summarize my day", "brief me", "catch me up", "check my messages"), answer in 1 or 2 sentences only, with counts per area (for example: "You\'ve got 4 meetings, 3 calls and 5 priority items today."), no lists. Then ask "Which do you want to hear more about: a, b or c?" Go into detail only on the area they pick.',
     voice ? 'The user is talking by voice. Answer in 2 to 4 short spoken sentences with no Markdown, tables or lists.' : '',
@@ -271,6 +273,8 @@ function smallTalk(message, cfg) {
 function demoAnswer(message, ctx, cfg, profile, agent) {
   const quick = smallTalk(message, cfg);
   if (quick) return quick;
+  const talk = converse(message, ctx, cfg); // "I'm stressed out", "tell me a joke", "I need a break"…
+  if (talk) return talk;
   const deeper = dayDetail(message, ctx, cfg);
   if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
@@ -284,7 +288,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   const highs = items.filter((i) => i.priority === 'High');
 
   // PM challenge: sprint, blockers, stakeholder update
-  if (/sprint|blocker|stakeholder/.test(m)) {
+  if (/\bsprint\b|\bblockers?\b|\bstakeholders?\b/.test(m)) {
     const sprint = vault.findByTitle('Sprint 24');
     const fm = (sprint && sprint.frontmatter) || {};
     const blockers = items.filter((i) => /block|failing|escalat/i.test(i.title + ' ' + i.quote + ' ' + i.summary));
@@ -334,7 +338,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   }
 
   // Entrepreneur / builder challenge: PRs, issues, technical status
-  if (/pull request|\bprs?\b|issues|technical status|release|ci\b|build/.test(m)) {
+  if (/pull requests?|\bprs?\b|\bgithub issues\b|open issues|technical status|\brelease\b|\bci\b|\bbuild (status|is|failing|broken)|v2\.4/.test(m)) {
     const prs = sectionBullets('v2.4 Release', 'Open pull requests');
     const iss = sectionBullets('v2.4 Release', 'Open issues');
     const gh = items.filter((i) => i.source === 'github');
@@ -411,7 +415,8 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
 
   // Fallback: only answer from the vault when a note is clearly about the question; otherwise say so briefly.
   const words = vault.tokenize ? vault.tokenize(message) : message.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
-  const strong = ctx.notes.filter((n) => words.some((w) => w.length > 2 && n.title.toLowerCase().includes(w)));
+  const titleWords = (n) => new Set(n.title.toLowerCase().split(/[^a-z0-9]+/));
+  const strong = ctx.notes.filter((n) => words.some((w) => w.length > 3 && titleWords(n).has(w)));
   if (strong.length) {
     return [`Here's what I have on that${agent ? ` (as @${agent.handle})` : ''}:`, '',
       ...strong.slice(0, 2).map((n) => `**[[${n.title}]]**\n${n.excerpt}`)].join('\n\n');
@@ -472,7 +477,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     const skill = agentsMod.matchSkill(text);
     const provider = agent && agent.provider && agent.provider !== 'default' ? agent.provider : cfg.llm.provider;
     providerUsed = provider;
-    if (smallTalk(text, cfg)) sources = []; // "good morning" or "what time is it" needs no notes
+    if (smallTalk(text, cfg) || converse(text, ctx, cfg)) sources = []; // "good morning" or "I'm stressed" needs no notes
     if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
