@@ -97,6 +97,8 @@ async function main() {
   const hi = await post('/chat', { message: 'Hey Maestro, I am at my Brain Builder event, say hi to everyone' });
   const bye = await post('/chat', { message: 'say goodbye to everyone', conversationId: hi.conversationId });
   ok('conversation: greets the room and remembers the event', /^Hi everyone, and welcome to Brain Builder!/.test(hi.reply) && /Brain Builder/.test(bye.reply));
+  const about = await post('/chat', { message: 'Hey Maestro, tell everyone a bit about yourself' });
+  ok('conversation: "tell everyone about yourself" is 2 sentences', /second brain/.test(about.reply) && about.reply.split(/(?<=[.!?])\s+(?=[A-Z])/).length <= 2);
   const joke = await post('/chat', { message: 'tell me a joke' });
   const crisis = await post('/chat', { message: "I don't want to live anymore" });
   ok('conversation: jokes, and crisis messages point to help', !/lost me/.test(joke.reply) && /988/.test(crisis.reply));
