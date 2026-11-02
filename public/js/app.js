@@ -175,7 +175,7 @@ function buildDashboard() {
             <button class="ghost" id="attach" title="Import a Markdown file (agent, skill or note)">${icon('paperclip')}</button>
             <input type="file" id="file" accept=".md,.markdown,.txt" hidden>
           </div>
-          <button class="mic-btn" id="mic" title="Talk to your brain (Alt+V)">${icon('mic')}</button>
+          <button class="mic-btn ${voice && voice.active ? 'listening' : ''}" id="mic" aria-pressed="${!!(voice && voice.active)}" title="Talk to your brain. Click once to keep the mic on, again to turn it off (Alt+V)">${icon('mic')}</button>
           <button class="send-btn" id="send" title="Send">${icon('send')}</button>
         </div>
         <div class="mentions" id="mentions"></div>
@@ -389,7 +389,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   setSubtitle(spoken.split(/(?<=[.!?])\s/)[0].slice(0, 140), true);
   const speakIt = viaVoice && S.state.config.voice.speakReplies && voiceSupported.tts;
   if (speakIt) {
-    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => { setBrainState('idle'); if (voice.handsFree && !voice.listening) voice.start({ handsFree: true }); } });
+    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => setBrainState(voice.active ? 'listening' : 'idle') });
   }
   await typeOut(body, res.reply);
   if (!speakIt) setTimeout(() => { if (brain.state === 'speaking') setBrainState('idle'); }, 600);
@@ -462,7 +462,8 @@ function setupVoice() {
   voice = new Voice({
     lang: S.state.config.voice.lang || 'en-US',
     onInterim: (t) => { setSubtitle(t, true); $('#chat-input', dashboardEl).value = t; },
-    onFinal: (t) => { $('#chat-input', dashboardEl).value = ''; if (!voice.handsFree) voice.stop(); ask(t, { voice: true }); },
+    onFinal: (t) => { $('#chat-input', dashboardEl).value = ''; ask(t, { voice: true }); }, // the mic stays on until you switch it off
+    onInterrupt: () => { setBrainState('listening'); setSubtitle('Listening…', true); },
     onLevel: (v) => { brain.setLevel(v); },
     onState: (s, err) => {
       $('#mic', dashboardEl).classList.toggle('listening', s === 'listening');
@@ -476,11 +477,20 @@ function setupVoice() {
 
 function toggleMic() {
   if (!voiceSupported.stt) return toast('Voice input needs Chrome or Edge. You can still type.', 'error');
-  if (voice.listening) { voice.stop(); setBrainState('idle'); return; }
+  const mic = $('#mic', dashboardEl);
+  // The mic button is an on/off switch: on, you can talk to Maestro at any point, even while it's speaking.
+  if (voice.active || voice.listening) {
+    voice.stop(); voice.stopSpeaking(); setBrainState('idle');
+    if (mic) { mic.classList.remove('listening'); mic.title = 'Talk to your brain (Alt+V)'; mic.setAttribute('aria-pressed', 'false'); }
+    toast('Mic off');
+    return;
+  }
   try {
     voice.wakeName = S.state.config.assistantName.toLowerCase();
-    voice.start({ handsFree: !!S.state.config.voice.handsFree });
-    if (S.state.config.voice.handsFree) toast(`Hands-free: say "Hey ${S.state.config.assistantName}, …"`);
+    const wake = !!S.state.config.voice.handsFree;
+    voice.start({ wakeWord: wake });
+    if (mic) { mic.title = 'Mic is on: talk any time. Click to turn it off (Alt+V)'; mic.setAttribute('aria-pressed', 'true'); }
+    toast(wake ? `Mic on. Start with "Hey ${S.state.config.assistantName}…". Click the mic again to turn it off.` : 'Mic on. Talk any time, or talk over me to interrupt. Click the mic again to turn it off.');
   } catch (e) { toast(e.message, 'error'); }
 }
 

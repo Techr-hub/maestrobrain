@@ -43,35 +43,58 @@ export class Voice {
     this.onLevel && this.onLevel(0);
   }
 
-  start({ handsFree = false } = {}) {
+  // The mic stays on until stop() is called (the mic button is a switch), so you can talk to Maestro at any point.
+  // wakeWord: only act on speech that starts with "Hey Maestro" (the hands-free setting).
+  // While Maestro is speaking the mic keeps listening: if you start talking, Maestro stops and listens instead.
+  start({ wakeWord = false } = {}) {
     if (!SR) throw new Error('Voice input needs Chrome or Edge.');
     this.stopSpeaking();
-    this.handsFree = handsFree;
+    this.active = true;
+    this.handsFree = true; // kept for older callers: "keep listening"
+    this.wakeWord = wakeWord;
+    this._listen();
+    this.startMeter();
+    this.onState && this.onState('listening');
+  }
+
+  _listen() {
     const rec = new SR();
     rec.lang = this.lang;
     rec.interimResults = true;
-    rec.continuous = handsFree;
+    rec.continuous = true;
     rec.onresult = (e) => {
       let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
       }
-      if (interim) this.onInterim && this.onInterim(interim);
-      if (final) {
-        let text = final.trim();
-        if (this.handsFree) {
-          const re = new RegExp(`^(?:hey |hi |ok |okay )?(?:${this.wakeName}|maestro|mistro|maestra|my stro)[,.!]?\\s*`, 'i');
-          if (!re.test(text)) return; // ignore speech without the wake word
-          text = text.replace(re, '');
-          if (!text) return;
-        }
-        this.onFinal && this.onFinal(text);
+      const heard = (final || interim).trim();
+      if (!heard) return;
+      // Maestro hearing its own voice through the speakers is not an interruption.
+      if (this.isEcho(heard)) return;
+      // You started talking while Maestro was speaking: stop and listen.
+      if (this.isSpeaking() && (final || words(interim).length >= 2)) {
+        this.stopSpeaking();
+        this.onInterrupt && this.onInterrupt();
       }
+      if (interim && !final) { this.onInterim && this.onInterim(interim); return; }
+      let text = final.trim();
+      if (STOP.test(text)) { this.stopSpeaking(); this.onInterim && this.onInterim(''); return; } // "stop", "wait": just be quiet
+      if (this.wakeWord) {
+        const re = new RegExp(`^(?:hey |hi |ok |okay )?(?:${this.wakeName}|maestro|mistro|maestra|my stro)[,.!]?\\s*`, 'i');
+        if (!re.test(text)) return; // ignore speech without the wake word
+        text = text.replace(re, '');
+        if (!text) return;
+      }
+      this.onFinal && this.onFinal(text);
     };
-    rec.onerror = (e) => { if (e.error !== 'no-speech' && e.error !== 'aborted') this.onState && this.onState('error', e.error); };
+    rec.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { this.active = false; }
+      if (e.error !== 'no-speech' && e.error !== 'aborted') this.onState && this.onState('error', e.error);
+    };
     rec.onend = () => {
-      if (this.handsFree && this.listening) { try { rec.start(); return; } catch { /* restart failed */ } }
+      // Browsers end recognition after a silence or about a minute; start again while the mic is switched on.
+      if (this.active) { try { this._listen(); return; } catch { /* restart failed */ } }
       this.listening = false;
       this.stopMeter();
       this.onState && this.onState('idle');
@@ -79,11 +102,21 @@ export class Voice {
     this.rec = rec;
     rec.start();
     this.listening = true;
-    this.startMeter();
-    this.onState && this.onState('listening');
   }
 
+  // Is this what Maestro is saying (or just said)? Most of the words match the reply being spoken.
+  isEcho(heard) {
+    if (!this._said || Date.now() > this._saidUntil) return false;
+    const w = words(heard);
+    if (!w.length) return true;
+    const hit = w.filter((x) => this._said.has(x)).length;
+    return hit / w.length >= 0.6;
+  }
+
+  isSpeaking() { return !!this._speaking; }
+
   stop() {
+    this.active = false;
     this.handsFree = false;
     this.listening = false;
     if (this.rec) try { this.rec.stop(); } catch { /* already stopped */ }
@@ -108,9 +141,11 @@ export class Voice {
     if (!parts.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice(gender);
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
+    this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
+    const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
     const next = (i) => {
       if (run !== this._run) return;
-      if (i >= parts.length) { onEnd && onEnd(); return; }
+      if (i >= parts.length) { finish(); return; }
       const u = new SpeechSynthesisUtterance(parts[i]);
       if (voice) u.voice = voice;
       u.lang = voice ? voice.lang : this.lang;
@@ -126,10 +161,16 @@ export class Voice {
 
   stopSpeaking() {
     this._run = (this._run || 0) + 1;
+    if (this._speaking) this._saidUntil = Date.now() + 1500;
+    this._speaking = false;
     clearTimeout(this._timer);
     if (voiceSupported.tts) speechSynthesis.cancel();
   }
 }
+
+const words = (t) => String(t).toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+// Short commands that only mean "be quiet": they stop Maestro and aren't sent as a message.
+const STOP = /^(?:(?:hey |ok |okay )?(?:maestro|mistro)[,.!]?\s*)?(stop|stop talking|wait|hold on|hang on|quiet|be quiet|shush|shh+|pause|that's enough|enough|okay stop|ok stop)[.!]?$/i;
 
 const ROBOTIC = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|fred|good news|hysterical|jester|junior|kathy|organ|pipe organ|princess|ralph|superstar|trinoids|whisper|wobble|zarvox|eloquence|espeak|microsoft (david|mark|zira) desktop)\b/i;
 // Score each voice: higher sounds more human.
