@@ -2,7 +2,23 @@
 // Centre = reasoning core. Inner cloud = knowledge (vault notes linked by [[wikilinks]]), one lobe per folder.
 // Outer orbit = connected sources (MCP integrations). Particles = notifications flowing in.
 // Drag to orbit, right-drag or Shift-drag to pan, scroll or pinch to zoom, double-click to reset.
-import { icon } from './icons.js';
+import { icon, iconSvg } from './icons.js';
+
+// Hub circles show an icon instead of initials (Ryan, 2026-11-02).
+const HUB_ICONS = { calendar: 'calendar-days', email: 'mail', messages: 'message-square', calls: 'phone', projects: 'folder' };
+const iconCache = new Map();
+function hubIcon(id, color) {
+  const name = HUB_ICONS[String(id).replace(/^hub:/, '')];
+  if (!name) return null;
+  const key = name + color;
+  if (!iconCache.has(key)) {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(iconSvg(name, color));
+    iconCache.set(key, img);
+  }
+  const img = iconCache.get(key);
+  return img.complete && img.naturalWidth ? img : null;
+}
 
 export const GROUP_COLORS = {
   Memory: '#00e5ff', Projects: '#00f2af', People: '#c42cff', Agents: '#ffb020', Skills: '#3d7bff',
@@ -441,7 +457,9 @@ export class BrainMap {
     if (off && !sat) ctx.setLineDash([2, 3]);
     ctx.beginPath(); ctx.arc(p.x, p.y, 15 * k, 0, TAU); ctx.fill(); ctx.stroke(); ctx.lineWidth = 1; ctx.setLineDash([]);
     ctx.fillStyle = s.color; ctx.font = `600 ${Math.round(11 * k)}px Rajdhani, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(s.short || s.name.slice(0, 2).toUpperCase(), p.x, p.y + 1);
+    const ic = sat ? null : hubIcon(s.id, s.color);
+    if (ic) { const w = 16 * k; ctx.drawImage(ic, p.x - w / 2, p.y - w / 2, w, w); }
+    else if (sat || !HUB_ICONS[String(s.id).replace(/^hub:/, '')]) ctx.fillText(s.short || s.name.slice(0, 2).toUpperCase(), p.x, p.y + 1);
     ctx.fillStyle = sat ? 'rgba(157,178,215,.7)' : 'rgba(198,210,235,.9)';
     ctx.font = `${sat ? 400 : 600} ${Math.round(clamp((sat ? 10 : 12) * Math.sqrt(p.k), 9, 16))}px ${sat ? 'Roboto' : 'Rajdhani, Roboto'}, sans-serif`;
     ctx.fillText(s.name.replace(/ \(.*\)/, '').replace(' / Microsoft 365', ''), p.x, p.y + (sat ? 20 : 28) * k);

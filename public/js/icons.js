@@ -89,3 +89,8 @@ export const CATEGORY = {
   PROJECT: { icon: 'folder', c: '#00f2af', pill: '#00342d', text: '#00e5ff' },
   INSIGHT: { icon: 'lightbulb', c: '#ffe14d', pill: '#33300a', text: '#ffe98a' },
 };
+
+// Standalone SVG markup for drawing an icon on a canvas (the brain map's hub circles).
+export function iconSvg(name, color, width = 2) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${P[name] || P['circle-dot']}</svg>`;
+}
