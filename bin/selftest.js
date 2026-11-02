@@ -165,7 +165,7 @@ async function main() {
   const joke = await post('/chat', { message: 'tell me a joke' });
   const crisis = await post('/chat', { message: "I don't want to live anymore" });
   ok('conversation: jokes, and crisis messages point to help', !/lost me/.test(joke.reply) && /988/.test(crisis.reply));
-  ok('unknown question gets a short reply', /lost me/.test(huh.reply) && huh.reply.length < 160);
+  ok('unknown question gets a short reply', huh.reply === "I didn't quite catch that, there's still a few things I need to be trained on." && huh.reply.length < 160);
   const none = await post('/chat', { message: 'When did Bob call me?' });
   ok('direct question: says when nothing matches', /No calls from Bob/.test(none.reply));
   const mem = await post('/chat', { message: 'Remember that the workshop is on Thursday' });

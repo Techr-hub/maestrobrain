@@ -465,7 +465,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
     return [`Here's what I have on that${agent ? ` (as @${agent.handle})` : ''}:`, '',
       ...strong.slice(0, 2).map((n) => `**[[${n.title}]]**\n${n.excerpt}`)].join('\n\n');
   }
-  return `You lost me there, ${firstName(cfg)}. Try "summarize my day" or ask about a meeting, message or project.`;
+  return "I didn't quite catch that, there's still a few things I need to be trained on."; // Ryan, 2026-11-02
 }
 
 // ---------------------------------------------------------------- main entry
