@@ -58,6 +58,25 @@ const RX = {
 
 function aboutMe(m) { return /^(i('m| am)|i feel|i'?ve been|feeling|i was|today (is|was)|this (day|week) (is|was)|ugh|man|honestly|so)\b/.test(m) || /\b(i('m| am)|i feel|feeling|me)\b/.test(m); }
 
+// "I'm at my Brain Builder event" → { name: 'Brain Builder event', short: 'Brain Builder' }
+function placeIn(text) {
+  const m = String(text || '').match(/\b(?:i'?m|i am|we'?re|we are)\s+(?:here\s+)?(?:at|in|on stage at|hosting|running|presenting at|speaking at|live at|live from)\s+(?:my |our |the |a |this )?([^,.!?]+?)(?:\s+(?:and|so|right now|today|tonight|with)\b|[,.!?]|$)/i);
+  if (!m) return null;
+  const name = m[1].trim();
+  if (/^(the )?(office|home|work|bed|a meeting|meeting|traffic|the car|my desk|desk|lunch|the gym|gym)$/i.test(name) || name.split(/\s+/).length > 7) return null;
+  const short = name.replace(/\s+(event|workshop|conference|meetup|session|summit|talk|class|launch|party|night)$/i, '').trim() || name;
+  const titled = short === short.toLowerCase() ? short.replace(/\b\w/g, (c) => c.toUpperCase()) : short;
+  return { name, short: titled, kind: (name.match(/(event|workshop|conference|meetup|session|summit|talk|class|launch|party|night)$/i) || [])[1] || '' };
+}
+// The place from this message, or from earlier in the conversation.
+function currentPlace(text, ctx) {
+  const here = placeIn(text);
+  if (here) return here;
+  for (const msg of (ctx.history || []).slice().reverse()) if (msg.role === 'user') { const p = placeIn(msg.content); if (p) return p; }
+  return null;
+}
+const AUDIENCE = /\b(everyone|everybody|every one|the (room|crowd|audience|group|class|team|people|attendees|participants|builders|folks)|them|y'?all|you all|all of (you|them)|the guys|folks|friends|ladies and gentlemen)\b/;
+
 function converse(message, ctx, cfg) {
   const m = String(message || '').toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, ' ').trim();
   const bare = m.replace(/[?!.,]+$/g, '').trim();
@@ -70,13 +89,42 @@ function converse(message, ctx, cfg) {
     return `${me}, I'm really glad you told me. You deserve support from a real person right now. If you're in Canada or the US, call or text 988 (Suicide Crisis Helpline) any time; elsewhere, findahelpline.com lists free local lines. If you're in danger, call 911. I'm here too. Do you want to tell me what's going on?`;
   }
 
+  // Talking to a room: "I'm at my Brain Builder event, say hi to everyone"
+  const place = currentPlace(message, ctx);
+  const bot = cfg.assistantName || 'Maestro';
+  const buildy = place && /brain|build|workshop|class|session|bootcamp/i.test(place.name);
+  const welcome = place ? `, and welcome to ${place.short}` : '';
+  const lastSaid = ((ctx.history || []).filter((x) => x.role === 'assistant').pop() || {}).content || '';
+  const yes = /^(yes|yeah|yep|yup|sure|go ahead|go for it|do it|please|please do|ok(ay)?|absolutely|definitely)\b/.test(bare);
+  if (yes && /say hi to everyone\?$/.test(lastSaid.trim())) {
+    return `Hi everyone${welcome}! I'm ${bot}, ${me}'s second brain. I keep track of ${me}'s notes, calendar, messages and tasks, so ${me} can focus on the fun part. ${buildy ? "Today you're building one of your own, and trust me, it's worth it." : 'Great to be here.'} Fair warning: I'm also the one who remembers every meeting ${me} would rather forget.`;
+  }
+  if (/\b(say (hi|hello|hey|hiya|good (morning|afternoon|evening))|wave|greet|give (a )?(shout ?out|hello))\b/.test(bare) && (AUDIENCE.test(bare) || /\bgreet\b/.test(bare) || place)) {
+    return `Hi everyone${welcome}! I'm ${bot}, ${me}'s second brain. I keep track of ${me}'s notes, calendar, messages and tasks, so ${me} can focus on the fun part. ${buildy ? "Today you're building one of your own, and trust me, it's worth it." : 'Great to be here.'} Fair warning: I'm also the one who remembers every meeting ${me} would rather forget.`;
+  }
+  if (/\b(introduce yourself|tell (them|everyone|everybody|the (room|audience|crowd|group|class)|us) (about yourself|who you are|what you do)|who are you to)\b/.test(bare)) {
+    return `Hello${place ? ` ${place.short}` : ' everyone'}! I'm ${bot}. I'm a second brain: I read ${me}'s notes in Obsidian, watch the calendar, email, messages and calls, and turn it all into one feed and one voice. Ask me "what's my day look like?" or "when did Alex call?" and I answer in a sentence or two. Claude does the deep thinking; I make sure it remembers everything. ${buildy ? 'By the end of today, you will each have your own.' : ''}`.trim();
+  }
+  if (/\b(say (bye|goodbye|good ?night|thanks|thank you)|thank)\b/.test(bare) && AUDIENCE.test(bare)) {
+    return `Thanks for having me, everyone${place ? ` at ${place.short}` : ''}! Go build something brilliant. And remember: if you don't write it down, your brain will, eventually. Probably at 3 AM.`;
+  }
+  if (/\b(how('s| is| are) (everyone|everybody|the (room|crowd|audience)) (doing|feeling)|what do you think of (the|this) (room|crowd|audience|group))\b/.test(bare)) {
+    return pick([`From here? Caffeinated, curious and slightly suspicious of the robot. Perfect conditions${place ? ` for ${place.short}` : ''}.`, `They look like people about to build something great. Also like people who'd like a coffee break. Both can be true.`]);
+  }
+  if (/\btell (them|everyone|everybody|the (room|audience|crowd|group|class)|us) (a |something )?(joke|funny)/.test(bare)) {
+    return pick(['Why did the second brain break up with the first one? It needed more space. About 2 GB, mostly meeting notes.', "I'd tell you a joke about the sprint, but it's still in progress.", 'My favourite exercise is running late. Your calendar agrees.']);
+  }
+  if (placeIn(message) && !isQuestion && bare.split(' ').length <= 14 && !/\b(meeting|call|create|schedule|remind)\b/.test(bare)) {
+    return `Nice! Enjoy ${place.short}, ${me}. Want me to say hi to everyone?`;
+  }
+
   const s = dayShape(ctx);
   const feeling = !isQuestion && (aboutMe(bare) || /^(this|that|it|today|ugh|argh|man|honestly|so|work)\b/.test(bare));
   const topic = topicOf(bare);
 
   if (feeling && RX.stressed.test(bare)) {
     const load = [s.left.length ? plural(s.left.length, 'meeting', 'meetings') + ' left today' : 'no more meetings today', s.highs.length ? plural(s.highs.length, 'high-priority item', 'high-priority items') : ''].filter(Boolean).join(' and ');
-    const calm = s.late ? "It's late, so none of it gets solved tonight. Park it, and we'll pick the first thing in the morning." : s.busy ? "Let's not try to win everything today. I'd pick one thing and let me hold the rest." : "It's less than it feels like. Breathe, then we pick one thing.";
+    const calm = s.late && !s.left.length ? "It's late, so none of it gets solved tonight. Park it, and we'll pick the first thing in the morning." : s.busy ? "Let's not try to win everything today. I'd pick one thing and let me hold the rest." : "It's less than it feels like. Breathe, then we pick one thing.";
     return `That's a lot to carry, ${me}. Here's the honest picture: ${load}, and ${freeText(s)}. ${calm}\n\n${ask([...(topic ? [topic] : []), 'priority items', 'tasks'].filter((x, i, a) => a.indexOf(x) === i))}`;
   }
   if (feeling && RX.worried.test(bare)) {
@@ -94,8 +142,8 @@ function converse(message, ctx, cfg) {
   if ((feeling && RX.tired.test(bare)) || RX.breakQ.test(bare)) {
     const nxt = s.next ? `Your next thing is ${s.next.title} at ${timeOf(s.next.start)}` : 'Nothing else is booked today';
     return RX.breakQ.test(bare)
-      ? (s.late ? `It's ${timeOf(Date.now())}, ${me}. That's not a break, that's bedtime. Log off; I'll keep watch.` : `Yes. ${nxt}, and ${freeText(s)}. Take the break, ${me}. The inbox will still be terrible when you get back.`)
-      : s.late ? `Then call it a night, ${me}. ${s.next ? `${nxt}.` : 'Nothing else is booked today.'} I'll keep watch and have your morning ready.`
+      ? (s.late && !s.left.length ? `It's ${timeOf(Date.now())}, ${me}. That's not a break, that's bedtime. Log off; I'll keep watch.` : `Yes. ${nxt}, and ${freeText(s)}. Take the break, ${me}. The inbox will still be terrible when you get back.`)
+      : s.late && !s.left.length ? `Then call it a night, ${me}. ${s.next ? `${nxt}.` : 'Nothing else is booked today.'} I'll keep watch and have your morning ready.`
         : `Running on fumes, ${me}? ${nxt}, and ${freeText(s)}. A 15-minute break now beats a foggy afternoon. Coffee is optional but strongly encouraged.`;
   }
   if (feeling && RX.bored.test(bare)) {

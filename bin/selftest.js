@@ -94,6 +94,9 @@ async function main() {
   ok('greeting has personality', /Ryan|good morning/i.test(gm.reply) && !/understand/.test(gm.reply));
   const stress = await post('/chat', { message: 'I am stressed out' });
   ok('conversation: "I am stressed out" gets empathy, not a status report', /carry/.test(stress.reply) && !/v2\.4|Pull requests/.test(stress.reply));
+  const hi = await post('/chat', { message: 'Hey Maestro, I am at my Brain Builder event, say hi to everyone' });
+  const bye = await post('/chat', { message: 'say goodbye to everyone', conversationId: hi.conversationId });
+  ok('conversation: greets the room and remembers the event', /^Hi everyone, and welcome to Brain Builder!/.test(hi.reply) && /Brain Builder/.test(bye.reply));
   const joke = await post('/chat', { message: 'tell me a joke' });
   const crisis = await post('/chat', { message: "I don't want to live anymore" });
   ok('conversation: jokes, and crisis messages point to help', !/lost me/.test(joke.reply) && /988/.test(crisis.reply));
