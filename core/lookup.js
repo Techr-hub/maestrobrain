@@ -123,7 +123,8 @@ function ticketAnswer(e) {
   if (!links.length) return `**I don't see a ticket link in ${e.title}'s details.** Check the invite or the organiser's website.`;
   const best = links[0];
   // Ryan (2026-11-02): "Get your ticket to the event from the Luma event page."
-  return `**Get your ticket to the event from the [${best.name} event page](${best.url}).** ${e.title} is ${e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start)}.`;
+  // Ryan (2026-11-02): just that, plus where the link is. No date line.
+  return `**Get your ticket to the event from the [${best.name} event page](${best.url}).** Click the link in the description.`;
 }
 
 // "What is board prep about?", "What's the Sprint Review about?", "Tell me about the offsite", "What's on the agenda for …"
@@ -351,7 +352,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
 function contextBlock(message, ctx) {
   const r = find(message, ctx);
   if (!r) return '';
-  if (r.kind === 'tickets') { const l = ticketLinks(r.event); return `# EXACT MATCH FOR THIS QUESTION (recommend the ticket page)\n- EVENT ${r.event.title} · ${whenText(r.event.start)}\n  Ticket links: ${l.map((x) => `${x.name}: ${x.url}`).join(', ') || '(none in the event details)'}`; }
+  if (r.kind === 'tickets') { const l = ticketLinks(r.event); return `# EXACT MATCH FOR THIS QUESTION (reply only: \"Get your ticket to the event from the <site> event page. Click the link in the description.\" with the link)\n- EVENT ${r.event.title} · ${whenText(r.event.start)}\n  Ticket links: ${l.map((x) => `${x.name}: ${x.url}`).join(', ') || '(none in the event details)'}`; }
   if (r.kind === 'detail') { const e = r.event; return `# EXACT MATCH FOR THIS QUESTION (answer about ${r.detail.label} for this event in at most 2 short sentences, using only its description; say so if it isn't there)\n- EVENT ${e.title} · ${whenText(e.start)}${e.location ? ' · at ' + e.location : ''}\n  Full description:\n${require('./feed').eventText(e) || '(none)'}`; }
   if (r.kind === 'about') {
     const e = r.event;

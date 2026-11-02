@@ -93,7 +93,7 @@ async function main() {
     ok('calendar API returns any date range (month and week views)', Array.isArray(ranged) && ranged.length > 0 && ranged.every((e) => new Date(e.end) >= wkFrom && new Date(e.start) <= wkTo));
     await post('/chat', { message: 'Add an event on Friday at 6pm called Brain Builder workshop at 100 Queen Street, description: tickets at https://lu.ma/brainbuilder, in my Maestro calendar' });
     const tix = await post('/chat', { message: 'Where can I get tickets to the Brain Builder workshop?' });
-    ok('tickets: points to the ticket link in the event description', /^\*\*Get your ticket to the event from the \[Luma event page\]\(https:\/\/lu\.ma\/brainbuilder\)/.test(tix.reply));
+    ok('tickets: points to the ticket link in the event description', /^\*\*Get your ticket to the event from the \[Luma event page\]\(https:\/\/lu\.ma\/brainbuilder\)\.\*\* Click the link in the description\.$/.test(tix.reply));
     const about = await post('/chat', { message: 'What is the Sprint 24 Review about?' });
     ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && /What would you like to know specifically\?$/.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').replace(/\s*What would you like to know specifically\?$/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
     const vague = await post('/chat', { message: 'Create a new calendar item' });
