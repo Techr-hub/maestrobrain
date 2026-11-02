@@ -88,6 +88,20 @@ async function main() {
     const fd1 = await (await fetch(base + '/feed?limit=400')).json();
     const rem = (fd1.items || fd1).filter((i) => i.category === 'INSIGHT');
     ok('Insight cards: a reminder when a task you created is due tomorrow (and not for demo tasks)', rem.some((i) => i.title === 'Due tomorrow: Send the workshop recap') && !rem.some((i) => /Write PRD/.test(i.title)));
+    {
+      // Editing a task, then ticking it off: its reminder card is marked Completed (Ryan, 2026-11-02).
+      const t1 = (await (await fetch(base + '/tasks')).json()).find((t) => t.text === 'Send the workshop recap');
+      await post('/tasks/update', { path: t1.path, line: t1.line, expect: t1.text, text: 'Send the workshop recap and slides', due: t1.due, dueTime: '15:00', alerts: [], priority: 'High', section: 'email' });
+      const t2 = (await (await fetch(base + '/tasks')).json()).find((t) => t.text === 'Send the workshop recap and slides');
+      const feA = await (await fetch(base + '/feed?limit=400')).json();
+      ok('edit a task: text, time, priority and section change; its old reminder card is replaced', t2 && t2.dueTime === '15:00' && t2.priority === 'High' && t2.section === 'email' && t2.created && !feA.some((i) => i.title === 'Due tomorrow: Send the workshop recap') && feA.some((i) => i.title === 'Due tomorrow: Send the workshop recap and slides' && !i.completed));
+      await post('/tasks/toggle', { path: t2.path, line: t2.line });
+      const fd = await (await fetch(base + '/feed?limit=400')).json();
+      const card = fd.find((i) => i.title === 'Due tomorrow: Send the workshop recap and slides');
+      await post('/tasks/toggle', { path: t2.path, line: t2.line });
+      const card2 = (await (await fetch(base + '/feed?limit=400')).json()).find((i) => i.title === card.title);
+      ok('ticking a task off marks its reminder card Completed (and unticking undoes it)', card && card.completed === true && card2 && !card2.completed);
+    }
     const hi = await post('/chat', { message: 'Hey Maestro' });
     ok('"Hey Maestro" opens with an upbeat greeting by name', /Ryan|there/.test(hi.reply) && /[!?]/.test(hi.reply) && hi.provider === 'greeting');
     const wy = await post('/chat', { message: 'Hey Maestro, what are you?' });

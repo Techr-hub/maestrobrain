@@ -555,12 +555,12 @@ function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
   const calColor = CAL_MARK[i.source] || i.category === 'MEETING' ? '#00e5ff' : cat.c; // calendar cards use the Calendar hub's aqua (Ryan, 2026-11-02)
-  return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
+  return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.completed ? 'completed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
       <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span><button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${icon('pin')}${i.pinned ? '<span>Pinned</span>' : ''}</button></div>
       <div class="a-title">${esc(i.title)}</div>
-      <div class="a-cat">${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span><button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
+      <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span><button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}

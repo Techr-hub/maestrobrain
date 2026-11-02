@@ -190,6 +190,25 @@ function eventMatcher(e, { series = false } = {}) {
   };
 }
 
+// A task's reminder cards (core/reminders.js): externalId "remind:<profile>:<path>:<hash of text>:<due>:<stage>".
+const taskHash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return (h >>> 0).toString(36); };
+const isTaskReminder = (relPath, text) => { const mid = `:${relPath}:${taskHash(text)}:`; return (i) => i.reminder && String(i.externalId || '').startsWith('remind:') && String(i.externalId).includes(mid); };
+// Ticking a task off marks its reminder cards Completed (Ryan, 2026-11-02); unticking brings them back.
+function markTaskDone(relPath, text, done = true) {
+  const items = readAll();
+  const hit = items.filter((i) => isTaskReminder(relPath, text)(i) && !!i.completed !== !!done);
+  hit.forEach((i) => { i.completed = !!done; i.completedAt = done ? Date.now() : 0; if (done) i.unread = false; });
+  if (hit.length) { writeAll(items); hit.forEach((i) => bus.emit('update', i)); }
+  return hit.length;
+}
+// An edited task's old reminder cards are taken out of the feed.
+function dropTaskReminders(relPath, text) {
+  const items = readAll();
+  const gone = items.filter(isTaskReminder(relPath, text));
+  if (gone.length) { writeAll(items.filter((i) => !gone.includes(i))); gone.forEach((i) => bus.emit('remove', i)); }
+  return gone.length;
+}
+
 // Pinned cards stay at the top of the feed until unpinned.
 function setPinned(id, pinned) {
   const items = readAll();
@@ -292,4 +311,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { markTaskDone, dropTaskReminders, list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

@@ -610,3 +610,15 @@ button.wk-dh:hover b { color: var(--cyan); }
 .modal .due-fields .rem-field { grid-column: 1 / -1; }
 .et-pri { max-width: 50%; }
 @media (max-width: 760px) { .due-fields { grid-template-columns: 1fr 1fr; } .due-fields .rem-field { grid-column: 1 / -1; } .et-pri { max-width: none; } }
+
+/* A reminder whose task was ticked off (Ryan, 2026-11-02): stays in the feed, marked Completed */
+.activity.completed { opacity: .6; }
+.activity.completed .a-title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, #00f2af 70%, transparent); }
+.activity.completed:hover { opacity: .85; }
+.pill.done-pill { --pill: rgba(0,242,175,.14); --pill-text: #00f2af; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.pill.done-pill svg { width: 11px; height: 11px; }
+/* Edit button on a task row */
+.task .t-edit { margin-left: auto; background: none; border: 1px solid transparent; color: var(--muted); border-radius: 8px; width: 32px; height: 32px; display: inline-grid; place-items: center; cursor: pointer; flex: none; }
+.task .t-edit svg { width: 15px; height: 15px; }
+.task .t-edit:hover, .task .t-edit:focus-visible { color: var(--text, #e9e7ff); border-color: var(--line, #24314a); }
+#te-text { font-family: inherit; font-size: 15px; line-height: 1.45; resize: vertical; min-height: 64px; height: 64px; }

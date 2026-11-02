@@ -147,6 +147,7 @@ route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().prof
 route('POST', '/api/tasks', async (_q, body) => { const line = tasks.add(body.text, body); reminders.check(); return { line }; });
 route('POST', '/api/tasks/event', async (_q, body) => { const r = tasks.addForEvent(body || {}); reminders.check(); return r; });
 route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(body.path, body.line) }));
+route('POST', '/api/tasks/update', async (_q, body) => { const r = tasks.update(body.path, body.line, body.expect, body); reminders.check(); return r; });
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7), from: q.get('from') || undefined, to: q.get('to') || undefined }));
 

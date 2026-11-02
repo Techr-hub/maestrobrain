@@ -37,8 +37,10 @@ function parseLine(text) {
   const due = (text.match(/(?:📅|due:)\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const priority = /#(high|urgent|p1)\b|⏫|🔺/i.test(text) ? 'High' : /#(low|p3)\b|🔽/i.test(text) ? 'Low' : /#(medium|p2)\b|🔼/i.test(text) ? 'Medium' : '';
   const created = (text.match(/➕\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+  const doneOn = (text.match(/✅\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+  text = text.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/g, '');
   const clean = text.replace(/➕\s*\d{4}-\d{2}-\d{2}/g, '').replace(/(?:📅|due:)\s*\d{4}-\d{2}-\d{2}/g, '').replace(/[⏫🔺🔼🔽]/g, '').replace(/#(high|urgent|p1|p2|p3|low|medium)\b/gi, '').trim();
-  return { text: clean, due, dueTime: due ? dueTime : '', alerts, priority, created, section: tagged ? tagged.toLowerCase() : '' };
+  return { text: clean, due, dueTime: due ? dueTime : '', alerts, priority, created, doneOn, section: tagged ? tagged.toLowerCase() : '' };
 }
 
 function list({ profile, includeDone = false } = {}) {
@@ -68,12 +70,47 @@ function toggle(relPath, line) {
   const m = lines[line] && lines[line].match(TASK_RE);
   if (!m) throw new Error('No task on that line');
   const done = m[2].toLowerCase() === 'x';
+  const task = parseLine(m[3]);
   lines[line] = lines[line].replace(/\[( |x|X)\]/, done ? '[ ]' : '[x]');
   if (!done && !/✅/.test(lines[line])) lines[line] += ' ✅ ' + new Date().toISOString().slice(0, 10);
   if (done) lines[line] = lines[line].replace(/\s*✅ \d{4}-\d{2}-\d{2}/, '');
   fs.writeFileSync(full, lines.join('\n'));
   vault.invalidate();
+  try { require('./feed').markTaskDone(relPath, task.text, !done); } catch { /* the feed is best-effort */ }
   return !done;
+}
+
+// Editing a task after it was made (Ryan, 2026-11-02): rewrites its line in place, keeping its indent, tick, created
+// and done dates. expect is the task's text as listed, so an edit made in Obsidian meanwhile is found (or refused).
+function lineOf(lines, line, expect) {
+  const at = (i) => { const m = lines[i] && lines[i].match(TASK_RE); return m && (!expect || parseLine(m[3]).text === expect) ? m : null; };
+  if (at(line)) return line;
+  const i = lines.findIndex((_, k) => at(k));
+  if (i < 0) throw new Error('That task changed in your vault. Reload the Tasks page and try again.');
+  return i;
+}
+function update(relPath, line, expect, { text, due = '', dueTime = '', alerts = [], priority = '', section = '' } = {}) {
+  const clean = String(text || '').trim().replace(/\s*\n\s*/g, ' ');
+  if (!clean) throw new Error('A task needs some text');
+  const full = vault.safeJoin(vault.vaultRoot(), relPath);
+  const lines = fs.readFileSync(full, 'utf8').split(/\r?\n/);
+  const i = lineOf(lines, Number(line), expect);
+  const [, indent, mark, rest] = lines[i].match(TASK_RE);
+  const old = parseLine(rest);
+  let out = `${indent}- [${mark}] ${clean}`;
+  if (priority) out += ` #${String(priority).toLowerCase()}`;
+  if (SECTIONS.includes(String(section).toLowerCase())) out += ` #${String(section).toLowerCase()}`;
+  if (due) out += ` 📅 ${due}`;
+  if (due && normTime(dueTime)) out += ` ⏰ ${normTime(dueTime)}`;
+  if (due && normAlerts(alerts).length) out += ` 🔔 ${normAlerts(alerts).join(',')}`;
+  if (old.created) out += ` ➕ ${old.created}`;
+  if (old.doneOn) out += ` ✅ ${old.doneOn}`;
+  lines[i] = out;
+  fs.writeFileSync(full, lines.join('\n'));
+  vault.invalidate();
+  // Its old reminder cards no longer fit (new text or date); fresh ones follow if it's still coming due.
+  try { require('./feed').dropTaskReminders(relPath, old.text); } catch { /* best-effort */ }
+  return { line: out, index: i };
 }
 
 function add(text, { due, dueTime, alerts, priority, file, indent = '', section = '' } = {}) {
@@ -124,4 +161,4 @@ function addForEvent({ event = '', note = '', items = '', due = '', dueTime = ''
   return { lines, due: first, count: lines.length };
 }
 
-module.exports = { ALERTS, list, toggle, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };
+module.exports = { ALERTS, list, toggle, update, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };

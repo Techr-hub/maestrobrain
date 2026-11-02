@@ -376,7 +376,7 @@ async function tasksPage(el, ctx) {
   const sec = (id) => TASK_TABS.find((x) => x.id === id) || TASK_TABS[6];
   const row = (t) => { const x = sec(t.section || 'other'); return `<div class="task ${t.done ? 'done' : ''}"><input type="checkbox" ${t.done ? 'checked' : ''} data-p="${esc(t.path)}" data-l="${t.line}" aria-label="Done">
     <div class="t-text"><span>${esc(t.text)}</span><small>${tab === 'all' ? `<span class="t-sec" style="--c:${x.c}">${icon(x.icon)}${x.name}</span> · ` : ''}${[t.priority && t.priority + ' priority', fmtDue(t), fmtAlerts(t)].filter(Boolean).map((v) => v + ' · ').join('')}<a href="#" data-n="${esc(t.path)}">${esc(t.note)}</a></small></div>
-    ${t.priority === 'High' ? '<span class="tag" style="color:#ff6b81;border-color:#5a1020">High</span>' : ''}</div>`; };
+    ${t.priority === 'High' ? '<span class="tag" style="color:#ff6b81;border-color:#5a1020">High</span>' : ''}<button class="t-edit" data-edit="${list.indexOf(t)}" title="Edit task" aria-label="Edit task: ${esc(t.text)}">${icon('pencil')}</button></div>`; };
   const cur = sec(tab);
   el.innerHTML = head('Tasks', `Tasks are Obsidian checkboxes anywhere in your vault (${profileName()} profile). Tick them here, in Obsidian, or ask the brain: “add a task to…”.`) +
     `<div class="task-tabs" role="tablist">${TASK_TABS.map((t) => `<button role="tab" class="task-tab ${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}" data-tab="${t.id}" style="--c:${t.c}">${icon(t.icon)}<span>${t.name}</span><b>${count(t.id)}</b></button>`).join('')}</div>
@@ -395,6 +395,36 @@ async function tasksPage(el, ctx) {
   el.querySelector('#t-new').onkeydown = (e) => { if (e.key === 'Enter') add(); };
   el.querySelectorAll('input[type=checkbox]').forEach((c) => c.onchange = async () => { await api('/tasks/toggle', { path: c.dataset.p, line: Number(c.dataset.l) }); tasksPage(el, ctx); });
   el.querySelectorAll('[data-n]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openNote(a.dataset.n); });
+  el.querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => editTask(list[Number(b.dataset.edit)], () => tasksPage(el, ctx))));
+}
+
+// Edit a task after it was made (Ryan, 2026-11-02): its text, due date and time, reminders, priority and section.
+function editTask(t, done) {
+  modal(`${modalHead('Edit task', esc(t.note))}
+    <div class="field"><label for="te-text">Task</label><textarea class="input" id="te-text" rows="2">${esc(t.text)}</textarea></div>
+    ${dueFields('te')}
+    <div class="due-fields">
+      <div class="field"><label for="te-pri">Priority</label><select class="input" id="te-pri">${['', 'High', 'Medium', 'Low'].map((p) => `<option value="${p}" ${p === t.priority ? 'selected' : ''}>${p || 'None'}</option>`).join('')}</select></div>
+      <div class="field"><label for="te-sec">Section</label><select class="input" id="te-sec">${TASK_TABS.filter((x) => x.id !== 'all').map((x) => `<option value="${x.id === 'other' ? '' : x.id}" ${(t.section || '') === (x.id === 'other' ? '' : x.id) ? 'selected' : ''}>${x.name}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="te-save">${icon('save')} Save changes</button></div>`, {
+    onMount: (el, close) => {
+      el.querySelector('#te-due').value = t.due || '';
+      el.querySelector('#te-time').value = t.dueTime || '';
+      el.querySelectorAll('[data-rem]').forEach((b) => { const on = (t.alerts || []).includes(b.dataset.rem); b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on); });
+      const readDue = wireDueFields(el, 'te');
+      const text = el.querySelector('#te-text');
+      setTimeout(() => { text.focus(); text.setSelectionRange(text.value.length, text.value.length); }, 50);
+      text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); el.querySelector('#te-save').click(); } };
+      el.querySelector('#te-save').onclick = async () => {
+        if (!text.value.trim()) { text.focus(); return toast('A task needs some text', 'error'); }
+        try {
+          await api('/tasks/update', { path: t.path, line: t.line, expect: t.text, text: text.value, priority: el.querySelector('#te-pri').value, section: el.querySelector('#te-sec').value, ...readDue() });
+          toast('Task updated'); close(); done();
+        } catch (e) { toast(e.message || 'Could not save the task', 'error'); }
+      };
+    },
+  });
 }
 
 // ================================================================ CALENDAR
