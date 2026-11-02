@@ -72,6 +72,7 @@ async function main() {
     await post('/feed/pin', { id: last.id, pinned: true });
     const pinned = await (await fetch(base + '/feed?limit=5')).json();
     ok('feed: a pinned card moves to the top', pinned[0].id === last.id && pinned[0].pinned === true);
+    ok('feed: pins are backed up so they survive a reload or new download', (JSON.parse(fs.readFileSync(path.join(process.env.MAESTRO_HOME, 'pins.json'), 'utf8')).pins || []).some((p) => p.id === last.id));
     await post('/feed/pin', { id: last.id, pinned: false });
     const full = await post('/chat', { message: 'Hey Maestro, book a dentist appointment on Friday at 3:15pm at Smile Dental for 45 minutes, description: cleaning and checkup, in my Maestro calendar' });
     ok('create event: everything said up front creates it without more questions', /^Creating "Dentist appointment" for .*3:15 PM to 4:00 PM, at Smile Dental, in your Maestro calendar/.test(full.reply));

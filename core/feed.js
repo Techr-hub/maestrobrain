@@ -23,7 +23,10 @@ function readAll() {
 function writeAll(items) {
   fs.mkdirSync(config.DATA_DIR, { recursive: true });
   const tmp = FEED_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(items.slice(0, MAX_ITEMS), null, 1));
+  // Pinned cards are never trimmed, however many new ones stream in.
+  const room = MAX_ITEMS - items.filter((i) => i.pinned).length;
+  let n = 0;
+  fs.writeFileSync(tmp, JSON.stringify(items.filter((i) => i.pinned || n++ < room), null, 1));
   fs.renameSync(tmp, FEED_FILE);
 }
 
@@ -31,8 +34,32 @@ function seed() {
   const now = Date.now();
   const items = demo.SEED.map((s) => normalize({ ...s, ts: now - s.minutesAgo * 60000, demo: true }));
   items.sort((a, b) => b.ts - a.ts);
+  restorePins(items);
   writeAll(items);
   return items;
+}
+
+// Pins are also kept next to your settings (<vault>/.maestro/pins.json and ~/.maestro/pins.json), so they
+// come back after a fresh download or a reset, like your connections do.
+function pinFiles() {
+  const cfg = config.load();
+  return [cfg.vaultPath && fs.existsSync(cfg.vaultPath) ? path.join(cfg.vaultPath, '.maestro', 'pins.json') : null, path.join(config.HOME_DIR, 'pins.json')].filter(Boolean);
+}
+function savePins(items) {
+  const body = JSON.stringify({ savedAt: Date.now(), pins: items.filter((i) => i.pinned) }, null, 1);
+  for (const f of pinFiles()) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, body); } catch { /* read-only: data/ still has them */ } }
+}
+function savedPins() {
+  const all = pinFiles().map((f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } }).filter(Boolean);
+  return (all.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0] || { pins: [] }).pins || [];
+}
+const sameCard = (a, b) => a.id === b.id || (a.externalId && a.externalId === b.externalId) || (a.source === b.source && a.title === b.title && a.profile === b.profile);
+function restorePins(items) {
+  for (const p of savedPins()) {
+    const hit = items.find((i) => sameCard(i, p));
+    if (hit) Object.assign(hit, { pinned: true, pinnedAt: p.pinnedAt || Date.now() });
+    else items.push({ ...p, pinned: true });
+  }
 }
 
 function normalize(raw) {
@@ -114,6 +141,7 @@ function setPinned(id, pinned) {
   if (!it) return null;
   it.pinned = !!pinned; it.pinnedAt = pinned ? Date.now() : 0;
   writeAll(items);
+  savePins(items);
   bus.emit('update', it);
   return it;
 }
