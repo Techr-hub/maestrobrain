@@ -135,7 +135,7 @@ export class Voice {
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
     // reads punctuation or symbols aloud (some voices say "dot", "end" or "point" for a trailing full stop).
-    const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(speakable).filter(Boolean);
+    const sentences = splitSentences(text).map(speakable).filter(Boolean);
     // Very long sentences get split at commas so Chrome doesn't cut them off.
     const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
     if (!parts.length) { onEnd && onEnd(); return; }
@@ -199,6 +199,22 @@ export function voiceGender(v) {
 export function rankVoices(list) { return list.filter((v) => voiceScore(v) > -500).sort((a, b) => voiceScore(b) - voiceScore(a)); }
 
 // Turn a chunk of reply text into something a speech engine reads naturally.
+// Split a reply into sentences for the pause between them, without splitting "3:15 p.m.", "Dr. Kim", "e.g." or "3.5".
+export function splitSentences(text = '') {
+  const DOT = '․'; // a dot that isn't a full stop, put back after splitting
+  const t = String(text)
+    // "3 p.m." / "3pm" / "3 P.M" -> "3 PM", one word with no pause. A full stop stays only if a new sentence follows.
+    .replace(/\b(\d{1,2}(?::\d{2})?)\s*([aApP])\.?\s?[mM]\b(\.?)(?=(\s+\S)?)/g, (_, time, ap, dot, next) => `${time} ${ap.toUpperCase()}M${dot}`)
+    .replace(/\b([aApP])\.[mM]\.(?=\s+[a-z])/g, (_, ap) => `${ap.toUpperCase()}M`) // "in the p.m. today"
+    .replace(/\b([aApP])\.[mM]\./g, (_, ap) => `${ap.toUpperCase()}M.`)
+    .replace(/(\d (?:AM|PM))\.(?=\s+[a-z])/g, '$1') // "3 PM. tomorrow" was never a sentence end
+    .replace(/\b(Dr|Mr|Mrs|Ms|Prof|Jr|Sr|St|Mt|No|vs|approx|etc)\.(?=\s+\S)/g, (m, w) => (/^(St|Mt|No|etc|Jr|Sr)$/.test(w) ? m : `${w}${DOT}`))
+    .replace(/\b(St|Mt|No|etc|Jr|Sr|Ave|Rd|Inc|Ltd|Co)\.(?=\s+[a-z\d])/g, `$1${DOT}`)
+    .replace(/\b(e)\.(g)\.?/gi, `$1${DOT}$2${DOT}`).replace(/\b(i)\.(e)\.?/gi, `$1${DOT}$2${DOT}`)
+    .replace(/(\d)\.(\d)/g, `$1${DOT}$2`); // 3.5, 10.30
+  return (t.match(/[^.!?]+[.!?]*/g) || [t]).map((x) => x.replace(new RegExp(DOT, 'g'), '.'));
+}
+
 export function speakable(s = '') {
   return s
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '') // emoji
