@@ -535,7 +535,7 @@ function sourceChip(i) {
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
-  const calColor = CAL_MARK[i.source] && i.source !== 'maestro' ? ((S.state.connectors.find((x) => x.id === i.source) || {}).color || cat.c) : cat.c; // calendar cards take their calendar's colour
+  const calColor = CAL_MARK[i.source] || i.category === 'MEETING' ? '#00e5ff' : cat.c; // calendar cards use the Calendar hub's aqua (Ryan, 2026-11-02)
   return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">

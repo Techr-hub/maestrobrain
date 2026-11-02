@@ -81,7 +81,7 @@ export function icon(name, cls = '') {
 // Feed categories → icon + colours from the design.
 export const CATEGORY = {
   TASK: { icon: 'square-check', c: '#00e5ff', pill: '#002d4c', text: '#00e5ff' },
-  MEETING: { icon: 'calendar-days', c: '#3d7bff', pill: '#0b1f4d', text: '#9ec0ff' },
+  MEETING: { icon: 'calendar-days', c: '#00e5ff', pill: '#003540', text: '#7ff3ff' }, // the Calendar hub's aqua (Ryan, 2026-11-02)
   CONVERSATION: { icon: 'message-square', c: '#c42cff', pill: '#22104d', text: '#e9e7ff' },
   EMAIL: { icon: 'mail', c: '#ffb020', pill: '#3a2500', text: '#ffd27a' },
   CALL: { icon: 'phone', c: '#ff7a45', pill: '#3a1608', text: '#ffb08f' },
