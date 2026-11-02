@@ -39,7 +39,14 @@ function snapshot(events) {
 }
 
 function post(profile, source, kind, key, e, extra = {}) {
-  if (kind === 'cancelled') feed.markRemoved((i) => i.source === source && i.eventKey === key);
+  if (kind === 'cancelled') {
+    // The event's cards turn grey instead of getting a separate "Cancelled" card. Only an event the feed never
+    // showed (and that wasn't removed in Maestro) gets a card, so you still hear about it.
+    const greyed = feed.markRemoved((i) => i.source === source && i.eventKey === key);
+    const known = greyed || feed.readAll().some((i) => i.source === source && i.eventKey === key)
+      || require('./removed').readAll().some((r) => r.source === source && (r.uid === key || r.key === key));
+    if (known) return;
+  }
   const name = (connectors.get(source) || {}).name || 'Calendar';
   const title = { new: e.recurring ? `New recurring event: ${e.title}` : `New: ${e.title}`, moved: `Moved: ${e.title}`, cancelled: `Cancelled: ${e.title}` }[kind];
   feed.add({

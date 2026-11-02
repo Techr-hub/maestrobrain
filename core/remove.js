@@ -58,14 +58,9 @@ async function candidates(text, profile) {
 async function perform(e, opts = {}) {
   const r = await removeIt(e, opts);
   const series = !!opts.series;
-  const prof = opts.profile || config.load().profile;
-  const label = calName(e);
-  // grey out this event's cards in the Intelligence Feed, then add one "Cancelled" card
+  // Grey out this event's cards in the Intelligence Feed. No extra "Cancelled" card (Ryan, 2026-11-02):
+  // Maestro's reply already says it's gone.
   try { const feed = require('./feed'); feed.markRemoved(feed.eventMatcher(e, { series })); } catch { /* best-effort */ }
-  // Same id the calendar watcher would use, so there's one "Cancelled" card, not two.
-  try {
-    require('./feed').add({ externalId: `cal:cancelled:${e.source}:${e.uid || e.title + '|' + e.start}:`, source: e.source === 'maestro' ? 'system' : e.source, profile: prof, category: 'MEETING', title: `Cancelled: ${e.title}`, quote: fmt(e.start, e.allDay) + (series ? ' · whole series' : ''), summary: `Removed by Maestro from your ${label}`, calendarName: e.calendarName || '', unread: false });
-  } catch { /* feed is best-effort */ }
   return r;
 }
 

@@ -66,7 +66,13 @@ async function main() {
     await post('/settings', { voice: { gender: 'female' } }).catch(() => null);
     const vcfg = (await (await fetch(base + '/state')).json()).config.voice;
     ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 2500);
-    ok('remove event: feed gets a "Cancelled" card', (fd.items || fd).some((i) => /^Cancelled: Design critique/.test(i.title)));
+    const fl = fd.items || fd;
+    ok('remove event: no separate "Cancelled" card in the feed', !fl.some((i) => /^Cancelled: Design critique/.test(i.title)));
+    const last = fl[fl.length - 1];
+    await post('/feed/pin', { id: last.id, pinned: true });
+    const pinned = await (await fetch(base + '/feed?limit=5')).json();
+    ok('feed: a pinned card moves to the top', pinned[0].id === last.id && pinned[0].pinned === true);
+    await post('/feed/pin', { id: last.id, pinned: false });
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();

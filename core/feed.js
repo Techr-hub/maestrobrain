@@ -72,7 +72,7 @@ function list({ profile, source, category, limit = 60 } = {}) {
   let items = visible(readAll(), cfg, prof);
   if (source && source !== 'all') items = items.filter((i) => i.source === source);
   if (category && category !== 'all') items = items.filter((i) => i.category === category);
-  items.sort((a, b) => b.ts - a.ts);
+  items.sort(byPinThenTime);
   return items.slice(0, limit);
 }
 
@@ -106,6 +106,18 @@ function eventMatcher(e, { series = false } = {}) {
     return ['up', 'new', 'moved'].some((k) => srcs.some((src) => x.startsWith(`cal:${k}:${src}:${key}:`) && (series || x.endsWith(':' + start) || x.endsWith(':' + e.start))));
   };
 }
+
+// Pinned cards stay at the top of the feed until unpinned.
+function setPinned(id, pinned) {
+  const items = readAll();
+  const it = items.find((i) => i.id === id);
+  if (!it) return null;
+  it.pinned = !!pinned; it.pinnedAt = pinned ? Date.now() : 0;
+  writeAll(items);
+  bus.emit('update', it);
+  return it;
+}
+const byPinThenTime = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.pinned ? (b.pinnedAt || 0) - (a.pinnedAt || 0) : 0) || b.ts - a.ts;
 
 function markRead(id) {
   const items = readAll();
@@ -196,4 +208,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { list, add, markRead, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { list, add, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

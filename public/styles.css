@@ -202,7 +202,7 @@ a:hover { text-decoration: underline; }
 .a-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .a-actions button { background: transparent; border: 1px solid var(--line); color: var(--soft); border-radius: 4px; font-size: 11px; padding: 3px 8px; }
 .a-actions button:hover { border-color: var(--c); color: var(--c); }
-.feed-foot { height: 35px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 18px; border-top: 1px solid var(--line); color: var(--text); font-size: 14px; flex: none; }
+.feed-foot { height: 35px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 18px; color: var(--text); font-size: 14px; flex: none; }
 .feed-foot button { background: transparent; border: 0; color: var(--text); display: flex; gap: 8px; align-items: center; }
 .feed-foot button:hover { color: var(--cyan); }
 .feed-empty { padding: 40px 24px; text-align: center; color: var(--muted); line-height: 1.6; }
@@ -455,3 +455,13 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .activity.removed .a-title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent); }
 .activity.removed:hover { opacity: .75; }
 .pill.removed-pill { --pill: #2a2f3a; --pill-text: #c3cad6; margin-left: 6px; }
+
+/* Pinned feed cards stay at the top */
+.pin-btn { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 0; padding: 2px 4px; border-radius: 6px; color: var(--dim); font-size: 11px; opacity: 0; transition: opacity .15s, color .15s; }
+.pin-btn .icon, .pin-btn svg { width: 14px; height: 14px; }
+.activity:hover .pin-btn, .pin-btn:focus-visible, .pin-btn.on { opacity: 1; }
+.pin-btn:hover { color: var(--cyan); }
+.pin-btn.on { color: var(--cyan); }
+.pin-btn.on svg { fill: currentColor; fill-opacity: .25; }
+@media (hover: none) { .pin-btn { opacity: .7; } }
+.activity.pinned { background: linear-gradient(90deg, rgba(0, 229, 255, .06), transparent 70%); border-radius: 10px; }

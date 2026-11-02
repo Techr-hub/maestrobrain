@@ -109,6 +109,7 @@ route('POST', '/api/profile', async (_q, body) => {
 
 route('GET', '/api/feed', async (q) => feed.list({ source: q.get('source'), category: q.get('category'), limit: Number(q.get('limit') || 60) }));
 route('POST', '/api/feed/read', async (_q, body) => feed.markRead(body.id));
+route('POST', '/api/feed/pin', async (_q, body) => feed.setPinned(body.id, body.pinned !== false) || { error: 'Card not found' });
 route('POST', '/api/feed/read-all', async () => { for (const i of feed.list({ limit: 300 })) if (i.unread) feed.markRead(i.id); return { ok: true }; });
 
 route('GET', '/api/graph', async () => vault.graph(config.load().profile));

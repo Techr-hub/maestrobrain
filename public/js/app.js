@@ -543,10 +543,10 @@ function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
   const calColor = CAL_MARK[i.source] && i.source !== 'maestro' ? ((S.state.connectors.find((x) => x.id === i.source) || {}).color || cat.c) : cat.c; // calendar cards take their calendar's colour
-  return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''}" data-id="${i.id}" style="--c:${calColor}">
+  return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
-      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span></div>
+      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span><button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${icon('pin')}${i.pinned ? '<span>Pinned</span>' : ''}</button></div>
       <div class="a-title">${esc(i.title)}</div>
       <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}</div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
@@ -557,10 +557,13 @@ function feedItemHtml(i, isNew) {
     </div></div>`;
 }
 
+// Pinned cards first (most recently pinned on top), then newest first.
+const pinFirst = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.pinned ? (b.pinnedAt || 0) - (a.pinnedAt || 0) : 0) || b.ts - a.ts;
+
 function renderFeed(animateFirst) {
   if (S.sourceView) return renderSourceView();
   const list = $('#feed-list');
-  const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source) && (S.category === 'all' || i.category === S.category));
+  const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source) && (S.category === 'all' || i.category === S.category)).sort(pinFirst);
   const cfgNow = S.state.config, srcConn = S.source !== 'all' ? (cfgNow.connections[cfgNow.profile] || {})[S.source] : null;
   if (!items.length && srcConn && srcConn.mode === 'claude') { showSource(S.source); return; } // shows how to sync it from Claude
   if (!items.length && srcConn && srcConn.mode === 'live' && S.source === 'slack' && !(srcConn.fields && srcConn.fields.channels && srcConn.fields.channels.length)) {
@@ -576,8 +579,15 @@ function renderFeed(animateFirst) {
   list.querySelectorAll('.activity').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => {
-      if (e.target.closest('[data-action]')) return;
+      if (e.target.closest('[data-action],[data-pin]')) return;
       openFeedItem(item);
+    };
+    el.querySelector('[data-pin]').onclick = async (e) => {
+      e.stopPropagation();
+      const pinned = !item.pinned;
+      Object.assign(item, { pinned, pinnedAt: pinned ? Date.now() : 0 });
+      renderFeed(false);
+      try { await api('/feed/pin', { id: item.id, pinned }); } catch (err) { toast('Could not pin: ' + err.message, 'error'); }
     };
     el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => {
       await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined });
