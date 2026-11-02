@@ -162,7 +162,7 @@ a:hover { text-decoration: underline; }
 .suggestion:hover { color: var(--cyan); border-color: var(--cyan-deep); }
 
 /* ---------------- Intelligence feed ---------------- */
-.feed { display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
+.feed { display: flex; flex-direction: column; min-height: 0; }
 .feed-head { height: 43px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex: none; }
 .feed-head h3 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: 0; white-space: nowrap; }
 .feed-head .select { width: 118px; }
