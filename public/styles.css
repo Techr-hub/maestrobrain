@@ -176,7 +176,7 @@ a:hover { text-decoration: underline; }
 .select { appearance: none; background: var(--panel-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23e9e7ff' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center; border: 1px solid var(--line-2); border-radius: var(--radius); height: 30px; padding: 0 30px 0 10px; color: var(--text); font-size: 13px; }
 .ctrl { width: 35px; height: 30px; background: var(--chip); border: 1px solid var(--bg); border-radius: var(--radius); color: var(--text); display: grid; place-items: center; font-size: 14px; }
 .ctrl:hover { border-color: var(--cyan-deep); }
-.feed-list { flex: 1; overflow-y: auto; min-height: 0; }
+.feed-list { flex: 1; overflow-y: auto; min-height: 0; padding: 15px; border: 1px solid var(--line); border-radius: 15px; }
 .activity { --c: var(--cyan); display: flex; gap: 12px; padding: 18px 10px 0 20px; margin: 0 12px 8px; border-left: 2px solid var(--c); cursor: pointer; transition: background .2s; position: relative; }
 .activity:hover { background: rgba(0, 45, 76, .25); }
 .activity.new { animation: slidein .6s ease-out; }
