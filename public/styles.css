@@ -44,7 +44,6 @@ a:hover { text-decoration: underline; }
 /* ---------------- Shell ---------------- */
 .app { display: grid; grid-template-rows: 77px 1fr; height: 100vh; padding: 10px 14px 10px; gap: 8px; }
 .header { display: flex; align-items: center; justify-content: space-between; position: relative; padding: 0 18px; border: 1px solid var(--line); border-radius: 15px; overflow: hidden; }
-.header .orbital { position: absolute; left: 330px; top: 0; height: 77px; width: 475px; opacity: .55; pointer-events: none; }
 .greeting { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .greeting h1 { margin: 0; font-size: 20px; font-weight: 600; white-space: nowrap; }
 .greeting p { margin: 0; color: var(--soft); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -349,7 +348,6 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 @media (max-width: 1400px) {
   .workspace { grid-template-columns: 230px 1fr 380px; }
   .workspace.collapsed { grid-template-columns: 74px 1fr 380px; }
-  .header .orbital { display: none; }
   .brand-name { font-size: 32px; }
   .brand-avatar { width: 120px; height: 120px; }
   .a-title { padding-right: 95px; }
