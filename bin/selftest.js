@@ -146,6 +146,14 @@ async function main() {
       const fc = { items: [], events: [bb], focus: bb };
       ok('event details: "tell me about this event" gives when, where and tickets, then offers an overview', /^\*\*The Brain Builder Workshop is being held on \w+day, \w+ \d+ from .+ to .+\.\*\* You can get tickets to it from the \[Luma event page\]\(https:\/\/lu\.ma\/bb\)\.\n\nWould you like me to give you an overview on topics, speakers and any other details\?$/.test(lk.answer('tell me about this event', fc)));
       ok('event details: "yes" gives the overview with speakers', /\*\*Speakers:\*\* Ryan W and Dana Li/.test(lk.answer('yes', { ...fc, offered: true })));
+      {
+        const bm = { ...bb, description: bb.description.replace('Bring a laptop.', 'Bring a laptop.\\nDoors open at 5:30.\\nSeating is limited.\\nSlides are shared after.\\nStay for demos.\\nThe venue is accessible.') };
+        const fm = { items: [], events: [bm], focus: bm };
+        ok('event details: "tell me more" gives the overview, then each next part of the description, then says it is done',
+          /\*\*Speakers:\*\*/.test(lk.answer('tell me more', fm)) && /Doors open at 5:30\..*Want me to keep going\?$/s.test(lk.answer('tell me more', { ...fm, moreStep: 1 }))
+          && /venue is accessible\..*covers everything/s.test(lk.answer('what else?', { ...fm, moreStep: 2 })) && /That's everything/.test(lk.answer('keep going', { ...fm, moreStep: 3 }))
+          && !/More on/.test(lk.answer('and who is speaking?', { ...fm, moreStep: 1 })));
+      }
       ok('event details: follow-ups come from the description', /Ryan W and Dana Li/.test(lk.answer('who is speaking?', fc)) && /Bring a laptop/.test(lk.answer('what should I bring to it?', fc)) && lk.answer('prepare an update for stakeholders', fc) === null);
     }
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];

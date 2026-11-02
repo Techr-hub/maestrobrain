@@ -211,17 +211,41 @@ function introAnswer(e) {
 function overviewAnswer(e) {
   const desc = eventDescription(e);
   const sentences = (desc.match(/[^.!?]+[.!?]*/g) || []).map((x) => x.trim()).filter((x) => x.length > 2);
-  const lines = descLines(e);
-  const find = (re) => (lines.find((x) => x.head && re.test(x.head)) || {}).text;
-  const speakers = find(/speak|presenter|host|panel|instructor|facilitat|guest|keynote/i);
-  const topics = find(/agenda|topic|cover|learn|program|schedule|outline|curriculum/i);
+  const parts = overviewParts(e);
+  const speakers = parts.speakers && parts.speakers.text;
+  const topics = parts.topics && parts.topics.text;
   const out = [`**${e.title}:** ${sentences.slice(0, 2).join(' ') || 'There is no summary in the description.'}`];
   if (topics) out.push(`**Topics:** ${topics}.`);
   if (speakers) out.push(`**Speakers:** ${speakers}.`);
-  const other = DETAILS.filter((d) => ['bring', 'food', 'parking', 'dress', 'cost'].includes(d.key))
-    .map((d) => (lines.find((x) => !x.head && d.line.test(x.text)) || {}).text).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  const other = parts.other.map((x) => x.text);
   if (other.length) out.push(`**Good to know:** ${other.map((x) => x.replace(/https?:\/\/\S+/g, '').trim().replace(/([^.!?])$/, '$1.')).join(' ')}`);
+  if (parts.rest.length) out.push('Want more? Just say "tell me more".');
   return out.join('\n\n');
+}
+// Asking for more about the event (Ryan, 2026-11-02): the first time gives the overview, after that each "tell me more"
+// summarizes the next part of the description that hasn't been covered, until it's all been said.
+const MORE = /^(tell me more|more|more (details|detail|info|information)|what else|anything else|go on|keep going|continue|and|and then|elaborate|more about (it|that|this|the event)|(give|tell) me (more|the|some more) (details|info|information|about it)|what are the details|(any )?other details|details( please)?|what other details|is there more|what more)( please| about it| about this event)?$/i;
+function overviewParts(e) {
+  const lines = descLines(e);
+  const used = new Set();
+  const speakers = lines.find((x) => x.head && /speak|presenter|host|panel|instructor|facilitat|guest|keynote/i.test(x.head));
+  const topics = lines.find((x) => x.head && /agenda|topic|cover|learn|program|schedule|outline|curriculum/i.test(x.head));
+  [speakers, topics].forEach((x) => x && used.add(x));
+  const other = DETAILS.filter((d) => ['bring', 'food', 'parking', 'dress', 'cost'].includes(d.key)).map((d) => lines.find((x) => !x.head && d.line.test(x.text))).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  other.forEach((x) => used.add(x));
+  // the summary uses the first two plain lines
+  lines.filter((x) => !x.head).slice(0, 2).forEach((x) => used.add(x));
+  const rest = lines.filter((x) => !used.has(x) && !/^(tickets?|register|rsvp)\b/i.test(x.head || x.text) && !/^https?:\/\/\S+$/.test(x.text));
+  return { speakers, topics, other, rest };
+}
+function moreAnswer(e, step) {
+  const { rest } = overviewParts(e);
+  const chunk = rest.slice((step - 1) * 4, step * 4);
+  const clean = (t) => t.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').replace(/[:\s]+$/, '').trim();
+  const end = (t) => (/[.!?…]$/.test(t) ? t : t + '.');
+  if (!chunk.length) return `**That's everything in the ${e.title} description.** For anything else, the organiser's event page is the best place to look.`;
+  const more = rest.length > step * 4;
+  return `**More on ${e.title}:** ${chunk.map((x) => end(clean(x.head ? `${x.head}: ${x.text}` : x.text))).join(' ')}${more ? '\n\nThere\'s a bit more. Want me to keep going?' : '\n\nThat covers everything in the description.'}`;
 }
 const YES = /^(yes|yeah|yep|yup|sure|please|ok|okay|go ahead|do it|absolutely|definitely|of course|tell me|sounds good)\b/i;
 
@@ -293,7 +317,10 @@ function find(message, ctx) {
     const ev = eventFor(q, ctx, { loose: true });
     if (ev) return { kind: 'tickets', q, subject: [], event: ev };
   }
-  if (ctx.offered && ctx.focus && YES.test(q.m.trim())) return { kind: 'overview', q, subject: [], event: ctx.focus };
+  if (ctx.focus && ((ctx.offered && YES.test(q.m.trim())) || MORE.test(q.m.trim().replace(/[?!.]+$/, '')))) {
+    const step = ctx.moreStep || 0; // 0: overview not given yet
+    return step ? { kind: 'more', q, subject: [], event: ctx.focus, step } : { kind: 'overview', q, subject: [], event: ctx.focus };
+  }
   const detail = DETAILS.find((d) => d.q.test(q.m));
   if (detail) {
     const ev = eventFor(q, ctx, { loose: !detail.strict || /\bwhat (should|do|can|must) (i|we) (need to )?bring\b/.test(q.m) }); // words like "bring" or "links" need "this event" or the event's name
@@ -353,6 +380,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
 
   if (r.kind === 'about') return SUMMARY_Q.test(r.q.m) ? aboutAnswer(r.event) : introAnswer(r.event);
   if (r.kind === 'overview') return overviewAnswer(r.event);
+  if (r.kind === 'more') return moreAnswer(r.event, r.step);
   if (r.kind === 'tickets') return ticketAnswer(r.event);
   if (r.kind === 'detail') return detailAnswer(r.event, r.detail);
   if (r.kind === 'event') {

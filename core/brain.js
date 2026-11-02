@@ -339,7 +339,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
-  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
+  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
   if (direct) return direct;
   const m = message.toLowerCase();
   const name = cfg.user.name;
@@ -557,14 +557,20 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     const fe = conv.focusEvent && Date.now() - conv.focusEvent.at < 2 * 3600000 ? conv.focusEvent : null;
     ctx.focus = fe ? (ctx.allEvents || ctx.events).find((e) => (e.uid && e.uid === fe.uid && String(e.start) === String(fe.start)) || (e.title === fe.title && String(e.start) === String(fe.start))) || (ctx.allEvents || ctx.events).find((e) => e.title === fe.title) || null : null;
     // Maestro just offered an overview of the event ("Would you like me to give you an overview…?"), so "yes" means that.
-    { const last = conv.messages.filter((x) => x.role === 'assistant').slice(-1)[0]; ctx.offered = !!(last && last.content.includes(lookup.OVERVIEW_OFFER)); }
+    { const last = conv.messages.filter((x) => x.role === 'assistant').slice(-1)[0]; ctx.offered = !!(last && (last.content.includes(lookup.OVERVIEW_OFFER) || /Want me to keep going\?/.test(last.content))); }
+    ctx.moreStep = fe && ctx.focus ? fe.more || 0 : 0;
     let eventReply = null;
     try {
-      const hit = lookup.find(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
+      const hit = lookup.find(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep });
       const ev = hit && (hit.event || (hit.kind === 'event' && hit.events && hit.events[0]));
-      if (ev) conv.focusEvent = { uid: ev.uid || '', title: ev.title, start: ev.start, at: Date.now() };
+      if (ev) {
+        const same = conv.focusEvent && conv.focusEvent.title === ev.title && String(conv.focusEvent.start) === String(ev.start);
+        // how far through the description "tell me more" has got: the overview, then each further part
+        const more = hit.kind === 'overview' ? 1 : hit.kind === 'more' ? (hit.step || 0) + 1 : same ? conv.focusEvent.more || 0 : 0;
+        conv.focusEvent = { uid: ev.uid || '', title: ev.title, start: ev.start, at: Date.now(), more };
+      }
       // Ryan's event answer format ("The … is being held on …") and the overview after "yes" read the same with every model.
-      if (hit && (hit.kind === 'overview' || hit.kind === 'about')) eventReply = lookup.answer(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
+      if (hit && (hit.kind === 'overview' || hit.kind === 'more' || hit.kind === 'about')) eventReply = lookup.answer(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep });
     } catch { /* focus is a convenience */ }
     ctx.history = conv.messages.slice(-12); // so "say hi to everyone" remembers "I'm at my Brain Builder event"
     if (eventReply) {
@@ -572,7 +578,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     } else if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
-      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
+      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep });
       const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + (exact ? exact + '\n\n' : '') + contextText(ctx, cfg, profile);
       const history = conv.messages.slice(-8).map((x) => ({ role: x.role, content: x.content }));
       try {
