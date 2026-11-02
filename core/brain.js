@@ -606,7 +606,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
         conv.focusEvent = { uid: ev.uid || '', title: ev.title, start: ev.start, at: Date.now(), more };
       }
       // Ryan's event answer format ("The … is being held on …") and the overview after "yes" read the same with every model.
-      if (hit && (hit.kind === 'overview' || hit.kind === 'more' || hit.kind === 'about')) eventReply = lookup.answer(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep });
+      if (hit && (hit.kind === 'overview' || hit.kind === 'more' || hit.kind === 'about' || (hit.kind === 'event' && hit.titleMatch && hit.events && hit.events.length && !hit.past))) eventReply = lookup.answer(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep });
     } catch { /* focus is a convenience */ }
     ctx.history = conv.messages.slice(-12); // so "say hi to everyone" remembers "I'm at my Brain Builder event"
     if (eventReply) {

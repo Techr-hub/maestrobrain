@@ -203,6 +203,24 @@ function eventIntro(e) {
   return `**${name} ${verb} ${when}${where}.**${tix ? ` You can get tickets to it from the [${tix.name} event page](${tix.url}).` : ''}`;
 }
 const midnightOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return +x; };
+// "When is the AI Brain Builder Workshop?" (Ryan, 2026-11-02): "The AI Brain Builder Workshop is happening tomorrow at
+// 5:30 PM to 8:00 PM at the Platform Innovation Centre. What else would you like to know about the event?"
+const WHEN_ASK = 'What else would you like to know about the event?';
+function whenAnswer(e) {
+  const name = /^the\s/i.test(e.title) ? e.title : `The ${e.title}`;
+  const s = new Date(e.start), en = new Date(e.end);
+  const t = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?([ap])\.?m\.?/i, (m, a) => ` ${a.toUpperCase()}M`);
+  const days = Math.round((midnightOf(s) - midnightOf(new Date())) / 86400000);
+  const day = days === 0 ? 'today' : days === 1 ? 'tomorrow' : days === -1 ? 'yesterday' : days > 1 && days < 7 ? `on ${s.toLocaleDateString([], { weekday: 'long' })}` : `on ${s.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}`;
+  const multi = en - s > 86400000 && midnightOf(s) !== midnightOf(new Date(+en - 1));
+  const when = e.allDay ? `${day}, all day` : multi ? `${day} at ${t(s)} until ${en.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}` : `${day} at ${t(s)} to ${t(en)}`;
+  const loc = String(e.location || '').replace(/\\,/g, ',').replace(/\s+/g, ' ').trim();
+  const venue = loc.split(',')[0].trim(); // the venue's name; the full address is in the event
+  const where = !loc ? '' : /^https?:\/\//i.test(loc) ? ' online' : ` at ${/^(the|a|an)\s/i.test(venue) || /^\d/.test(venue) ? '' : 'the '}${venue}`;
+  const verb = en < Date.now() ? 'happened' : 'is happening';
+  if (s <= Date.now() && en >= Date.now()) return `**${name} is happening now until ${t(en)}${where}.** ${WHEN_ASK}`;
+  return `**${name} ${verb} ${when}${where}.** ${WHEN_ASK}`;
+}
 function introAnswer(e) {
   const hasMore = !!require('./feed').eventText(e);
   return `${eventIntro(e)}\n\n${hasMore ? OVERVIEW_OFFER : 'There are no other details in the calendar description.'}`;
@@ -388,15 +406,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
     if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 90 days.**`;
     const [e, ...rest] = r.events;
-    if (r.titleMatch) {
-      const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
-      const where = /\bwhere\b/.test(r.q.m) && e.location ? ` at ${e.location}` : '';
-      const len = e.allDay ? 'all day' : mins >= 60 && mins % 60 === 0 ? `${mins / 60} h` : `${mins} min`;
-      const then = rest.find((x) => x.title === e.title);
-      return [`**${e.title} is ${e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start)}${where} · ${len}.**`,
-        e.location && !where ? `Location: ${e.location}.` : '', e.attendees && e.attendees.length ? `With ${e.attendees.join(', ')}.` : '',
-        then ? `After that, the next one is ${whenText(then.start)}.` : ''].filter(Boolean).join('\n');
-    }
+    if (r.titleMatch) return whenAnswer(e);
     const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
     return [`**${who ? `Your next meeting with ${who} is` : 'Next up:'} ${e.title}, ${whenText(e.start)} · ${mins} min.**`,
       e.attendees ? `With ${e.attendees.join(', ')}.` : '', e.location ? `Location: ${e.location}.` : '', e.notes ? `Prep notes: [[${e.notes.split('/').pop()}]]` : '',

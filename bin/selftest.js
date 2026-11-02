@@ -171,7 +171,7 @@ async function main() {
       ok('event details: follow-ups come from the description', /Ryan W and Dana Li/.test(lk.answer('who is speaking?', fc)) && /Bring a laptop/.test(lk.answer('what should I bring to it?', fc)) && lk.answer('prepare an update for stakeholders', fc) === null);
     }
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];
-    ok('event questions: finds an event by its name', /^\*\*Board prep is/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*Kids soccer practice is/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));
+    ok('event questions: "when is <event>" answers "The <event> is happening <day> at <start> to <end>…" then asks what else', /^\*\*The Board prep is happening (today|tomorrow|on \w+).* at .+ to .+\.\*\* What else would you like to know about the event\?$/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*The Kids soccer practice is happening/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));
     const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
     ok('calendar watcher: this week\'s events become feed cards once', w.upcoming('business', 'system', up) === 1 && w.upcoming('business', 'system', up) === 0);
   }
