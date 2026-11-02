@@ -339,7 +339,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
-  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
+  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
   if (direct) return direct;
   const m = message.toLowerCase();
   const name = cfg.user.name;
@@ -556,16 +556,23 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     // The event this conversation is on, so "tell me about this event" and "who's speaking?" know which one (2 h).
     const fe = conv.focusEvent && Date.now() - conv.focusEvent.at < 2 * 3600000 ? conv.focusEvent : null;
     ctx.focus = fe ? (ctx.allEvents || ctx.events).find((e) => (e.uid && e.uid === fe.uid && String(e.start) === String(fe.start)) || (e.title === fe.title && String(e.start) === String(fe.start))) || (ctx.allEvents || ctx.events).find((e) => e.title === fe.title) || null : null;
+    // Maestro just offered an overview of the event ("Would you like me to give you an overview…?"), so "yes" means that.
+    { const last = conv.messages.filter((x) => x.role === 'assistant').slice(-1)[0]; ctx.offered = !!(last && last.content.includes(lookup.OVERVIEW_OFFER)); }
+    let eventReply = null;
     try {
-      const hit = lookup.find(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus });
+      const hit = lookup.find(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
       const ev = hit && (hit.event || (hit.kind === 'event' && hit.events && hit.events[0]));
       if (ev) conv.focusEvent = { uid: ev.uid || '', title: ev.title, start: ev.start, at: Date.now() };
+      // Ryan's event answer format ("The … is being held on …") and the overview after "yes" read the same with every model.
+      if (hit && (hit.kind === 'overview' || hit.kind === 'about')) eventReply = lookup.answer(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
     } catch { /* focus is a convenience */ }
     ctx.history = conv.messages.slice(-12); // so "say hi to everyone" remembers "I'm at my Brain Builder event"
-    if (provider === 'demo') {
+    if (eventReply) {
+      reply = eventReply; providerUsed = 'calendar'; sources = [];
+    } else if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
-      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events, focus: ctx.focus });
+      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered });
       const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + (exact ? exact + '\n\n' : '') + contextText(ctx, cfg, profile);
       const history = conv.messages.slice(-8).map((x) => ({ role: x.role, content: x.content }));
       try {

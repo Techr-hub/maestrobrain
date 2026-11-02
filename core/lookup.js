@@ -136,6 +136,8 @@ function ticketAnswer(e) {
 }
 
 // "What is board prep about?", "What's the Sprint Review about?", "Tell me about the offsite", "What's on the agenda for …"
+// "What is X about?" / "what's on the agenda" keep the short description summary; "tell me about…" gets the intro.
+const SUMMARY_Q = /\bwhat('?s| is| was| are)?\b.*\babout\b|agenda|summari[sz]e|what happens at|purpose of/;
 const ABOUT = /\b(what('?s| is| was| are)?\b.*\babout\b|tell me (more )?about|details (of|on|for|about)|what('?s| is) (on )?the agenda|summari[sz]e (the |my )?|what happens at|purpose of|what('?s| is) .* for\?)/;
 
 // The event's own description (calendar DESCRIPTION, or the text Maestro saved), else its linked vault note,
@@ -181,6 +183,47 @@ function aboutAnswer(e) {
   // Ryan (2026-11-02): two short sentences, then ask what they want to know.
   return `**${e.title}**, ${when}: ${first.charAt(0).toUpperCase() + first.slice(1)}${sentences[1] ? ' ' + end(trim(sentences[1])) : ''}\n\nWhat would you like to know specifically?`;
 }
+
+// "Tell me about this event" (Ryan, 2026-11-02): "The <event> is being held on <date> from <start> to <end> at the
+// <location>. You can get tickets to it from <ticket link>. Would you like me to give you an overview on topics,
+// speakers and any other details?" A "yes" then gets overviewAnswer.
+const OVERVIEW_OFFER = 'Would you like me to give you an overview on topics, speakers and any other details?';
+function eventIntro(e) {
+  const name = /^the\s/i.test(e.title) ? e.title : `The ${e.title}`;
+  const s = new Date(e.start), en = new Date(e.end);
+  const day = (d) => d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  const t = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?([ap])\.?m\.?/i, (m, a) => ` ${a.toUpperCase()}M`);
+  const multi = new Date(e.end) - new Date(e.start) > 86400000 && midnightOf(s) !== midnightOf(new Date(+en - 1));
+  const when = e.allDay ? (multi ? `from ${day(s)} to ${day(new Date(+en - 1))}` : `on ${day(s)}, all day`)
+    : multi ? `from ${day(s)} at ${t(s)} to ${day(en)} at ${t(en)}` : `on ${day(s)} from ${t(s)} to ${t(en)}`;
+  const loc = String(e.location || '').replace(/\\,/g, ',').replace(/\s+/g, ' ').trim();
+  const where = !loc ? '' : /^https?:\/\//i.test(loc) ? ' online' : ` at ${/^(the|a|an)\s/i.test(loc) || /^\d/.test(loc) ? '' : 'the '}${loc}`;
+  const verb = new Date(e.end) < Date.now() ? 'was held' : 'is being held';
+  const tix = ticketLinks(e)[0];
+  return `**${name} ${verb} ${when}${where}.**${tix ? ` You can get tickets to it from the [${tix.name} event page](${tix.url}).` : ''}`;
+}
+const midnightOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return +x; };
+function introAnswer(e) {
+  const hasMore = !!require('./feed').eventText(e);
+  return `${eventIntro(e)}\n\n${hasMore ? OVERVIEW_OFFER : 'There are no other details in the calendar description.'}`;
+}
+// After "yes": what it's about, the speakers and the topics, from the description.
+function overviewAnswer(e) {
+  const desc = eventDescription(e);
+  const sentences = (desc.match(/[^.!?]+[.!?]*/g) || []).map((x) => x.trim()).filter((x) => x.length > 2);
+  const lines = descLines(e);
+  const find = (re) => (lines.find((x) => x.head && re.test(x.head)) || {}).text;
+  const speakers = find(/speak|presenter|host|panel|instructor|facilitat|guest|keynote/i);
+  const topics = find(/agenda|topic|cover|learn|program|schedule|outline|curriculum/i);
+  const out = [`**${e.title}:** ${sentences.slice(0, 2).join(' ') || 'There is no summary in the description.'}`];
+  if (topics) out.push(`**Topics:** ${topics}.`);
+  if (speakers) out.push(`**Speakers:** ${speakers}.`);
+  const other = DETAILS.filter((d) => ['bring', 'food', 'parking', 'dress', 'cost'].includes(d.key))
+    .map((d) => (lines.find((x) => !x.head && d.line.test(x.text)) || {}).text).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  if (other.length) out.push(`**Good to know:** ${other.map((x) => x.replace(/https?:\/\/\S+/g, '').trim().replace(/([^.!?])$/, '$1.')).join(' ')}`);
+  return out.join('\n\n');
+}
+const YES = /^(yes|yeah|yep|yup|sure|please|ok|okay|go ahead|do it|absolutely|definitely|of course|tell me|sounds good)\b/i;
 
 // Follow-up questions answered from the event's description (Ryan, 2026-11-02): speakers, topics, cost, what to
 // bring, food, parking, dress code and links. strict: only with "it"/"this event" or the event's name. q: the question; line: what a matching line or section header says.
@@ -250,6 +293,7 @@ function find(message, ctx) {
     const ev = eventFor(q, ctx, { loose: true });
     if (ev) return { kind: 'tickets', q, subject: [], event: ev };
   }
+  if (ctx.offered && ctx.focus && YES.test(q.m.trim())) return { kind: 'overview', q, subject: [], event: ctx.focus };
   const detail = DETAILS.find((d) => d.q.test(q.m));
   if (detail) {
     const ev = eventFor(q, ctx, { loose: !detail.strict || /\bwhat (should|do|can|must) (i|we) (need to )?bring\b/.test(q.m) }); // words like "bring" or "links" need "this event" or the event's name
@@ -307,7 +351,8 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const peopleNote = r.subject.length ? vault.loadNotes().find((n) => n.folder === 'People' && r.subject.every((t) => has(n.title, t))) : null;
   const link = peopleNote ? `\n\n_More about them: [[${peopleNote.title}]]_` : '';
 
-  if (r.kind === 'about') return aboutAnswer(r.event);
+  if (r.kind === 'about') return SUMMARY_Q.test(r.q.m) ? aboutAnswer(r.event) : introAnswer(r.event);
+  if (r.kind === 'overview') return overviewAnswer(r.event);
   if (r.kind === 'tickets') return ticketAnswer(r.event);
   if (r.kind === 'detail') return detailAnswer(r.event, r.detail);
   if (r.kind === 'event') {
@@ -372,4 +417,4 @@ function contextBlock(message, ctx) {
   return rows.length ? `# EXACT MATCHES FOR THIS QUESTION (answer from these first)\n${rows.join('\n')}` : '# EXACT MATCHES FOR THIS QUESTION\n(none found in the feed or calendar)';
 }
 
-module.exports = { find, answer, contextBlock, whenText, parse, matchEvents };
+module.exports = { OVERVIEW_OFFER, find, answer, contextBlock, whenText, parse, matchEvents };

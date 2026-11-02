@@ -144,7 +144,8 @@ async function main() {
       const bb = { uid: 'bb', title: 'Brain Builder Workshop', start: new Date(t0).toISOString(), end: new Date(t0 + 7200000).toISOString(), attendees: [],
         description: 'Build your own second brain in one evening.\\nYou leave with a working assistant.\\n\\nSpeakers:\\n- Ryan W\\n- Dana Li\\n\\nBring a laptop.\\nTickets: https://lu.ma/bb' };
       const fc = { items: [], events: [bb], focus: bb };
-      ok('event details: "tell me about this event" gives 2 sentences, then asks what to know', /^\*\*Brain Builder Workshop\*\*.*one evening\. You leave with a working assistant\.\n\nWhat would you like to know specifically\?$/.test(lk.answer('tell me about this event', fc)));
+      ok('event details: "tell me about this event" gives when, where and tickets, then offers an overview', /^\*\*The Brain Builder Workshop is being held on \w+day, \w+ \d+ from .+ to .+\.\*\* You can get tickets to it from the \[Luma event page\]\(https:\/\/lu\.ma\/bb\)\.\n\nWould you like me to give you an overview on topics, speakers and any other details\?$/.test(lk.answer('tell me about this event', fc)));
+      ok('event details: "yes" gives the overview with speakers', /\*\*Speakers:\*\* Ryan W and Dana Li/.test(lk.answer('yes', { ...fc, offered: true })));
       ok('event details: follow-ups come from the description', /Ryan W and Dana Li/.test(lk.answer('who is speaking?', fc)) && /Bring a laptop/.test(lk.answer('what should I bring to it?', fc)) && lk.answer('prepare an update for stakeholders', fc) === null);
     }
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];
