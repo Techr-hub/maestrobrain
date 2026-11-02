@@ -130,7 +130,7 @@ export class Voice {
   // gender: 'male' | 'female' | '' (any). Falls back to the best voice of any gender if none match.
   bestVoice(gender = '') { const r = rankVoices(this.voices()); return (gender && r.find((v) => voiceGender(v) === gender)) || r[0] || null; }
 
-  speak(text, { voiceName, gender = '', rate = 0.92, pause = 2000, onStart, onEnd } = {}) {
+  speak(text, { voiceName, gender = '', rate = 0.92, pause = 1000, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never

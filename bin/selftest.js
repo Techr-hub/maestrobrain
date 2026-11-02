@@ -65,7 +65,7 @@ async function main() {
     const fd = await (await fetch(base + '/feed?limit=200')).json();
     await post('/settings', { voice: { gender: 'female' } }).catch(() => null);
     const vcfg = (await (await fetch(base + '/state')).json()).config.voice;
-    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 2000);
+    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 1000);
     const fl = fd.items || fd;
     ok('remove event: no separate "Cancelled" card in the feed', !fl.some((i) => /^Cancelled: Design critique/.test(i.title)));
     const last = fl[fl.length - 1];
@@ -78,6 +78,8 @@ async function main() {
     ok('create event: everything said up front creates it without more questions', /^Creating "Dentist appointment" for .*3:15 PM to 4:00 PM, at Smile Dental, in your Maestro calendar/.test(full.reply));
     const full2 = await post('/chat', { message: 'Schedule a lunch with Sarah on Thursday at 12:30 at The Keg, description: discuss the partnership deal' });
     ok('create event: full request only asks which calendar', /^Which calendar/.test(full2.reply));
+    const about = await post('/chat', { message: 'What is the Sprint 24 Review about?' });
+    ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();

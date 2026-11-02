@@ -81,7 +81,7 @@ function personIn(i) {
 // "When is board prep?", "What time is Kids soccer?", "Where is the offsite?": match the words of the question
 // against event titles, attendees and locations, best match first, then soonest.
 const EVENT_FILLER = new Set(('happening happen happens scheduled schedule event events calendar calender booked planned plan start starts starting ' +
-  'begin begins day date held going taking place appointment meeting meetings meet call is are').split(' '));
+  'begin begins day date held going taking place appointment meeting meetings meet call is are about details detail purpose agenda topic topics summary summarize summarise tell more covering cover covers').split(' '));
 const stem = (t) => (t.length > 4 ? t.replace(/(ing|es|s)$/, '') : t);
 function matchEvents(m, events) {
   const words = tokens(m).filter((t) => t.length > 1 && !STOP.has(t));
@@ -103,9 +103,57 @@ function matchEvents(m, events) {
 }
 
 // Find feed items and events that answer the question. Returns null when it isn't a lookup question.
+// "What is board prep about?", "What's the Sprint Review about?", "Tell me about the offsite", "What's on the agenda for …"
+const ABOUT = /\b(what('?s| is| was| are)?\b.*\babout\b|tell me (more )?about|details (of|on|for|about)|what('?s| is) (on )?the agenda|summari[sz]e (the |my )?|what happens at|purpose of|what('?s| is) .* for\?)/;
+
+// The event's own description (calendar DESCRIPTION, or the text Maestro saved), else its linked vault note,
+// cleaned of meeting-link boilerplate. Returns plain sentences.
+function eventDescription(e) {
+  let text = e.description || (e.notes && !/^[\w -]+\/[\w .'&-]+$/.test(e.notes) ? e.notes : '');
+  if (!text && e.notes) { try { text = vault.readNote(/\.md$/.test(e.notes) ? e.notes : e.notes + '.md').body; } catch { /* no note */ } }
+  const lines = String(text || '').replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\;/g, ';').split('\n')
+    .filter((l) => !/^\s*(created by maestro|with [^.]*$|join (zoom|microsoft teams|with google meet)|meeting id|passcode|password|dial|one tap|find your local|-+:+~|https?:\/\/\S+$|# |---|tags:|date:|\**attendees:?\**:?)/i.test(l.trim()));
+  const clean = (l) => l.replace(/\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, '$1').replace(/[*_`]/g, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim();
+  const out = [];
+  let list = [];
+  const flush = () => {
+    if (!list.length) return;
+    const items = list.map((x) => x.replace(/[.;]$/, ''));
+    out.push(`${items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}` : items[0]}.`);
+    list = [];
+  };
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (!l) { flush(); continue; }
+    if (/^#{2,}\s/.test(l)) { flush(); if (/agenda|topics?|purpose|goal|covering/i.test(l)) out.push('It covers'); continue; }
+    if (/^([-*•]|\d+[.)])\s+/.test(l)) { list.push(clean(l.replace(/^([-*•]|\d+[.)])\s+/, ''))); continue; }
+    flush(); out.push(clean(l));
+  }
+  flush();
+  return out.join(' ').replace(/It covers ([A-Z])/g, (m, c) => `It covers ${c.toLowerCase()}`).replace(/It covers\s*$/, '').trim();
+}
+function aboutAnswer(e) {
+  const when = e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start);
+  const desc = eventDescription(e);
+  const sentences = (desc.match(/[^.!?]+[.!?]*/g) || []).map((s) => s.trim()).filter((s) => s.length > 2);
+  if (!sentences.length) {
+    const who = e.attendees && e.attendees.length ? ` with ${e.attendees.join(', ')}` : '';
+    return `**${e.title}, ${when}, has no description on your calendar.**${who || e.location ? ` It's${who}${e.location ? ` at ${e.location}` : ''}.` : ''}`;
+  }
+  // At most 2 sentences (Ryan, 2026-11-02): the event and the first line of its description, then one more.
+  const trim = (s) => (s.length > 220 ? s.slice(0, 217).replace(/\s+\S*$/, '') + '…' : s);
+  const end = (s) => (/[.!?…]$/.test(s) ? s : s + '.');
+  const first = end(trim(sentences[0]));
+  return `**${e.title}**, ${when}: ${first.charAt(0).toUpperCase() + first.slice(1)}${sentences[1] ? ' ' + end(trim(sentences[1])) : ''}`;
+}
+
 function find(message, ctx) {
-  const r = findBasic(message, ctx);
   const q = parse(message);
+  if (!q.past && ABOUT.test(q.m)) {
+    const a = matchEvents(q.m, ctx.events || []);
+    if (a && (a.events.length || a.past) && a.byTitle) return { kind: 'about', q, subject: [], event: a.events[0] || a.past };
+  }
+  const r = findBasic(message, ctx);
   const t = !q.past && /\b(when|what time|what day|which day|where|how long until)\b/.test(q.m) ? matchEvents(q.m, ctx.events || []) : null;
   // "when is my meeting with Sarah?" keeps the person-first answer, unless the question names the event itself
   if (r && r.kind === 'event' && ((r.subject.length && r.events.length) || r.past) && !(t && t.byTitle)) return r;
@@ -153,6 +201,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const peopleNote = r.subject.length ? vault.loadNotes().find((n) => n.folder === 'People' && r.subject.every((t) => has(n.title, t))) : null;
   const link = peopleNote ? `\n\n_More about them: [[${peopleNote.title}]]_` : '';
 
+  if (r.kind === 'about') return aboutAnswer(r.event);
   if (r.kind === 'event') {
     if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 90 days.`;
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
@@ -203,6 +252,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
 function contextBlock(message, ctx) {
   const r = find(message, ctx);
   if (!r) return '';
+  if (r.kind === 'about') { const e = r.event; return `# EXACT MATCH FOR THIS QUESTION (summarize what this event is about in at most 2 sentences, from its description)\n- EVENT ${e.title} · ${whenText(e.start)}${e.attendees && e.attendees.length ? ' · with ' + e.attendees.join(', ') : ''}${e.location ? ' · at ' + e.location : ''}\n  Description: ${eventDescription(e) || '(none)'}`; }
   const rows = r.kind === 'event'
     ? r.events.slice(0, 6).map((e) => `- EVENT ${e.title} · ${whenText(e.start)} · ${e.attendees ? 'with ' + e.attendees.join(', ') : ''}`)
     : r.items.slice(0, 8).map((i) => `- [${i.category}] ${i.sourceName} · ${whenText(i.ts)} · ${i.title}${i.quote ? ' — ' + i.quote : ''}`);
