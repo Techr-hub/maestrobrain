@@ -11,6 +11,8 @@ export async function api(path, body, method) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
+  // The page is newer than the server answering it (Maestro was updated while it was running).
+  if (res.status === 404 && json.error === 'No such endpoint') throw new Error('Maestro was updated while it was running. Close the Maestro window, then start Maestro again.');
   if (!res.ok) throw new Error(json.error || res.statusText);
   return json;
 }

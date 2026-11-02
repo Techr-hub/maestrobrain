@@ -600,6 +600,7 @@ function renderFeed(animateFirst) {
       try { await api('/feed/pin', { id: item.id, pinned }); } catch (err) { toast('Could not pin: ' + err.message, 'error'); }
     };
     el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => {
+      if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } // note, action items, deadline
       await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
       toast(`Task added: ${b.dataset.action}`);
       markRead(item);
@@ -675,7 +676,7 @@ function renderSourceView() {
   list.querySelectorAll('.activity[data-id]').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
   });
 }
 
@@ -718,7 +719,7 @@ function renderHubView(d) {
   list.querySelectorAll('.activity[data-id]').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
   });
 }
 
@@ -828,8 +829,14 @@ function visibleNow(item) {
   return !!(cfg.connections[cfg.profile] || {})[item.source];
 }
 
+// After Maestro restarts with a new version, open dashboards reload so page and server match.
+let serverBuild = null;
+async function checkBuild() {
+  try { const v = await api('/version'); if (serverBuild && v.build !== serverBuild) location.reload(); serverBuild = v.build; } catch { /* older server: no /version */ }
+}
 function connectStream() {
   const es = new EventSource('/api/stream');
+  es.addEventListener('open', checkBuild);
   es.addEventListener('feed', (e) => {
     const item = JSON.parse(e.data);
     if (!visibleNow(item)) return;

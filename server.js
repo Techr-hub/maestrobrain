@@ -36,10 +36,25 @@ feed.bus.on('item', (item) => { seenIds.add(item.id); broadcast('feed', item); }
 feed.bus.on('update', (item) => broadcast('feed-update', item));
 feed.bus.on('remove', (item) => broadcast('feed-remove', { id: item.id }));
 
+// Every repeating job goes through every(), so an update-restart can stop them all (see watchForUpdates).
+const timers = [];
+let stopping = false;
+const every = (fn, ms) => { const t = setInterval(() => { if (!stopping) fn(); }, ms); timers.push(t); return t; };
+
+// The code this process is running, so the dashboard can tell when Maestro was updated on disk.
+const CODE_DIRS = [__dirname, path.join(__dirname, 'core'), path.join(__dirname, 'mcp'), path.join(__dirname, 'bin')];
+function codeStamp() {
+  let max = 0;
+  for (const d of CODE_DIRS) { try { for (const f of fs.readdirSync(d)) if (f.endsWith('.js')) max = Math.max(max, fs.statSync(path.join(d, f)).mtimeMs); } catch { /* missing folder */ } }
+  try { max = Math.max(max, fs.statSync(path.join(__dirname, 'package.json')).mtimeMs); } catch { /* none */ }
+  return Math.round(max);
+}
+const BUILD = String(codeStamp());
+
 // Items written by another process (Claude Desktop via the MCP server) show up live too.
 let feedMtime = 0;
 let lastRemovedScan = Date.now();
-setInterval(() => {
+every(() => {
   try {
     const st = fs.statSync(path.join(config.DATA_DIR, 'feed.json'));
     if (st.mtimeMs === feedMtime) return;
@@ -111,6 +126,9 @@ route('POST', '/api/profile', async (_q, body) => {
 
 route('GET', '/api/feed', async (q) => feed.list({ source: q.get('source'), category: q.get('category'), limit: Number(q.get('limit') || 60) }));
 route('POST', '/api/feed/read', async (_q, body) => feed.markRead(body.id));
+route('GET', '/api/version', async () => ({ app: 'maestro', build: BUILD, root: __dirname, pid: process.pid }));
+// A newer Maestro starting on this port asks the running one to step aside (localhost only).
+route('POST', '/api/shutdown', async (_q, body) => { if (!body || body.reason !== 'update') return { error: 'Not allowed' }; setTimeout(() => process.exit(0), 150); return { ok: true }; });
 route('POST', '/api/feed/dismiss', async (_q, body) => feed.dismiss(body.id) || { error: 'Card not found' });
 route('POST', '/api/feed/pin', async (_q, body) => feed.setPinned(body.id, body.pinned !== false) || { error: 'Card not found' });
 route('POST', '/api/feed/read-all', async () => { for (const i of feed.list({ limit: 300 })) if (i.unread) feed.markRead(i.id); return { ok: true }; });
@@ -349,26 +367,52 @@ function start(port) {
   const tickDemo = () => {
     const c = config.load();
     if (c.demo && c.demo.liveFeed && clients.size) feed.nextDemoItem();
-    setTimeout(tickDemo, ((c.demo && c.demo.intervalSeconds) || 35) * 1000 * (0.7 + Math.random() * 0.6));
+    if (!stopping) setTimeout(tickDemo, ((c.demo && c.demo.intervalSeconds) || 35) * 1000 * (0.7 + Math.random() * 0.6));
   };
   setTimeout(tickDemo, 20000);
-  setInterval(() => workflows.tick().catch(() => {}), 60000);
-  setInterval(() => feed.pollLive().catch(() => {}), 120000);
+  every(() => workflows.tick().catch(() => {}), 60000);
+  every(() => feed.pollLive().catch(() => {}), 120000);
   // calendars are checked every minute so new events reach the feed quickly
-  setInterval(() => calwatch.check().catch(() => {}), 60000);
+  every(() => calwatch.check().catch(() => {}), 60000);
   calwatch.check().catch(() => {});
   // task reminders (the only Insight cards): checked every 5 minutes, and right after a task is added
-  setInterval(() => { try { reminders.check(); } catch { /* best-effort */ } }, 5 * 60000);
+  every(() => { try { reminders.check(); } catch { /* best-effort */ } }, 5 * 60000);
   try { reminders.check(); } catch { /* best-effort */ }
   feed.pollLive().catch(() => {});
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => resolve({ server, port: server.address().port }));
+    server.listen(port, '127.0.0.1', () => { watchForUpdates(server); resolve({ server, port: server.address().port }); });
   });
 }
 
-module.exports = { start, createServer };
+// Ryan (2026-11-02) hit "No such endpoint" after unzipping a new Maestro over a running one: the browser loaded the
+// new page but the old server was still answering. Now, when the code on disk changes, Maestro restarts itself on
+// the same port (in the same window) and open dashboards reload.
+function watchForUpdates(server) {
+  if (process.env.MAESTRO_NO_RESTART) return;
+  let seen = BUILD, stableFor = 0;
+  every(() => {
+    const now = String(codeStamp());
+    if (now === BUILD) return;
+    if (now !== seen) { seen = now; stableFor = 0; return; } // still unzipping: wait until the files settle
+    if (++stableFor < 2) return;
+    stopping = true;
+    timers.forEach(clearInterval);
+    const port = server.address().port;
+    console.log('\n   Maestro was updated. Restarting with the new version…\n');
+    for (const res of clients) { try { res.end(); } catch { /* gone */ } }
+    server.close(() => {
+      const { spawn } = require('child_process');
+      const child = spawn(process.execPath, process.argv.slice(1), { stdio: 'inherit', env: { ...process.env, PORT: String(port), MAESTRO_NO_BROWSER: '1' } });
+      child.on('exit', (code) => process.exit(code || 0));
+      process.on('SIGINT', () => child.kill('SIGINT'));
+    });
+    if (server.closeAllConnections) server.closeAllConnections();
+  }, 2000);
+}
+
+module.exports = { start, createServer, BUILD };
 
 if (require.main === module) {
   start().then(({ port }) => console.log(`Maestro is running at http://localhost:${port}`)).catch((e) => { console.error(e.message); process.exit(1); });

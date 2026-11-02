@@ -41,6 +41,15 @@ async function start() {
   const { start: startServer } = require('../server');
   let port = Number(process.env.PORT) || config.load().port || 4141;
   let started;
+  // An older Maestro still running on this port (e.g. before you unzipped an update) is asked to stop, so the
+  // new version takes its place and your open dashboard keeps working.
+  try {
+    const v = await fetch(`http://127.0.0.1:${port}/api/version`, { signal: AbortSignal.timeout(1500) }).then((r) => r.json());
+    if (v && (v.app === 'maestro' || v.build)) {
+      await fetch(`http://127.0.0.1:${port}/api/shutdown`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'update' }), signal: AbortSignal.timeout(1500) }).catch(() => {});
+      for (let i = 0; i < 20; i++) { await new Promise((r) => setTimeout(r, 150)); try { await fetch(`http://127.0.0.1:${port}/api/version`, { signal: AbortSignal.timeout(300) }); } catch { break; } }
+    }
+  } catch { /* nothing running there, or not Maestro */ }
   for (let i = 0; i < 10 && !started; i++) {
     try { started = await startServer(port + i); } catch (e) { if (e.code !== 'EADDRINUSE') throw e; }
   }

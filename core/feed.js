@@ -18,7 +18,12 @@ const newId = () => Date.now().toString(36) + '-' + (idCounter++).toString(36) +
 // Ryan (2026-11-02): Insight cards are only reminders for tasks you created that are coming due. Older demo
 // Insight cards are dropped, and workflow results show as Brief cards.
 function tidy(items) {
-  return items.filter((i) => i.category !== 'INSIGHT' || i.reminder || i.workflow).map((i) => (i.category === 'INSIGHT' && i.workflow ? { ...i, category: 'BRIEF' } : i));
+  return items.filter((i) => i.category !== 'INSIGHT' || i.reminder || i.workflow).map((i) => {
+    if (i.category === 'INSIGHT' && i.workflow) i = { ...i, category: 'BRIEF' };
+    // "Prep me for this" became "Add Task" (Ryan, 2026-11-02)
+    if (i.actions && i.actions.includes('Prep me for this')) i = { ...i, actions: i.actions.map((a) => (a === 'Prep me for this' ? 'Add Task' : a)) };
+    return i;
+  });
 }
 function readAll() {
   if (!fs.existsSync(FEED_FILE)) return seed();

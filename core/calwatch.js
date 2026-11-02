@@ -56,7 +56,7 @@ function post(profile, source, kind, key, e, extra = {}) {
     summary: e.calendly || source === 'calendly' ? 'Booked through Calendly' : kind === 'cancelled' ? `Removed from ${name}` : `${kind === 'new' ? 'Added to' : 'Updated in'} ${name}`,
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
     deadline: kind === 'cancelled' ? '' : `Starts ${when(e.start, e.allDay)}`,
-    actions: kind === 'cancelled' ? [] : ['Prep me for this'],
+    actions: kind === 'cancelled' ? [] : ['Add Task'],
     description: feed.eventText(e),
   });
 }
@@ -101,7 +101,7 @@ function upcoming(profile, source, events, skip = new Set()) {
       priority: startsIn > 0 && startsIn < 2 * 3600000 ? 'Medium' : '',
       deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       unread: false,
-      actions: ['Prep me for this'],
+      actions: ['Add Task'],
     });
     if (item) n++;
   });
