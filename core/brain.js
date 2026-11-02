@@ -430,7 +430,8 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
   const profile = cfg.profile;
   const raw = String(message || '').trim();
   if (!raw) throw new Error('Empty message');
-  let text = stripWake(raw, cfg) || 'hey';
+  const stripped = stripWake(raw, cfg);
+  let text = stripped || 'hey';
 
   // @mentions pick an agent
   let agent = null;
@@ -441,6 +442,8 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
 
   const convs = loadConversations();
   let conv = convs.find((c) => c.id === conversationId);
+  // Answering a question with "Maestro" (e.g. which calendar?) is an answer, not a wake word.
+  if (conv && conv.pending) { const lead = raw.replace(/^[\s,]*(hey|ok|okay|hi)?[\s,]*/i, ''); if (!stripped || (/^(maestro|mistro|maestra)\b/i.test(lead) && /\b(calendar|one|please)\b/i.test(lead))) text = lead || raw; }
   if (!conv) {
     conv = { id: Date.now().toString(36), title: text.slice(0, 60), created: Date.now(), profile, messages: [] };
     convs.unshift(conv);
@@ -454,7 +457,9 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     reply = sched.reply; providerUsed = 'calendar';
     if (sched.event) {
       actions.push({ type: 'event', event: sched.event });
-      try { feed.add({ source: 'system', category: 'MEETING', profile, title: `New: ${sched.event.title}`, quote: `${new Date(sched.event.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${sched.event.attendees.length ? ' · with ' + sched.event.attendees.join(', ') : ''}`, summary: 'Created by Maestro', priority: '' }); } catch { /* feed is best-effort */ }
+      try { const ev = sched.event;
+      const calSrc = ev.calendarFor || (ev.target && ev.target.startsWith('caldav:') ? ev.target.split(':')[1] : 'system');
+      feed.add({ source: calSrc, category: 'MEETING', profile, title: `New: ${ev.title}`, quote: `${new Date(ev.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${ev.attendees.length ? ' · with ' + ev.attendees.join(', ') : ''}${ev.location ? ' · ' + ev.location : ''}`, summary: 'Created by Maestro', priority: '' }); } catch { /* feed is best-effort */ }
     }
   }
 

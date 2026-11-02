@@ -271,6 +271,8 @@ function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new 
     }
   }
   events.sort((a, b) => new Date(a.start) - new Date(b.start));
+  const cal = (body.match(/^X-WR-CALNAME:(.*)$/m) || [])[1];
+  if (cal && cal.trim()) for (const e of events) e.calendarName = cal.trim().replace(/\\,/g, ',');
   return events;
 }
 

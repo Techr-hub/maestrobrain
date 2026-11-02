@@ -39,6 +39,8 @@ function toIcs(events, name = 'Maestro') {
 // ---------------------------------------------------------------- CalDAV
 const CALDAV_DEFAULT = { icalendar: 'https://caldav.icloud.com/' };
 const CAL_CONNECTORS = { icalendar: 'iCloud', gcal: 'Google Calendar', outlook: 'Outlook' };
+// How each calendar is named when Maestro asks "which calendar?"
+const CAL_LABEL = { icalendar: 'Mac / iCloud Calendar', gcal: 'Google Calendar', outlook: 'Outlook Calendar' };
 
 function caldavCreds(id, conn) {
   const f = (conn && conn.fields) || {};
@@ -106,7 +108,11 @@ async function caldavPut(creds, calHref, ev) {
 }
 
 // ---------------------------------------------------------------- targets + create
-// Where can a new event go? Maestro's own calendar always; plus every writable CalDAV calendar.
+// Where can a new event go? Every calendar you connected, then Maestro's own calendar.
+// - iCloud / CalDAV with sign-in details: each writable calendar, written directly.
+// - Any other connected calendar (Google, Outlook, iCal links without sign-in): the event is filed under that
+//   calendar in Maestro right away, and Claude Desktop copies it in with its calendar connector
+//   ("Sync my new events into my calendars" prompt). These show as "via Claude Desktop".
 async function targets(profile) {
   const cfg = config.load();
   const prof = profile || cfg.profile;
@@ -117,9 +123,14 @@ async function targets(profile) {
     const c = conns[id];
     if (!c) continue;
     const creds = c.mode === 'live' ? caldavCreds(id, c) : null;
+    let direct = false;
     if (creds) {
-      try { for (const cal of await discover(creds)) out.push({ id: `caldav:${id}:${cal.href}`, name: cal.name, via: CAL_CONNECTORS[id], connector: id, href: cal.href }); } catch (e) { notes.push(`${CAL_CONNECTORS[id]}: ${e.message}`); }
-    } else if (c.mode !== 'demo') notes.push(id === 'icalendar' ? 'iCloud is connected read-only. Add your Apple ID and an app-specific password to its card to create events there.' : `${CAL_CONNECTORS[id]} can only be written through Claude Desktop's ${CAL_CONNECTORS[id]} connector.`);
+      try {
+        for (const cal of await discover(creds)) out.push({ id: `caldav:${id}:${cal.href}`, name: cal.name, via: CAL_CONNECTORS[id], connector: id, href: cal.href });
+        direct = true;
+      } catch (e) { notes.push(`${CAL_CONNECTORS[id]}: ${e.message}`); }
+    }
+    if (!direct) out.push({ id: `pending:${id}`, name: CAL_LABEL[id], via: c.mode === 'demo' ? 'demo' : 'via Claude Desktop', connector: id, pending: true });
   }
   out.push({ id: 'maestro', name: 'Maestro', via: 'Maestro calendar' });
   return { targets: out, notes };
@@ -141,7 +152,13 @@ async function create(input, { profile, target = 'maestro' } = {}) {
   };
   if (isNaN(new Date(ev.start))) throw new Error('That start time is not a valid date.');
   let where = 'your Maestro calendar', warning = '';
-  if (target && target.startsWith('caldav:')) {
+  if (target && target.startsWith('pending:')) {
+    const id = target.slice(8);
+    ev.target = target; ev.calendarFor = id; ev.synced = false;
+    const conn = (config.load().connections[prof] || {})[id] || {};
+    where = `your ${CAL_LABEL[id] || id}`;
+    if (conn.mode !== 'demo') warning = `It's on your ${CAL_LABEL[id]} in Maestro now. To copy it into ${CAL_CONNECTORS[id]} itself, run "Sync my new events into my calendars" in Claude Desktop (+ → Maestro).${id === 'icalendar' ? ' Or add your Apple ID and an app-specific password to the iCalendar card, and Maestro will write it there directly.' : ''}`;
+  } else if (target && target.startsWith('caldav:')) {
     const [, id, ...rest] = target.split(':');
     const href = rest.join(':');
     const cfg = config.load();
@@ -160,4 +177,8 @@ async function create(input, { profile, target = 'maestro' } = {}) {
   return { event: ev, where, warning };
 }
 
-module.exports = { list, create, targets, toIcs, discover, caldavCreds, CAL_CONNECTORS };
+// Events Claude Desktop still needs to copy into Google / Outlook / iCloud, and marking them done.
+function pendingSync() { return readAll().filter((e) => e.calendarFor && !e.synced); }
+function markSynced(uid) { const all = readAll(); const e = all.find((x) => x.uid === uid); if (!e) return false; e.synced = true; e.syncedAt = Date.now(); writeAll(all); return true; }
+
+module.exports = { list, create, targets, toIcs, discover, caldavCreds, pendingSync, markSynced, CAL_CONNECTORS, CAL_LABEL };

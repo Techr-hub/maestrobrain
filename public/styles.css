@@ -437,3 +437,12 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .chan-row small { color: var(--muted); font-size: 11px; }
 .chan-row[hidden] { display: none; }
 .field label.chan-row { text-transform: none; letter-spacing: normal; font-family: inherit; color: var(--text, inherit); margin: 0; }
+
+/* Source chip at the top of each feed card: coloured name + calendar mark */
+.a-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.src-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px 2px 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--sc) 16%, transparent); border: 1px solid color-mix(in srgb, var(--sc) 45%, transparent); font-size: 11.5px; line-height: 1.4; }
+.src-chip svg { width: 14px; height: 14px; flex: none; color: var(--sc); }
+.src-chip b { color: color-mix(in srgb, var(--sc) 70%, #fff); font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.src-chip i { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-chip i::before { content: '·'; margin-right: 5px; color: var(--dim); }

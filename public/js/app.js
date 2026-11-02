@@ -492,13 +492,30 @@ function fillSourceFilter() {
   };
 }
 
+// Small marks for each calendar so cards from different calendars are easy to tell apart.
+const CAL_MARK = {
+  gcal: (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="#fff"/><path d="M1 4a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v1H1z" fill="#4285f4"/><path d="M15 12v1a2 2 0 0 1-2 2h-2l4-4z" fill="#34a853"/><path d="M1 12v1a2 2 0 0 0 2 2h2l-4-4z" fill="#fbbc04"/><text x="8" y="12.4" text-anchor="middle" font-size="7" font-weight="700" font-family="Arial,sans-serif" fill="#4285f4">${d}</text></svg>`,
+  icalendar: (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="#fff"/><path d="M1 4a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v1.5H1z" fill="#ff3b30"/><text x="8" y="13" text-anchor="middle" font-size="7.5" font-weight="700" font-family="Arial,sans-serif" fill="#1c1c1e">${d}</text></svg>`,
+  outlook: () => `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="#0f6cbd"/><circle cx="8" cy="8" r="3.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg>`,
+  calendly: () => `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="#006bff"/><path d="M10.6 5.6A3.4 3.4 0 1 0 10.6 10.4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  maestro: () => `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3" fill="#00f2af"/><text x="8" y="11.6" text-anchor="middle" font-size="8" font-weight="700" font-family="Arial,sans-serif" fill="#01121c">M</text></svg>`,
+};
+function sourceChip(i) {
+  const c = S.state && S.state.connectors.find((x) => x.id === i.source);
+  const color = i.source === 'maestro' ? '#00f2af' : (c && c.color) || '#00e5ff';
+  const mark = CAL_MARK[i.source] ? CAL_MARK[i.source](new Date().getDate()) : icon((c && c.icon) || (i.source === 'system' ? 'brain' : 'plug'));
+  const name = (i.sourceName || '').replace(/ \(.*\)/, '').replace(' / Microsoft 365', '');
+  return `<span class="src-chip ${CAL_MARK[i.source] ? 'cal' : ''}" style="--sc:${color}">${mark}<b>${esc(name)}</b>${i.calendarName ? `<i>${esc(i.calendarName)}</i>` : ''}</span>`;
+}
+
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
-  return `<div class="activity ${isNew ? 'new' : ''}" data-id="${i.id}" style="--c:${cat.c}">
+  const calColor = CAL_MARK[i.source] && i.source !== 'maestro' ? ((S.state.connectors.find((x) => x.id === i.source) || {}).color || cat.c) : cat.c; // calendar cards take their calendar's colour
+  return `<div class="activity ${isNew ? 'new' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
-      <span class="a-time">${timeAgo(i.ts)} · ${esc(i.sourceName)}</span>
+      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span></div>
       <div class="a-title">${esc(i.title)}</div>
       <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.unread ? '<span class="unread-dot"></span>' : ''}</div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}

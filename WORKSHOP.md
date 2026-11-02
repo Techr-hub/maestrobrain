@@ -17,7 +17,7 @@ ZIP fallback: https://github.com/Techr-hub/maestrobrain/archive/refs/heads/main.
 4. Use **Chrome or Edge** for the dashboard (needed for voice).
 5. Optional: run the install command in advance. It's small and needs no `npm install`, so conference Wi-Fi is fine.
 
-Facilitator check: run `npm test` on a clean machine the day before. It should print `48 passed, 0 failed`.
+Facilitator check: run `npm test` on a clean machine the day before. It should print `49 passed, 0 failed`.
 
 ---
 

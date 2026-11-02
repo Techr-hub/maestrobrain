@@ -23,9 +23,9 @@ You can use both at once. Tokens are never written into the vault.
 > A public link can be read by anyone who has it. Keep it private, or make a separate calendar for the brain.
 
 ### Creating events ("Hey Maestro, create a meeting tomorrow at 2pm with John")
-Maestro asks for anything missing (day, time, length, topic, which calendar), then creates the event.
+Maestro asks for anything missing (day, time, length, title, location, description), then asks **which calendar** when you have more than one connected ("1) Mac / iCloud Calendar, 2) Google Calendar, 3) Outlook Calendar, 4) Maestro"). Answer with the number or the name ("Google", "the Mac one").
 - **iCloud (and any CalDAV calendar: Fastmail, Nextcloud…):** on the iCalendar card, also enter your Apple ID and an **app-specific password** (appleid.apple.com → Sign-In and Security → App-Specific Passwords). Maestro finds your calendars and can write to any of them. For other CalDAV servers, fill in the server address too.
-- **Google Calendar and Outlook** only allow writing through a sign-in app (OAuth). Connect them in Claude Desktop (Settings → Connectors) and ask Claude there; Claude can use Maestro's `create_event` tool or the Google/Microsoft connector.
+- **Google Calendar and Outlook** only allow writing through a sign-in app (OAuth). The event is filed under that calendar in Maestro straight away (feed, Calendar page, answers). To copy it into Google or Outlook itself, connect them in Claude Desktop (Settings → Connectors) and run **+ → Maestro → Sync my new events into my calendars**; Claude creates each one and marks it synced.
 - Without any of these, events go to your **Maestro calendar**. It shows everywhere in Maestro, and Apple Calendar or Outlook on the same computer can subscribe to `http://localhost:4141/calendar.ics`.
 
 ### New events in the feed

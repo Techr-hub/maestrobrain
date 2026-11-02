@@ -51,7 +51,7 @@ async function list({ profile, days = 7 } = {}) {
   }
   // events Maestro created (skip ones already coming back through a live calendar link)
   const liveUids = new Set(events.filter((e) => e.uid).map((e) => e.uid));
-  for (const e of created.list({ profile: prof })) if (!liveUids.has(e.uid)) events.push({ ...e, source: 'maestro', created: true });
+  for (const e of created.list({ profile: prof })) if (!liveUids.has(e.uid)) events.push({ ...e, source: e.calendarFor && conns[e.calendarFor] ? e.calendarFor : 'maestro', created: true });
   events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to);
   events.sort((a, b) => new Date(a.start) - new Date(b.start));
   return events;

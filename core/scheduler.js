@@ -137,7 +137,7 @@ function nextQuestion(s, targets, name) {
   if (s.title == null) return { slot: 'title', q: `What should I call it? Say "skip" and I'll call it "${defaultTitle(s)}".` };
   if (s.location == null) return { slot: 'location', q: 'Where is it? An address, a room or a video link, or say "skip".' };
   if (s.notes == null) return { slot: 'notes', q: 'Any description or notes to add? Or say "skip".' };
-  if (!s.target && targets.length > 1) return { slot: 'target', q: `Which calendar: ${targets.map((t, i) => `${i + 1}) ${t.name}${t.via && t.id !== 'maestro' ? ` (${t.via})` : ''}`).join(', ')}?` };
+  if (!s.target && targets.length > 1) return { slot: 'target', q: `Which calendar should I add it to: ${targets.map((t, i) => `${i + 1}) ${t.pending || t.id === 'maestro' ? t.name : `${t.name} (${t.via})`}`).join(', ')}?` };
   return null;
 }
 
@@ -163,7 +163,10 @@ function answer(slot, text, s, targets, now) {
   if (slot === 'title' && s.title == null) s.title = /^(skip|no|nope|nothing|none|no title|that'?s fine|fine|default|just that|keep it)\b/.test(m) ? '' : text.trim().replace(/^(it'?s |it is |about |re |regarding )/i, '').replace(/[.!?]+$/, '').replace(/^\w/, (c) => c.toUpperCase());
   if (slot === 'target' && !s.target) {
     const n = Number((m.match(/\b(\d)\b/) || [])[1] || { first: 1, second: 2, third: 3, fourth: 4 }[(m.match(/\b(first|second|third|fourth)\b/) || [])[1]] || 0);
-    const hit = n ? targets[n - 1] : targets.find((t) => m.includes(t.name.toLowerCase()) || (t.via && m.includes(t.via.toLowerCase().split(' ')[0])));
+    const ALIAS = { icalendar: /\b(mac|apple|icloud|ical|icalendar|iphone)\b/, gcal: /\b(google|gmail|gcal)\b/, outlook: /\b(outlook|microsoft|office|365|exchange)\b/ };
+    const hit = n ? targets[n - 1] : targets.find((t) => m.includes(t.name.toLowerCase()) && !t.pending)
+      || targets.find((t) => t.id === 'maestro' ? /\b(maestro|mistro|maestra|its own|your own|local)\b/.test(m) : t.connector && ALIAS[t.connector] && ALIAS[t.connector].test(m))
+      || targets.find((t) => m.includes(t.name.toLowerCase()));
     if (hit) s.target = hit.id;
   }
 }
@@ -183,9 +186,10 @@ async function finish(s, targets, profile, name) {
     const day = (await calendar.list({ profile, days: 14 })).filter((e) => e.uid !== r.event.uid && new Date(e.start) < end && new Date(e.end) > start);
     if (day.length) clash = ` Heads up, ${name}: it overlaps "${day[0].title}" at ${fmtTime(day[0].start)}.`;
   } catch { /* calendar read is best-effort */ }
-  const where = r.warning ? 'your calendar' : t.id === 'maestro' ? 'your Maestro calendar' : `your "${t.name}" calendar (${t.via})`;
+  const failed = r.warning && !t.pending;
+  const where = failed ? 'your calendar' : t.id === 'maestro' ? 'your Maestro calendar' : t.pending ? `your ${t.name}` : `your "${t.name}" calendar (${t.via})`;
   const line = `Creating "${title}" for ${fmtDay(start)}, ${fmtTime(start)} to ${fmtTime(end)}${s.attendees && s.attendees.length ? `, with ${s.attendees.join(' and ')}` : ''}${s.location ? `, at ${s.location}` : ''}, in ${where}.`;
-  return { reply: `${line} ${r.warning ? r.warning : "Done, it's on your calendar."}${clash}`, event: r.event };
+  return { reply: `${line} ${failed ? r.warning : "Done, it's on your calendar."}${clash}${!failed && r.warning ? `\n\n_${r.warning}_` : ''}`, event: r.event };
 }
 
 // Called for every chat message. Returns null when this isn't about creating an event.
