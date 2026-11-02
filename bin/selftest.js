@@ -64,6 +64,13 @@ async function main() {
     await post('/tasks', { text: 'Reply to the venue', section: 'email' });
     const ts = await (await fetch(base + '/tasks')).json();
     ok('Tasks page: tasks carry their brain section (tagged or worked out)', ts.some((t) => t.text === 'Reply to the venue' && t.section === 'email') && ts.some((t) => t.text === 'Brain Builder Workshop: Share the recording with attendees' && t.section === 'calendar') && ts.some((t) => /^Call /.test(t.text) && t.section === 'calls'));
+    const before = (await (await fetch(base + '/feed?limit=400')).json());
+    const victim = (before.items || before).find((i) => i.source !== 'system');
+    await post('/feed/dismiss', { id: victim.id });
+    const { add: feedAdd } = require('../core/feed');
+    const back = feedAdd({ ...victim, id: undefined });
+    const after2 = (await (await fetch(base + '/feed?limit=400')).json());
+    ok('feed: the X clears a card and it never comes back', !(after2.items || after2).some((i) => i.title === victim.title && i.source === victim.source) && back === null);
     const fd0 = await (await fetch(base + '/feed?limit=400')).json();
     ok('Insight cards: none from demo data', !(fd0.items || fd0).some((i) => i.category === 'INSIGHT' && !i.reminder));
     const tmr = new Date(Date.now() + 86400000); const tmrIso = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;

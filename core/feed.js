@@ -22,7 +22,7 @@ function tidy(items) {
 }
 function readAll() {
   if (!fs.existsSync(FEED_FILE)) return seed();
-  try { return tidy(JSON.parse(fs.readFileSync(FEED_FILE, 'utf8'))); } catch { return seed(); }
+  try { return tidy(JSON.parse(fs.readFileSync(FEED_FILE, 'utf8'))).filter((i) => !isDismissed(i)); } catch { return seed(); }
 }
 
 function writeAll(items) {
@@ -37,7 +37,7 @@ function writeAll(items) {
 
 function seed() {
   const now = Date.now();
-  const items = demo.SEED.map((s) => normalize({ ...s, ts: now - s.minutesAgo * 60000, demo: true }));
+  const items = demo.SEED.map((s) => normalize({ ...s, ts: now - s.minutesAgo * 60000, demo: true })).filter((i) => !isDismissed(i));
   items.sort((a, b) => b.ts - a.ts);
   restorePins(items);
   writeAll(items);
@@ -60,11 +60,38 @@ function savedPins() {
 }
 const sameCard = (a, b) => a.id === b.id || (a.externalId && a.externalId === b.externalId) || (a.source === b.source && a.title === b.title && a.profile === b.profile);
 function restorePins(items) {
-  for (const p of savedPins()) {
+  for (const p of savedPins().filter((x) => !isDismissed(x))) {
     const hit = items.find((i) => sameCard(i, p));
     if (hit) Object.assign(hit, { pinned: true, pinnedAt: p.pinnedAt || Date.now() });
     else items.push({ ...p, pinned: true });
   }
+}
+
+// Cleared cards (Ryan, 2026-11-02): the X on a card removes it for good. Its key is remembered (data/dismissed.json,
+// plus <vault>/.maestro and ~/.maestro like pins) so calendar re-reads, demo streams and resets never bring it back.
+const DISMISSED_FILE = path.join(config.DATA_DIR, 'dismissed.json');
+const cardKey = (i) => i.externalId || `${i.source}|${i.profile || ''}|${i.title}`;
+let dismissedCache = null;
+function dismissedFiles() { return [DISMISSED_FILE, ...pinFiles().map((f) => f.replace(/pins\.json$/, 'dismissed.json'))]; }
+function dismissed() {
+  if (dismissedCache) return dismissedCache;
+  dismissedCache = new Set();
+  for (const f of dismissedFiles()) { try { JSON.parse(fs.readFileSync(f, 'utf8')).keys.forEach((k) => dismissedCache.add(k)); } catch { /* none yet */ } }
+  return dismissedCache;
+}
+function isDismissed(i) { return dismissed().has(cardKey(i)); }
+function dismiss(id) {
+  const items = readAll();
+  const it = items.find((i) => i.id === id);
+  if (!it) return null;
+  const set = dismissed();
+  set.add(cardKey(it));
+  const body = JSON.stringify({ savedAt: Date.now(), keys: [...set].slice(-5000) });
+  for (const f of dismissedFiles()) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, body); } catch { /* read-only copy */ } }
+  writeAll(items.filter((i) => i !== it));
+  if (it.pinned) savePins(items.filter((i) => i !== it));
+  bus.emit('remove', it);
+  return { id: it.id, dismissed: true };
 }
 
 function normalize(raw) {
@@ -109,6 +136,7 @@ function list({ profile, source, category, limit = 60 } = {}) {
 }
 
 function add(raw, { emit = true } = {}) {
+  if (isDismissed(raw)) return null; // cleared with the card's X
   const items = readAll();
   if (raw.externalId) {
     const had = items.find((i) => i.externalId === raw.externalId);
@@ -259,4 +287,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { list, add, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

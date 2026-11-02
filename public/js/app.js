@@ -536,6 +536,18 @@ function sourceChip(i) {
 const SECTION_OF = { MEETING: 'calendar', EMAIL: 'email', CONVERSATION: 'messages', SMS: 'messages', CALL: 'calls', PROJECT: 'projects', TASK: 'projects' };
 function sectionOf(item) { return SECTION_OF[item.category] || (CAL_MARK[item.source] ? 'calendar' : ''); }
 
+// The X on a card clears it from the feed for good (Ryan, 2026-11-02). One listener covers every feed list.
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-dismiss]');
+  if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  const id = b.dataset.dismiss, card = b.closest('.activity');
+  if (card) { card.classList.add('dismissing'); await new Promise((r) => setTimeout(r, 180)); }
+  S.feed = S.feed.filter((x) => x.id !== id);
+  renderFeed(false);
+  try { await api('/feed/dismiss', { id }); } catch (err) { toast('Could not clear it: ' + err.message, 'error'); }
+}, true);
+
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
@@ -545,7 +557,7 @@ function feedItemHtml(i, isNew) {
     <div class="activity-details">
       <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span><button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${icon('pin')}${i.pinned ? '<span>Pinned</span>' : ''}</button></div>
       <div class="a-title">${esc(i.title)}</div>
-      <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}</div>
+      <div class="a-cat">${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span><button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
@@ -827,6 +839,7 @@ function connectStream() {
     if (brain) brain.pulseSource(item.source, cat.c);
     if (item.notePath) loadGraph();
   });
+  es.addEventListener('feed-remove', (e) => { const { id } = JSON.parse(e.data); if (S.feed.some((x) => x.id === id)) { S.feed = S.feed.filter((x) => x.id !== id); renderFeed(false); } });
   es.addEventListener('feed-update', (e) => { // e.g. a removed calendar event: its cards turn grey
     const item = JSON.parse(e.data);
     if (!S.feed.some((x) => x.id === item.id)) return;

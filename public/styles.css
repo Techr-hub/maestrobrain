@@ -588,3 +588,9 @@ button.wk-dh:hover b { color: var(--cyan); }
 .wk-ev.wide.short { flex-direction: row; align-items: center; gap: 10px; padding-top: 2px; padding-bottom: 2px; }
 .wk-ev.wide.short b { flex: 0 1 auto; padding-right: 0; }
 .wk-ev.wide.short small { flex: none; }
+/* X to clear a card from the feed (Ryan, 2026-11-02) */
+.dismiss-btn { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--dim); cursor: pointer; opacity: .55; transition: opacity .15s, color .15s, border-color .15s, background .15s; }
+.dismiss-btn svg { width: 13px; height: 13px; }
+.activity:hover .dismiss-btn, .dismiss-btn:focus-visible { opacity: 1; }
+.dismiss-btn:hover { color: #ff6b81; border-color: rgba(255,107,129,.45); background: rgba(255,77,109,.1); }
+.activity.dismissing { opacity: 0; transform: translateX(16px); transition: opacity .18s, transform .18s; }
