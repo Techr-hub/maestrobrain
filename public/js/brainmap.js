@@ -263,7 +263,7 @@ export class BrainMap {
       if (dx * dx + dy * dy < rad * rad && z < bz) { bz = z; best = item; }
     };
     for (const n of this.nodes) if (n.sp) consider({ ...n, kind: 'note' }, n.sp.x, n.sp.y, Math.max(9, n.sr + 5), n.sp.z);
-    for (const s of this.sources) if (s.sp) consider({ ...s, kind: s.hub ? 'hub' : 'source', label: s.name }, s.sp.x, s.sp.y, Math.max(s.parent ? 10 : 14, (s.parent ? 11 : 17) * s.sp.k), s.sp.z - (s.parent ? 1100 : 1000));
+    for (const s of this.sources) if (s.sp) consider({ ...s, kind: s.hub ? 'hub' : 'source', label: s.name }, s.sp.x, s.sp.y, Math.max(s.parent ? 11.5 : 17.5, (s.parent ? 12.6 : 21) * s.sp.k), s.sp.z - (s.parent ? 1100 : 1000));
     this.hover = best;
     this.c.style.cursor = best ? 'pointer' : 'grab';
     if (this.tooltip) {
@@ -427,7 +427,7 @@ export class BrainMap {
   }
 
   drawSource(s, core) {
-    const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 : 1), off = s.connected === false;
+    const sat = !!s.parent, ctx = this.ctx, p = s.sp, k = clamp(Math.sqrt(p.k), 0.6, 2) * (sat ? 0.62 * 1.15 : 1.25), off = s.connected === false;
     const fog = clamp(1 - p.z / 1200, 0.45, 1) * (off && !sat ? 0.5 : 1);
     const anchor = sat ? (this.hubIndex.get(s.parent) || {}).sp || core : core;
     // Lines: sub-category → hub, and hub → brain core. Solid, in the hub colour, and they glow while a notification travels.
