@@ -15,9 +15,14 @@ bus.setMaxListeners(50);
 let idCounter = 0;
 const newId = () => Date.now().toString(36) + '-' + (idCounter++).toString(36) + Math.random().toString(36).slice(2, 6);
 
+// Ryan (2026-11-02): Insight cards are only reminders for tasks you created that are coming due. Older demo
+// Insight cards are dropped, and workflow results show as Brief cards.
+function tidy(items) {
+  return items.filter((i) => i.category !== 'INSIGHT' || i.reminder || i.workflow).map((i) => (i.category === 'INSIGHT' && i.workflow ? { ...i, category: 'BRIEF' } : i));
+}
 function readAll() {
   if (!fs.existsSync(FEED_FILE)) return seed();
-  try { return JSON.parse(fs.readFileSync(FEED_FILE, 'utf8')); } catch { return seed(); }
+  try { return tidy(JSON.parse(fs.readFileSync(FEED_FILE, 'utf8'))); } catch { return seed(); }
 }
 
 function writeAll(items) {

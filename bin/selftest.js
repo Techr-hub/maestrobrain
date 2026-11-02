@@ -61,6 +61,13 @@ async function main() {
     const tk = await post('/tasks/event', { event: 'New: Brain Builder Workshop', note: 'Share the recording with attendees', items: 'Send the slides by Friday\n- Book the room for December', priority: 'High' });
     const tl = await (await fetch(base + '/tasks')).json();
     ok('Create Task on an event: note and action items join the task list, with spoken deadlines', tk.count === 3 && tl.some((t) => t.text === 'Brain Builder Workshop: Share the recording with attendees' && t.priority === 'High') && tl.some((t) => t.text === 'Send the slides (Brain Builder Workshop)' && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) && tl.some((t) => t.text === 'Book the room for December (Brain Builder Workshop)' && !t.due));
+    const fd0 = await (await fetch(base + '/feed?limit=400')).json();
+    ok('Insight cards: none from demo data', !(fd0.items || fd0).some((i) => i.category === 'INSIGHT' && !i.reminder));
+    const tmr = new Date(Date.now() + 86400000); const tmrIso = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;
+    await post('/tasks', { text: 'Send the workshop recap', due: tmrIso });
+    const fd1 = await (await fetch(base + '/feed?limit=400')).json();
+    const rem = (fd1.items || fd1).filter((i) => i.category === 'INSIGHT');
+    ok('Insight cards: a reminder when a task you created is due tomorrow (and not for demo tasks)', rem.some((i) => i.title === 'Due tomorrow: Send the workshop recap') && !rem.some((i) => /Write PRD/.test(i.title)));
     const f1 = await post('/chat', { message: 'When is the design critique?' });
     const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
     ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));

@@ -479,7 +479,8 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     sources = [rel]; providerUsed = 'memory'; actions.push({ type: 'memory', path: rel });
   } else if (taskMatch) {
     const line = tasks.add(taskMatch[1]);
-    reply = `Added to [[Inbox]]: ${line.replace('- [ ] ', '')}`;
+    try { require('./reminders').check(); } catch { /* reminders are best-effort */ }
+    reply = `Added to [[Inbox]]: ${line.replace('- [ ] ', '').replace(/ ➕ \S+/, '')}`;
     sources = ['Tasks/Inbox.md']; providerUsed = 'tasks'; actions.push({ type: 'task' });
   } else {
     const ctx = await gatherContext(text, profile);

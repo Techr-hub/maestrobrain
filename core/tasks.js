@@ -4,13 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const vault = require('./vault');
 
+function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 const TASK_RE = /^(\s*)[-*] \[( |x|X)\] (.+)$/;
 
 function parseLine(text) {
   const due = (text.match(/(?:📅|due:)\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const priority = /#(high|urgent|p1)\b|⏫|🔺/i.test(text) ? 'High' : /#(low|p3)\b|🔽/i.test(text) ? 'Low' : /#(medium|p2)\b|🔼/i.test(text) ? 'Medium' : '';
-  const clean = text.replace(/(?:📅|due:)\s*\d{4}-\d{2}-\d{2}/g, '').replace(/[⏫🔺🔼🔽]/g, '').replace(/#(high|urgent|p1|p2|p3|low|medium)\b/gi, '').trim();
-  return { text: clean, due, priority };
+  const created = (text.match(/➕\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
+  const clean = text.replace(/➕\s*\d{4}-\d{2}-\d{2}/g, '').replace(/(?:📅|due:)\s*\d{4}-\d{2}-\d{2}/g, '').replace(/[⏫🔺🔼🔽]/g, '').replace(/#(high|urgent|p1|p2|p3|low|medium)\b/gi, '').trim();
+  return { text: clean, due, priority, created };
 }
 
 function list({ profile, includeDone = false } = {}) {
@@ -52,6 +54,7 @@ function add(text, { due, priority, file, indent = '' } = {}) {
   let line = `${indent}- [ ] ${text.trim().replace(/\s*\n\s*/g, ' ')}`;
   if (priority) line += ` #${priority.toLowerCase()}`;
   if (due) line += ` 📅 ${due}`;
+  line += ` ➕ ${iso(new Date())}`; // created date: marks tasks you made (Maestro's reminders skip the demo vault's own tasks)
   const root = vault.vaultRoot();
   const full = vault.safeJoin(root, file);
   if (!fs.existsSync(full)) {
@@ -67,7 +70,6 @@ function add(text, { due, priority, file, indent = '' } = {}) {
 // A deadline picked in the form wins; otherwise one said in the text ("by Friday", "due Nov 5") is used,
 // and an action item that names its own date keeps it.
 const DUE_WORDS = /\b(by|due|before|until|deadline|no later than|on)\b[^.;\n]*?\b(today|tonight|tomorrow|day after tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|in (\d+|a|one|two|three) (days?|weeks?)|(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2}|\d{1,2}(st|nd|rd|th)? (of )?(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})\b/i;
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 function dueIn(text, now = new Date()) {
   const m = String(text || '').toLowerCase().match(DUE_WORDS);
   if (!m) return { due: '', text };
@@ -92,4 +94,4 @@ function addForEvent({ event = '', note = '', items = '', due = '', priority = '
   return { lines, due: first, count: lines.length };
 }
 
-module.exports = { list, toggle, add, addForEvent, splitItems, dueIn };
+module.exports = { list, toggle, add, addForEvent, splitItems, dueIn, parseLine };

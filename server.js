@@ -12,6 +12,7 @@ const feed = require('./core/feed');
 const calwatch = require('./core/calwatch');
 const calendar = require('./core/calendar');
 const tasks = require('./core/tasks');
+const reminders = require('./core/reminders');
 const agents = require('./core/agents');
 const packs = require('./core/packs');
 const brain = require('./core/brain');
@@ -123,8 +124,8 @@ route('POST', '/api/chat/save', async (_q, body) => ({ path: brain.saveAnswer(bo
 route('GET', '/api/conversations', async () => brain.loadConversations());
 
 route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().profile, includeDone: q.get('done') === '1' }));
-route('POST', '/api/tasks', async (_q, body) => ({ line: tasks.add(body.text, body) }));
-route('POST', '/api/tasks/event', async (_q, body) => tasks.addForEvent(body || {}));
+route('POST', '/api/tasks', async (_q, body) => { const line = tasks.add(body.text, body); reminders.check(); return { line }; });
+route('POST', '/api/tasks/event', async (_q, body) => { const r = tasks.addForEvent(body || {}); reminders.check(); return r; });
 route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(body.path, body.line) }));
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7), from: q.get('from') || undefined, to: q.get('to') || undefined }));
@@ -354,6 +355,9 @@ function start(port) {
   // calendars are checked every minute so new events reach the feed quickly
   setInterval(() => calwatch.check().catch(() => {}), 60000);
   calwatch.check().catch(() => {});
+  // task reminders (the only Insight cards): checked every 5 minutes, and right after a task is added
+  setInterval(() => { try { reminders.check(); } catch { /* best-effort */ } }, 5 * 60000);
+  try { reminders.check(); } catch { /* best-effort */ }
   feed.pollLive().catch(() => {});
 
   return new Promise((resolve, reject) => {

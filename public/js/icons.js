@@ -87,6 +87,7 @@ export const CATEGORY = {
   CALL: { icon: 'phone', c: '#ff7a45', pill: '#3a1608', text: '#ffb08f' },
   SMS: { icon: 'message-circle', c: '#ff4d8d', pill: '#3a0b1f', text: '#ff9cc0' },
   PROJECT: { icon: 'folder', c: '#00f2af', pill: '#00342d', text: '#00e5ff' },
+  BRIEF: { icon: 'file-text', c: '#00f2af', pill: '#00342d', text: '#7fffd9' }, // workflow results (morning brief…)
   INSIGHT: { icon: 'lightbulb', c: '#ffe14d', pill: '#33300a', text: '#ffe98a' },
 };
 

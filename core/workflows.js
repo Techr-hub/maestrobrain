@@ -35,7 +35,7 @@ async function run(id) {
   const daily = brain.ensureDaily();
   vault.writeNote(daily, `\n## ${def.name} (${brain.timeOf(Date.now())})\n\n${content}\n`, { append: true });
   const firstLine = content.split('\n').find((l) => l.trim()) || def.name;
-  const item = feed.add({ source: 'system', profile: config.load().profile, category: 'INSIGHT', title: `${def.name} ready`, quote: firstLine.replace(/\*\*/g, '').slice(0, 160), summary: `Saved to ${daily.replace('.md', '')}`, workflow: id, notePath: daily });
+  const item = feed.add({ source: 'system', profile: config.load().profile, category: 'BRIEF', title: `${def.name} ready`, quote: firstLine.replace(/\*\*/g, '').slice(0, 160), summary: `Saved to ${daily.replace('.md', '')}`, workflow: id, notePath: daily });
   lastRun[id] = Date.now();
   return { id, content, notePath: daily, item };
 }

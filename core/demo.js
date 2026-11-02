@@ -21,7 +21,6 @@ const SEED = [
   { source: 'slack', profile: 'business', minutesAgo: 41, category: 'CONVERSATION', title: '#eng-mobile: Marcus flagged a blocker', quote: '"Payment SDK v5 migration is blocking the release. Need a scope call today."', summary: 'Blocker on Sprint 24 goal', priority: 'High', unread: true, actions: ['Decide scope', 'Log decision'] },
   { source: 'email', profile: 'business', minutesAgo: 55, category: 'EMAIL', title: 'Support escalation: Northwind cannot export reports', quote: '"Third ticket this week. Customer threatens to churn."', summary: 'Linked to known bug EXP-77', priority: 'High', deadline: 'SLA 4h' },
   { source: 'system', profile: 'business', minutesAgo: 70, category: 'TASK', title: 'Write PRD: Smart Notifications', quote: 'From Tasks/Inbox.md', summary: 'Draft started in Projects/Smart Notifications PRD', priority: 'High', deadline: 'Due today' },
-  { source: 'system', profile: 'business', minutesAgo: 95, category: 'INSIGHT', title: 'Pattern detected', quote: '3 customers asked about offline mode this week', summary: 'Consider adding to Q3 roadmap discussion' },
   { source: 'icalendar', profile: 'business', minutesAgo: 120, category: 'MEETING', title: '1:1 with Jordan moved to 3:00 PM', quote: 'Topic: career growth and the API platform handoff', summary: 'Last 1:1 notes in People/Jordan Patel' },
 
   // ---------------- Personal ----------------
@@ -30,7 +29,6 @@ const SEED = [
   { source: 'icalendar', profile: 'personal', minutesAgo: 30, category: 'MEETING', title: 'Gym: Leg day at 6:30 PM', quote: 'Streak: 2 sessions this week', summary: 'Goal is 4 per week' },
   { source: 'twilio_calls', profile: 'personal', minutesAgo: 48, category: 'CALL', title: 'Missed call from Dr. Patel’s office', quote: 'Voicemail: "Reminder to book your annual check-up."', summary: 'Booking line closes at 5 PM', priority: 'Medium', deadline: 'Today 5 PM' },
   { source: 'gmail', profile: 'personal', minutesAgo: 80, category: 'EMAIL', title: 'Passport renewal reminder', quote: 'Your passport expires in 4 months', summary: 'Needed for September trip', priority: 'Medium', deadline: 'Renew by Fri' },
-  { source: 'system', profile: 'personal', minutesAgo: 110, category: 'INSIGHT', title: 'Wellbeing check', quote: 'You worked past 9 PM three nights this week', summary: 'Protect Thursday evening?' },
 
   // ---------------- Role pack sources ----------------
   { source: 'linear', profile: 'business', minutesAgo: 12, category: 'TASK', title: 'MOB-142 blocked: Payment SDK v5 migration', quote: 'Assignee: Marcus Lee • Sprint 24', summary: 'Blocking 2 other issues', priority: 'High', deadline: 'Sprint ends Fri', pack: 'product-manager' },
@@ -51,7 +49,6 @@ const STREAM = [
   { source: 'gcal', profile: 'business', category: 'MEETING', title: 'New invite: Design critique, Thu 2 PM', quote: 'From Sarah Kim • Checkout v3', summary: 'No conflicts', actions: ['Accept'] },
   { source: 'twilio_calls', profile: 'business', category: 'CALL', title: 'Call from Jordan Patel (2 min)', quote: 'Transcript: "Quick heads-up, the API partner wants a demo next week."', summary: 'Follow-up task created' },
   { source: 'email', profile: 'business', category: 'EMAIL', title: 'Customer feedback digest', quote: '12 new NPS responses • score 41 (+3)', summary: 'Top theme: notification overload' },
-  { source: 'system', profile: 'business', category: 'INSIGHT', title: 'Meeting load warning', quote: 'Thursday is 82% booked', summary: 'Block focus time for the PRD?' },
   { source: 'slack', profile: 'business', category: 'CONVERSATION', title: '#eng-mobile: Marcus', quote: '"Release candidate is green except payments."', summary: 'Blocker still open' },
   { source: 'linear', profile: 'business', category: 'TASK', title: 'MOB-150 created: Notification quiet hours', quote: 'Created by Sarah Kim from PRD comments', summary: 'Needs estimate', pack: 'product-manager' },
   { source: 'figma', profile: 'business', category: 'CONVERSATION', title: 'Sarah resolved 2 comments on Checkout v3', quote: 'Loading states added', summary: '2 comments left before handoff', pack: 'designer' },
