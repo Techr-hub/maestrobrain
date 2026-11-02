@@ -739,7 +739,7 @@ function openFeedItem(item) {
       <button class="btn primary" data-ask>${icon('sparkles')} Ask ${esc(S.state.config.assistantName)} about this</button>
     </div>`, {
     onMount: (el, close) => {
-      el.querySelector('[data-ask]').onclick = () => { close(); ask(`Help me with this ${item.category.toLowerCase()} from ${item.sourceName}: "${item.title}". ${item.quote || ''} What should I do?`); };
+      el.querySelector('[data-ask]').onclick = () => { close(); if (item.eventKey && !item.removed) return ask(`Tell me about ${item.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, '')}`); ask(`Help me with this ${item.category.toLowerCase()} from ${item.sourceName}: "${item.title}". ${item.quote || ''} What should I do?`); };
       el.querySelector('[data-task]').onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined }); toast('Task added'); close(); };
       const n = el.querySelector('[data-note]'); if (n) n.onclick = (e) => { e.preventDefault(); close(); openNote(item.notePath); };
     },

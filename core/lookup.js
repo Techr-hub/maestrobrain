@@ -169,18 +169,86 @@ function aboutAnswer(e) {
   const trim = (s) => (s.length > 220 ? s.slice(0, 217).replace(/\s+\S*$/, '') + '…' : s);
   const end = (s) => (/[.!?…]$/.test(s) ? s : s + '.');
   const first = end(trim(sentences[0]));
-  return `**${e.title}**, ${when}: ${first.charAt(0).toUpperCase() + first.slice(1)}${sentences[1] ? ' ' + end(trim(sentences[1])) : ''}`;
+  // Ryan (2026-11-02): two short sentences, then ask what they want to know.
+  return `**${e.title}**, ${when}: ${first.charAt(0).toUpperCase() + first.slice(1)}${sentences[1] ? ' ' + end(trim(sentences[1])) : ''}\n\nWhat would you like to know specifically?`;
+}
+
+// Follow-up questions answered from the event's description (Ryan, 2026-11-02): speakers, topics, cost, what to
+// bring, food, parking, dress code and links. strict: only with "it"/"this event" or the event's name. q: the question; line: what a matching line or section header says.
+const DETAILS = [
+  { key: 'speakers', label: 'who is speaking', q: /\b(speakers?|speaking|presenters?|presenting|hosts?|hosting|hosted|panel(ists?)?|instructors?|teach(ing|er)|facilitat\w*|who('?s| is| are)? (running|leading|giving|teaching|presenting|on stage)|who (will|is going to) (be )?(speak|talk|present|teach))\b/, line: /speak|presenter|presented by|present(ing|s)\b|host|panel|instructor|facilitat|featuring|led by|keynote|guest/i },
+  { key: 'topics', strict: true, label: 'the topics', q: /\b(topics?|cover(ed|ing|s)?|agenda|learn|talk(ing|ed)? about|discuss(ed|ing)?|program(me)?|run ?of ?show|outline|curriculum|what will (we|i|they|you) (do|learn|cover|build)|what('?s| is) (happening|planned))\b/, line: /topic|agenda|cover|learn|discuss|program|outline|curriculum|you('ll| will)|session|build|explore|walk ?through|hands-on|schedule/i },
+  { key: 'cost', strict: true, label: 'the price', q: /\b(cost|costs|price|pricing|how much|fee|fees|is it free|free to)\b/, line: /[$€£]\s?\d|\bfree\b|price|cost|fee\b|\bcad\b|\busd\b/i },
+  { key: 'bring', strict: true, label: 'what to bring', q: /\b(bring|prerequisites?|requirements?|need to (have|install|know)|(prepare|prep|get ready) for (it|this|that|the (event|workshop|session|class|meeting|talk))|before (it|the (event|workshop|session|class)))\b/, line: /bring|laptop|prerequisite|require|install|before (the|you)|prepare|need/i },
+  { key: 'food', label: 'food or drinks', q: /\b(food|lunch|dinner|breakfast|snacks?|drinks?|refreshments?|catering|pizza|coffee)\b/, line: /food|lunch|dinner|breakfast|snack|drink|refreshment|cater|pizza|coffee|beer|wine/i },
+  { key: 'parking', label: 'parking or directions', q: /\b(park(ing)?|transit|subway|directions|get there|getting there)\b/, line: /park|transit|subway|direction|entrance|floor|suite|buzz/i },
+  { key: 'dress', label: 'a dress code', q: /\b(dress( code)?|what (should|do) i wear|attire)\b/, line: /dress|attire|wear|casual|formal/i },
+  { key: 'links', strict: true, label: 'any links', q: /\b(links?|website|web ?page|url|join link|zoom link|stream|livestream)\b/, line: /https?:\/\//i },
+];
+// "this event", "the workshop", "it": the event the conversation is about.
+const FOCUS_REF = /\b(this|that|the|it'?s|its) (event|meeting|workshop|session|talk|conference|class|webinar|meetup|seminar|course|one)\b|\b(it|its|there)\b/;
+
+// The description as lines, with "Header:" sections gathered so "Speakers:" followed by names reads as one line.
+function descLines(e) {
+  const raw = require('./feed').eventText(e);
+  const out = [];
+  let head = null;
+  for (const l0 of raw.split('\n')) {
+    const l = l0.replace(/^\s*([-*•]|\d+[.)])\s+/, '').replace(/[*_`#]/g, '').trim();
+    if (!l) { head = null; continue; }
+    if (/^(created by maestro|join (zoom|microsoft teams|with google meet)|meeting id|passcode|password|dial|one tap|find your local)/i.test(l)) continue;
+    if (/^#{1,}\s/.test(l0.trim()) || /^[^:]{2,40}:$/.test(l)) { head = { head: l.replace(/:$/, ''), items: [] }; out.push(head); continue; }
+    if (head && /^\s*([-*•]|\d+[.)])\s+/.test(l0)) { head.items.push(l); continue; }
+    if (head && !head.items.length) { head.items.push(l); continue; }
+    head = null; out.push({ head: '', items: [l] });
+  }
+  return out.filter((x) => x.items.length).map((x) => ({ head: x.head, text: x.items.length > 1 ? `${x.items.slice(0, -1).join(', ')} and ${x.items[x.items.length - 1]}` : x.items[0] }));
+}
+function detailAnswer(e, d) {
+  const lines = descLines(e);
+  const noUrl = (t) => t.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').replace(/[:\s]+$/, '').trim();
+  let hits;
+  if (d.key === 'links') {
+    const urls = [...new Set((require('./feed').eventText(e).match(/https?:\/\/[^\s<>"')\]]+/g) || []).map((u) => u.replace(/[.,;:!?]+$/, '')))];
+    if (!urls.length) return `**${e.title}'s description has no links.**`;
+    return `**${e.title} links:** ${urls.slice(0, 4).map((u) => `[${u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 40)}](${u})`).join(', ')}.`;
+  }
+  // A section whose header names it ("Speakers:", "Agenda") wins; otherwise lines that mention it.
+  hits = lines.filter((x) => x.head && d.line.test(x.head)).map((x) => `${x.head}: ${x.text}`);
+  if (!hits.length) hits = lines.filter((x) => d.line.test(`${x.head} ${x.text}`)).map((x) => (x.head ? `${x.head}: ${x.text}` : x.text));
+  hits = hits.map(noUrl).filter((t) => t.length > 2);
+  if (!hits.length) return `**${e.title}'s description doesn't mention ${d.label}.** The organiser's event page may have more.`;
+  const end = (t) => (/[.!?…]$/.test(t) ? t : t + '.');
+  const trim = (t) => (t.length > 240 ? t.slice(0, 237).replace(/\s+\S*$/, '') + '…' : t);
+  return `**${e.title}:** ${hits.slice(0, 2).map((t) => end(trim(t))).join(' ')}`;
+}
+// The event this question is about: named in it, or the one the conversation is on ("this event", "who's speaking?").
+function eventFor(q, ctx, { loose = false } = {}) {
+  const a = matchEvents(q.m, ctx.events || []);
+  if (a && (a.events.length || a.past) && a.byTitle) return a.events[0] || a.past;
+  if (ctx.focus && (FOCUS_REF.test(q.m) || (loose && !a))) return ctx.focus;
+  // "Tell me about this event" with nothing discussed yet: the event on now, else the next one.
+  if (/\b(this|the) (event|meeting|workshop|session|talk|conference|webinar|meetup)\b/.test(q.m) && !a) {
+    const now = Date.now(), evs = (ctx.events || []).filter((e) => new Date(e.end) > now).sort((x, y) => new Date(x.start) - new Date(y.start));
+    return evs.find((e) => new Date(e.start) <= now) || evs[0] || null;
+  }
+  return null;
 }
 
 function find(message, ctx) {
   const q = parse(message);
   if (TICKETS.test(q.m)) {
-    const a = matchEvents(q.m, ctx.events || []);
-    if (a && (a.events.length || a.past) && a.byTitle) return { kind: 'tickets', q, subject: [], event: a.events[0] || a.past };
+    const ev = eventFor(q, ctx, { loose: true });
+    if (ev) return { kind: 'tickets', q, subject: [], event: ev };
+  }
+  const detail = DETAILS.find((d) => d.q.test(q.m));
+  if (detail) {
+    const ev = eventFor(q, ctx, { loose: !detail.strict || /\bwhat (should|do|can|must) (i|we) (need to )?bring\b/.test(q.m) }); // words like "bring" or "links" need "this event" or the event's name
+    if (ev) return { kind: 'detail', q, subject: [], event: ev, detail };
   }
   if (!q.past && ABOUT.test(q.m)) {
-    const a = matchEvents(q.m, ctx.events || []);
-    if (a && (a.events.length || a.past) && a.byTitle) return { kind: 'about', q, subject: [], event: a.events[0] || a.past };
+    const ev = eventFor(q, ctx);
+    if (ev) return { kind: 'about', q, subject: [], event: ev };
   }
   const r = findBasic(message, ctx);
   const t = !q.past && /\b(when|what time|what day|which day|where|how long until)\b/.test(q.m) ? matchEvents(q.m, ctx.events || []) : null;
@@ -232,6 +300,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
 
   if (r.kind === 'about') return aboutAnswer(r.event);
   if (r.kind === 'tickets') return ticketAnswer(r.event);
+  if (r.kind === 'detail') return detailAnswer(r.event, r.detail);
   if (r.kind === 'event') {
     if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 90 days.`;
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
@@ -283,7 +352,11 @@ function contextBlock(message, ctx) {
   const r = find(message, ctx);
   if (!r) return '';
   if (r.kind === 'tickets') { const l = ticketLinks(r.event); return `# EXACT MATCH FOR THIS QUESTION (recommend the ticket page)\n- EVENT ${r.event.title} · ${whenText(r.event.start)}\n  Ticket links: ${l.map((x) => `${x.name}: ${x.url}`).join(', ') || '(none in the event details)'}`; }
-  if (r.kind === 'about') { const e = r.event; return `# EXACT MATCH FOR THIS QUESTION (summarize what this event is about in at most 2 sentences, from its description)\n- EVENT ${e.title} · ${whenText(e.start)}${e.attendees && e.attendees.length ? ' · with ' + e.attendees.join(', ') : ''}${e.location ? ' · at ' + e.location : ''}\n  Description: ${eventDescription(e) || '(none)'}`; }
+  if (r.kind === 'detail') { const e = r.event; return `# EXACT MATCH FOR THIS QUESTION (answer about ${r.detail.label} for this event in at most 2 short sentences, using only its description; say so if it isn't there)\n- EVENT ${e.title} · ${whenText(e.start)}${e.location ? ' · at ' + e.location : ''}\n  Full description:\n${require('./feed').eventText(e) || '(none)'}`; }
+  if (r.kind === 'about') {
+    const e = r.event;
+    return `# EXACT MATCH FOR THIS QUESTION (summarize what this event is about in at most 2 short sentences from its description, then ask "What would you like to know specifically?")\n- EVENT ${e.title} · ${whenText(e.start)}${e.attendees && e.attendees.length ? ' · with ' + e.attendees.join(', ') : ''}${e.location ? ' · at ' + e.location : ''}\n  Summary: ${eventDescription(e) || '(none)'}\n  Full description (speakers, topics, tickets and other details for follow-up questions):\n${require('./feed').eventText(e) || '(none)'}`;
+  }
   const rows = r.kind === 'event'
     ? r.events.slice(0, 6).map((e) => `- EVENT ${e.title} · ${whenText(e.start)} · ${e.attendees ? 'with ' + e.attendees.join(', ') : ''}`)
     : r.items.slice(0, 8).map((i) => `- [${i.category}] ${i.sourceName} · ${whenText(i.ts)} · ${i.title}${i.quote ? ' — ' + i.quote : ''}`);

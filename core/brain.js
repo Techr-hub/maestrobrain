@@ -281,7 +281,7 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   if (deeper) return deeper;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
-  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
+  const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });
   if (direct) return direct;
   const m = message.toLowerCase();
   const name = cfg.user.name;
@@ -488,11 +488,19 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     const provider = agent && agent.provider && agent.provider !== 'default' ? agent.provider : cfg.llm.provider;
     providerUsed = provider;
     if (smallTalk(text, cfg) || converse(text, { ...ctx, history: conv.messages.slice(-12) }, cfg)) sources = []; // "good morning" or "I'm stressed" needs no notes
+    // The event this conversation is on, so "tell me about this event" and "who's speaking?" know which one (2 h).
+    const fe = conv.focusEvent && Date.now() - conv.focusEvent.at < 2 * 3600000 ? conv.focusEvent : null;
+    ctx.focus = fe ? (ctx.allEvents || ctx.events).find((e) => (e.uid && e.uid === fe.uid && String(e.start) === String(fe.start)) || (e.title === fe.title && String(e.start) === String(fe.start))) || (ctx.allEvents || ctx.events).find((e) => e.title === fe.title) || null : null;
+    try {
+      const hit = lookup.find(text, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus });
+      const ev = hit && (hit.event || (hit.kind === 'event' && hit.events && hit.events[0]));
+      if (ev) conv.focusEvent = { uid: ev.uid || '', title: ev.title, start: ev.start, at: Date.now() };
+    } catch { /* focus is a convenience */ }
     ctx.history = conv.messages.slice(-12); // so "say hi to everyone" remembers "I'm at my Brain Builder event"
     if (provider === 'demo') {
       reply = demoAnswer(text, ctx, cfg, profile, agent);
     } else {
-      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events });
+      const exact = lookup.contextBlock(text, { items: ctx.all, events: ctx.allEvents || ctx.events, focus: ctx.focus });
       const system = systemPrompt(cfg, profile, agent, skill, voice) + '\n\n' + (exact ? exact + '\n\n' : '') + contextText(ctx, cfg, profile);
       const history = conv.messages.slice(-8).map((x) => ({ role: x.role, content: x.content }));
       try {

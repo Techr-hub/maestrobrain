@@ -58,6 +58,9 @@ async function main() {
     const m6 = /Which calendar/.test(m5.reply) ? await post('/chat', { message: 'Maestro', conversationId: m1.conversationId }) : m5;
     ok('create meeting: asks which calendar when several are connected', /Which calendar should I add it to: 1\) .*Google Calendar.*Maestro\?/.test(m5.reply));
     ok('create meeting: asks what is missing, then creates it', /How long/.test(m1.reply) && /call it/.test(m2.reply) && /Where is it/.test(m3.reply) && /description/.test(m4.reply) && /^Creating "Pricing follow-up" for tomorrow .*2:00 PM to 2:45 PM, with John, at Zoom/.test(m6.reply));
+    const f1 = await post('/chat', { message: 'When is the design critique?' });
+    const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
+    ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));
     const r1 = await post('/chat', { message: 'Hey Maestro, cancel the design critique' });
     const r2 = await post('/chat', { message: 'yes', conversationId: r1.conversationId });
     const after = await (await fetch(base + '/calendar?days=7')).json();
@@ -89,7 +92,7 @@ async function main() {
     const tix = await post('/chat', { message: 'Where can I get tickets to the Brain Builder workshop?' });
     ok('tickets: points to the ticket link in the event description', /^\*\*Get your ticket to the event from the \[Luma event page\]\(https:\/\/lu\.ma\/brainbuilder\)/.test(tix.reply));
     const about = await post('/chat', { message: 'What is the Sprint 24 Review about?' });
-    ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
+    ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && /What would you like to know specifically\?$/.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').replace(/\s*What would you like to know specifically\?$/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();
@@ -102,6 +105,14 @@ async function main() {
     const et = require('../core/feed').eventText({ description: 'Bring a laptop\\nTickets: <a href="https://lu.ma/x">https://lu.ma/x</a> Q&amp;A' });
     ok('event cards: description kept as plain text with line breaks', et === 'Bring a laptop\nTickets: https://lu.ma/x Q&A');
     const lk = require('../core/lookup');
+    {
+      const t0 = Date.now() + 3 * 86400000;
+      const bb = { uid: 'bb', title: 'Brain Builder Workshop', start: new Date(t0).toISOString(), end: new Date(t0 + 7200000).toISOString(), attendees: [],
+        description: 'Build your own second brain in one evening.\\nYou leave with a working assistant.\\n\\nSpeakers:\\n- Ryan W\\n- Dana Li\\n\\nBring a laptop.\\nTickets: https://lu.ma/bb' };
+      const fc = { items: [], events: [bb], focus: bb };
+      ok('event details: "tell me about this event" gives 2 sentences, then asks what to know', /^\*\*Brain Builder Workshop\*\*.*one evening\. You leave with a working assistant\.\n\nWhat would you like to know specifically\?$/.test(lk.answer('tell me about this event', fc)));
+      ok('event details: follow-ups come from the description', /Ryan W and Dana Li/.test(lk.answer('who is speaking?', fc)) && /Bring a laptop/.test(lk.answer('what should I bring to it?', fc)) && lk.answer('prepare an update for stakeholders', fc) === null);
+    }
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];
     ok('event questions: finds an event by its name', /^\*\*Board prep is/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*Kids soccer practice is/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));
     const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
