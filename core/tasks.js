@@ -47,9 +47,9 @@ function toggle(relPath, line) {
   return !done;
 }
 
-function add(text, { due, priority, file } = {}) {
+function add(text, { due, priority, file, indent = '' } = {}) {
   if (!file) file = require('./config').load().profile === 'personal' ? 'Personal/Personal Tasks.md' : 'Tasks/Inbox.md';
-  let line = `- [ ] ${text.trim()}`;
+  let line = `${indent}- [ ] ${text.trim().replace(/\s*\n\s*/g, ' ')}`;
   if (priority) line += ` #${priority.toLowerCase()}`;
   if (due) line += ` 📅 ${due}`;
   const root = vault.vaultRoot();
@@ -62,4 +62,34 @@ function add(text, { due, priority, file } = {}) {
   return line;
 }
 
-module.exports = { list, toggle, add };
+// "Create Task" on an event card (Ryan, 2026-11-02): a note about the event plus its action items and deadlines.
+// The note becomes the main task ("Brain Builder Workshop: book the room") and each action item a sub-task under it.
+// A deadline picked in the form wins; otherwise one said in the text ("by Friday", "due Nov 5") is used,
+// and an action item that names its own date keeps it.
+const DUE_WORDS = /\b(by|due|before|until|deadline|no later than|on)\b[^.;\n]*?\b(today|tonight|tomorrow|day after tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|in (\d+|a|one|two|three) (days?|weeks?)|(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2}|\d{1,2}(st|nd|rd|th)? (of )?(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})\b/i;
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function dueIn(text, now = new Date()) {
+  const m = String(text || '').toLowerCase().match(DUE_WORDS);
+  if (!m) return { due: '', text };
+  const d = require('./scheduler').parseDate(m[0], now);
+  if (!d) return { due: '', text };
+  return { due: iso(d), text: String(text).replace(new RegExp(m[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '').replace(/\s+([,.;!?])/g, '$1').replace(/\s{2,}/g, ' ').replace(/[\s,;:-]+$/, '').trim() };
+}
+// "call Sam; send slides by Friday" / one per line / "- book the room" → ['call Sam', 'send slides by Friday', 'book the room']
+function splitItems(text) {
+  return String(text || '').split(/\n|;|(?:^|\s)(?:\d+[.)]|[-*•])\s+|,?\s*\b(?:and then|then also|also)\b\s*/i)
+    .map((x) => (x || '').replace(/^\s*([-*•]|\d+[.)])\s+/, '').replace(/^\s*(action items?|to ?dos?|tasks?)\s*:?\s*/i, '').trim()).filter((x) => x && x.length > 1);
+}
+function addForEvent({ event = '', note = '', items = '', due = '', priority = '' } = {}, now = new Date()) {
+  const title = String(event).replace(/^(New( recurring event)?|Moved|Cancelled): /, '').trim() || 'Event';
+  const n = dueIn(note, now);
+  const list = (Array.isArray(items) ? items : splitItems(items)).map((x) => dueIn(x, now));
+  const main = due || n.due || ''; // items without their own date share this one
+  const first = [main, ...list.map((x) => x.due)].filter(Boolean).sort()[0] || ''; // the main task is due with its earliest item
+  const lines = [add(`${title}: ${n.text || (list.length ? 'action items' : 'follow up')}`, { due: first, priority })];
+  // Each action item names its event, since the task list sorts by priority and date, not by event.
+  for (const x of list) lines.push(add(`${x.text} (${title})`, { due: x.due || main, priority, indent: '  ' }));
+  return { lines, due: first, count: lines.length };
+}
+
+module.exports = { list, toggle, add, addForEvent, splitItems, dueIn };

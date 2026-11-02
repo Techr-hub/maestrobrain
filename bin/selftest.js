@@ -58,6 +58,9 @@ async function main() {
     const m6 = /Which calendar/.test(m5.reply) ? await post('/chat', { message: 'Maestro', conversationId: m1.conversationId }) : m5;
     ok('create meeting: asks which calendar when several are connected', /Which calendar should I add it to: 1\) .*Google Calendar.*Maestro\?/.test(m5.reply));
     ok('create meeting: asks what is missing, then creates it', /How long/.test(m1.reply) && /call it/.test(m2.reply) && /Where is it/.test(m3.reply) && /description/.test(m4.reply) && /^Creating "Pricing follow-up" for tomorrow .*2:00 PM to 2:45 PM, with John, at Zoom/.test(m6.reply));
+    const tk = await post('/tasks/event', { event: 'New: Brain Builder Workshop', note: 'Share the recording with attendees', items: 'Send the slides by Friday\n- Book the room for December', priority: 'High' });
+    const tl = await (await fetch(base + '/tasks')).json();
+    ok('Create Task on an event: note and action items join the task list, with spoken deadlines', tk.count === 3 && tl.some((t) => t.text === 'Brain Builder Workshop: Share the recording with attendees' && t.priority === 'High') && tl.some((t) => t.text === 'Send the slides (Brain Builder Workshop)' && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) && tl.some((t) => t.text === 'Book the room for December (Brain Builder Workshop)' && !t.due));
     const f1 = await post('/chat', { message: 'When is the design critique?' });
     const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
     ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));

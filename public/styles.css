@@ -538,3 +538,13 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .ev-detail svg { width: 15px; height: 15px; color: var(--cyan); flex: none; }
 .ev-detail p { margin: 4px 0 0; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--line); padding-top: 10px; }
 @media (max-width: 760px) { .wk-head, .wk-allday, .wk-grid { grid-template-columns: 40px repeat(7, minmax(44px, 1fr)); } .wk { overflow-x: auto; } .wk-title { font-size: 24px; } }
+/* Create Task form on event cards (Ryan, 2026-11-02) */
+.et-ask { color: var(--soft); margin: 0 0 14px; line-height: 1.5; }
+.dict-wrap { position: relative; }
+textarea.input.et-text { min-height: 0; font-family: inherit; font-size: 14px; padding-right: 48px; }
+.dict-btn { position: absolute; right: 8px; top: 8px; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: rgba(0,45,76,.5); color: var(--cyan); display: grid; place-items: center; cursor: pointer; }
+.dict-btn svg { width: 16px; height: 16px; }
+.dict-btn.on { background: #ff4d6d; border-color: #ff4d6d; color: #fff; animation: dictPulse 1.2s ease-in-out infinite; }
+@keyframes dictPulse { 50% { box-shadow: 0 0 0 6px rgba(255,77,109,.25); } }
+.et-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .et-row { grid-template-columns: 1fr; } }

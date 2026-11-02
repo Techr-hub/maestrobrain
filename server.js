@@ -124,6 +124,7 @@ route('GET', '/api/conversations', async () => brain.loadConversations());
 
 route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().profile, includeDone: q.get('done') === '1' }));
 route('POST', '/api/tasks', async (_q, body) => ({ line: tasks.add(body.text, body) }));
+route('POST', '/api/tasks/event', async (_q, body) => tasks.addForEvent(body || {}));
 route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(body.path, body.line) }));
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7), from: q.get('from') || undefined, to: q.get('to') || undefined }));

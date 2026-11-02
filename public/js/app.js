@@ -725,6 +725,63 @@ async function markRead(item) {
 // Web links in an event description open in a new tab. Works on already-escaped text.
 const linkify = (h) => h.replace(/https?:\/\/[^\s<]+[^\s<.,;:)!?'"]/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
 
+// "Create Task" on an event card (Ryan, 2026-11-02): say or type a note about the event, its action items and
+// deadlines; it all goes on Maestro's main task list (the note as the task, action items as sub-tasks).
+function eventTaskForm(item) {
+  const title = item.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, '');
+  const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micWasOn = !!(voice && voice.active);
+  if (micWasOn) { voice.stop(); voice.stopSpeaking(); } // the chat mic would send the dictation as a message
+  let rec = null, target = null, base = '';
+  const stopDictation = () => { if (rec) { try { rec.stop(); } catch { /* already stopped */ } } rec = null; document.querySelectorAll('.dict-btn.on').forEach((b) => b.classList.remove('on')); };
+  const dictate = (btn, field) => {
+    if (rec && target === field) return stopDictation();
+    stopDictation();
+    if (!SRc) return toast('Voice input needs Chrome or Edge. You can still type.', 'error');
+    target = field; base = field.value ? field.value.replace(/\s*$/, ' ') : '';
+    rec = new SRc(); rec.lang = (S.state.config.voice && S.state.config.voice.lang) || 'en-US'; rec.continuous = true; rec.interimResults = true;
+    let done = '';
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) done += t.trim() + (field.id === 'et-items' ? '\n' : ' '); else interim += t; }
+      field.value = base + done + interim;
+    };
+    rec.onend = () => { if (rec) { btn.classList.remove('on'); rec = null; } };
+    try { rec.start(); btn.classList.add('on'); } catch { rec = null; }
+  };
+  const micBtn = (id, label) => `<button type="button" class="dict-btn" data-dict="${id}" title="Say it" aria-label="${label}">${icon('mic')}</button>`;
+  modal(`${modalHead('Create Task', esc(title))}
+    <p class="et-ask">Say or type a note about this event, any action items, and when they need to be done.</p>
+    <div class="field"><label for="et-note">Note</label><div class="dict-wrap"><textarea class="input et-text" id="et-note" rows="3" placeholder="e.g. Follow up with the speakers about sharing the recording"></textarea>${micBtn('et-note', 'Dictate the note')}</div></div>
+    <div class="field"><label for="et-items">Action items</label><div class="dict-wrap"><textarea class="input et-text" id="et-items" rows="4" placeholder="One per line, e.g.&#10;Send the slides to attendees by Friday&#10;Book the room for next month"></textarea>${micBtn('et-items', 'Dictate action items')}</div><span class="help">Deadlines you say, like “by Friday” or “due November 12”, are picked up for each item.</span></div>
+    <div class="et-row">
+      <div class="field"><label for="et-due">Deadline</label><input class="input" type="date" id="et-due"></div>
+      <div class="field"><label for="et-pri">Priority</label><select class="input" id="et-pri"><option value="">None</option><option>High</option><option>Medium</option><option>Low</option></select></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="et-save">${icon('plus')} Add to tasks</button></div>`, {
+    onClose: () => { stopDictation(); if (micWasOn && !voice.active) toggleMic(); },
+    onMount: (el, close) => {
+      el.querySelectorAll('[data-dict]').forEach((b) => (b.onclick = () => dictate(b, el.querySelector('#' + b.dataset.dict))));
+      const note = el.querySelector('#et-note');
+      setTimeout(() => note.focus(), 50);
+      // Maestro asks out loud when replies are spoken; if you were talking to it, it starts listening for the note.
+      if (S.state.config.voice && S.state.config.voice.speakReplies && voice) {
+        voice.speak(`What's your note about ${title}? Add any action items and when they're due.`, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => { if (micWasOn && document.body.contains(note) && !rec) dictate(el.querySelector('[data-dict=et-note]'), note); } });
+      }
+      el.querySelector('#et-save').onclick = async () => {
+        stopDictation();
+        const body = { event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, due: el.querySelector('#et-due').value, priority: el.querySelector('#et-pri').value };
+        if (!body.note && !body.items.trim()) { note.focus(); return toast('Add a note or an action item first', 'error'); }
+        try {
+          const r = await api('/tasks/event', body);
+          toast(`${r.count} task${r.count === 1 ? '' : 's'} added${r.due ? ' · due ' + new Date(r.due + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : ''}`);
+          close();
+        } catch (e) { toast(e.message || 'Could not add the task', 'error'); }
+      };
+    },
+  });
+}
+
 function openFeedItem(item) {
   markRead(item);
   const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;
@@ -735,12 +792,13 @@ function openFeedItem(item) {
     <p class="meta" style="color:var(--muted)">${[item.priority && item.priority + ' priority', item.deadline].filter(Boolean).map(esc).join(' · ')}</p>
     ${item.notePath ? `<p><a href="#" data-note>Open ${esc(item.notePath)}</a></p>` : ''}
     <div class="modal-foot">
-      <button class="btn ghost" data-task>${icon('plus')} Make it a task</button>
+      ${item.eventKey || item.category === 'MEETING' ? `<button class="btn ghost" data-event-task>${icon('clipboard-check')} Create Task</button>` : `<button class="btn ghost" data-task>${icon('plus')} Make it a task</button>`}
       <button class="btn primary" data-ask>${icon('sparkles')} Ask ${esc(S.state.config.assistantName)} about this</button>
     </div>`, {
     onMount: (el, close) => {
       el.querySelector('[data-ask]').onclick = () => { close(); if (item.eventKey && !item.removed) return ask(`Tell me about ${item.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, '')}`); ask(`Help me with this ${item.category.toLowerCase()} from ${item.sourceName}: "${item.title}". ${item.quote || ''} What should I do?`); };
-      el.querySelector('[data-task]').onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined }); toast('Task added'); close(); };
+      const mt = el.querySelector('[data-task]'); if (mt) mt.onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined }); toast('Task added'); close(); };
+      const et = el.querySelector('[data-event-task]'); if (et) et.onclick = () => { close(); eventTaskForm(item); };
       const n = el.querySelector('[data-note]'); if (n) n.onclick = (e) => { e.preventDefault(); close(); openNote(item.notePath); };
     },
   });

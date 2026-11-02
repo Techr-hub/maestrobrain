@@ -36,11 +36,12 @@ export function timeAgo(ts) {
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
 
-export function modal(html, { wide = false, onMount } = {}) {
+export function modal(html, { wide = false, onMount, onClose } = {}) {
   const ov = document.createElement('div');
   ov.className = 'overlay';
   ov.innerHTML = `<div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true">${html}</div>`;
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; ov.remove(); document.removeEventListener('keydown', onKey); if (onClose) onClose(); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
   ov.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
