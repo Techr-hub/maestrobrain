@@ -143,7 +143,7 @@ export function navigate(route) {
     const page = document.createElement('div');
     page.className = 'page';
     main.replaceChildren(page);
-    PAGES[route](page, { navigate, afterChange, ask, newConversation });
+    PAGES[route](page, { navigate, afterChange, ask, newConversation, createTask: eventTaskForm });
   }
 }
 

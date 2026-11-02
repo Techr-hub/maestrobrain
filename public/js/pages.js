@@ -372,9 +372,9 @@ async function tasksPage(el, ctx) {
 // ================================================================ CALENDAR
 async function calendarPage(el, ctx) {
   const feedUrl = `${location.origin}/calendar.ics`;
-  el.innerHTML = head('Calendar', `All your connected calendars in one week (${profileName()}). Say “Hey Maestro, create a meeting tomorrow at 2pm with John” to add one. Events Maestro creates go to iCloud when its card has sign-in details, otherwise to your Maestro calendar (<code>${esc(feedUrl)}</code>).`,
+  el.innerHTML = head('Calendar', `All your connected calendars by day, week or month (${profileName()}). Click an event for its details. Say “Hey Maestro, create a meeting tomorrow at 2pm with John” to add one. Events Maestro creates go to iCloud when its card has sign-in details, otherwise to your Maestro calendar (<code>${esc(feedUrl)}</code>).`,
     `<button class="btn" id="new-ev">${icon('plus')} New event</button><button class="btn" id="prep">${icon('sparkles')} Prep my next meeting</button>`) + '<div id="cal-week"></div>';
-  weekCalendar(el.querySelector('#cal-week'), { ask: (t) => ctx.ask(t) });
+  weekCalendar(el.querySelector('#cal-week'), { ask: (t) => ctx.ask(t), createTask: ctx.createTask });
   el.querySelector('#prep').onclick = () => ctx.ask('Prep me for my next meeting');
   el.querySelector('#new-ev').onclick = () => ctx.ask('Create a new meeting');
 }
