@@ -107,14 +107,22 @@ function matchEvents(m, events) {
 const TICKETS = /\b(tickets?|register|registration|rsvp|sign ?up|buy (a )?(seat|spot|pass)|book (a )?(seat|spot)|admission|entry pass)\b/;
 const TICKET_SITES = [[/(^|\.)(lu\.ma|luma\.com)$/, 'Luma'], [/eventbrite\./, 'Eventbrite'], [/meetup\.com$/, 'Meetup'], [/ticketmaster\./, 'Ticketmaster'], [/(^|\.)ti\.to$|tito\.io$/, 'Tito'], [/universe\.com$/, 'Universe'], [/tickettailor\.com$/, 'Ticket Tailor'], [/humanitix\.com$/, 'Humanitix'], [/partiful\.com$/, 'Partiful'], [/zoom\.us$/, ''], [/teams\.microsoft\.com$|meet\.google\.com$/, '']];
 // Links in an event (description, location and URL), best ticket page first.
+// Ryan (2026-11-02): the link written in the description comes first, whatever site it's on; the calendar's own
+// URL field and the location are only a fallback.
+const NOT_TICKETS = /(^|\.)(google\.[a-z.]+\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.apple\.com)/;
 function ticketLinks(e) {
-  const text = [e.url, e.description, e.notes, e.location].filter(Boolean).join(' ').replace(/\\n/g, ' ').replace(/\\,/g, ',');
-  const urls = [...new Set((text.match(/https?:\/\/[^\s<>"')\]]+|\b(?:lu\.ma|luma\.com|www\.eventbrite\.[a-z.]+|eventbrite\.[a-z.]+|meetup\.com)\/[^\s<>"')\]]+/gi) || []).map((u) => (/^https?:/i.test(u) ? u : 'https://' + u).replace(/[.,;:!?]+$/, '')))];
+  const clean = (t) => String(t || '').replace(/\\n/g, ' ').replace(/\\,/g, ',').replace(/&amp;/g, '&');
+  const inDesc = new Set();
+  const grab = (t) => (clean(t).match(/https?:\/\/[^\s<>"')\]]+|\b(?:lu\.ma|luma\.com|www\.eventbrite\.[a-z.]+|eventbrite\.[a-z.]+|meetup\.com)\/[^\s<>"')\]]+/gi) || []).map((u) => (/^https?:/i.test(u) ? u : 'https://' + u).replace(/[.,;:!?]+$/, ''));
+  grab([e.description, e.notes].filter(Boolean).join(' ')).forEach((u) => inDesc.add(u));
+  const text = [e.description, e.notes, e.url, e.location].filter(Boolean).join(' ');
+  const urls = [...new Set((clean(text).match(/https?:\/\/[^\s<>"')\]]+|\b(?:lu\.ma|luma\.com|www\.eventbrite\.[a-z.]+|eventbrite\.[a-z.]+|meetup\.com)\/[^\s<>"')\]]+/gi) || []).map((u) => (/^https?:/i.test(u) ? u : 'https://' + u).replace(/[.,;:!?]+$/, '')))];
   return urls.map((u) => {
     let host = ''; try { host = new URL(u).hostname.replace(/^www\./, ''); } catch { return null; }
     const site = TICKET_SITES.find(([re]) => re.test(host));
     if (site && site[1] === '') return null; // meeting links aren't ticket pages
-    const score = (site ? 3 : 0) + (/ticket|register|rsvp|event|tix|book/i.test(u) ? 2 : 0);
+    if (NOT_TICKETS.test(host + new URL(u).pathname)) return null; // map links aren't ticket pages
+    const score = (inDesc.has(u) ? 10 : 0) + (site ? 3 : 0) + (/ticket|register|rsvp|event|tix|book/i.test(u) ? 2 : 0);
     return { url: u, name: site ? site[1] : host, score };
   }).filter(Boolean).sort((a, b) => b.score - a.score);
 }
