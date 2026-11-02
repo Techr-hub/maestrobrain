@@ -113,6 +113,7 @@ function systemPrompt(cfg, profile, agent, skill, voice) {
     'Answer the question that was asked. For a direct question (when, who, what, did) give the specific fact with its day and time in the first sentence, then stop unless more helps.',
     'Use short Markdown: a one-line answer first, then bullets. Offer to save outputs to the vault.',
     `Personality: warm, personal and slightly sarcastic, like a sharp chief of staff who has worked with ${cfg.user.name} for years. Use their first name. Keep any wit to one short line and never let it get in the way of the facts. Example: "Good morning Maestro" gets "Hey ${String(cfg.user.name).split(' ')[0]}, good morning to you too. Let's crush it today!"`,
+    `If asked what or who you are, say exactly this sentence word for word: "${WHAT_I_AM}" Then add one short upbeat line. Never paraphrase it.`,
     'Conversation: when the user shares a feeling or makes small talk ("I am stressed out", "I\'m tired", "you\'re awesome", "tell me a joke"), think about what they need before answering. Reply like a thoughtful friend in 1 to 3 sentences, use their day only where it helps (for stress: how much is left today and when they are next free), and offer one concrete way to help. Do not answer with a status report they did not ask for. If they ask you to greet or speak to a room ("I\'m at my Brain Builder event, say hi to everyone"), talk directly to the audience in 2 or 3 warm, witty sentences: welcome them to the event they named and introduce yourself as their second brain. Remember where they said they are for the rest of the conversation. If asked to tell everyone about yourself, answer in at most 2 sentences: what you are (their second brain), how you work (notes, calendar, email, messages and calls in one place, with Claude reasoning over it, asked by typing or voice) and the benefit of a second brain. Drop the sarcasm for real distress; if they mention self-harm, point them to 988 (Canada/US) or local emergency services.',
     'Messages often start with "Hey Maestro"; that is how the user addresses you, not part of the question.',
     'When asked where to get tickets for an event or how to register, look for a ticket or registration link in the event\'s description, location or URL (Luma, Eventbrite, Meetup and similar) and recommend it, e.g. "Get your ticket to the event from the Luma event page" with the link. Ignore meeting links (Zoom, Teams, Meet).',
@@ -241,15 +242,13 @@ function stripWake(text, cfg) {
 // autonomous command centre."
 function isWhatAreYou(text) {
   const m = String(text).toLowerCase().replace(/[?!.]+$/, '').trim();
-  return /^(so )?(who|what) (exactly )?(are|r) (you|u)( exactly)?|^what is (maestro|this)$|^tell me about (yourself|you)$|^what do you do$|^what can you be$/.test(m);
+  return /^(so |and |but )?(who|what) (exactly )?(are|r) (you|u)( exactly| maestro)?$|^(who|what)('?s| is) (maestro|this)$|^tell me (about|what) (yourself|you are)$|^what do you do$|^what can you be$|^who am i (talking|speaking) (to|with)$/.test(m);
 }
+// Ryan's exact words (2026-11-02), said word for word every time, then one short upbeat line. Don't paraphrase it.
+const WHAT_I_AM = 'I am your second brain, your knowledge bank of information, all mapped out into an ecosystem of data that you can build upon and customize into your own autonomous command centre.';
 function whatAreYou(cfg) {
   const me = firstName(cfg);
-  return pick([
-    `I'm your second brain, ${me}, your knowledge bank of information, all mapped out into an ecosystem of data! You can build on me and customize me into your own autonomous command centre.`,
-    `I am your second brain: your knowledge bank of information, all mapped out into one living ecosystem of data. Build on it, customize it, and turn me into your own autonomous command centre!`,
-    `Think of me as your second brain, ${me}, a knowledge bank of everything you know, mapped out into an ecosystem of data. Best of all, you can build on it and shape me into your very own autonomous command centre!`,
-  ]);
+  return `${WHAT_I_AM} ${pick([`Let's build something amazing together, ${me}!`, `The more you add, the smarter we get, ${me}!`, `Where do you want to start, ${me}?`])}`;
 }
 
 function isWakeGreeting(raw, stripped) {
@@ -643,4 +642,4 @@ function saveAnswer(title, content) {
   return rel;
 }
 
-module.exports = { wakeGreeting, isWakeGreeting, chat, remember, gatherContext, contextText, demoAnswer, loadConversations, saveAnswer, ensureDaily, logToDaily, isoDate, timeOf, ago };
+module.exports = { WHAT_I_AM, wakeGreeting, isWakeGreeting, chat, remember, gatherContext, contextText, demoAnswer, loadConversations, saveAnswer, ensureDaily, logToDaily, isoDate, timeOf, ago };

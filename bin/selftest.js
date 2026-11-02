@@ -105,7 +105,7 @@ async function main() {
     const hi = await post('/chat', { message: 'Hey Maestro' });
     ok('"Hey Maestro" opens with an upbeat greeting by name', /Ryan|there/.test(hi.reply) && /[!?]/.test(hi.reply) && hi.provider === 'greeting');
     const wy = await post('/chat', { message: 'Hey Maestro, what are you?' });
-    ok('"What are you?" is 2 upbeat sentences about being a second brain and command centre', /second brain/.test(wy.reply) && /command centre/.test(wy.reply) && (wy.reply.match(/[.!?](\s|$)/g) || []).length === 2);
+    ok('"What are you?" says the exact sentence Ryan gave, then one upbeat line', wy.reply.startsWith(require('../core/brain').WHAT_I_AM + ' ') && (wy.reply.match(/[.!?](\s|$)/g) || []).length === 2);
     const f1 = await post('/chat', { message: 'When is the design critique?' });
     const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
     ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));
