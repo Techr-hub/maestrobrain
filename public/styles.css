@@ -83,6 +83,7 @@ a:hover { text-decoration: underline; }
 .nav-item .icon { font-size: 24px; stroke-width: 1.6; }
 .nav-item:hover { background: rgba(0, 45, 76, .5); color: var(--text); }
 .nav-item.active { background: var(--nav-active); border-color: var(--cyan); color: var(--text); font-weight: 600; box-shadow: 0 0 12px rgba(0, 123, 255, .27); }
+.nav-item.active { margin: 0 10px; width: calc(100% - 20px); } /* 10px either side of the active menu item (Ryan, 2026-11-02) */
 .nav-item .badge { margin-left: auto; background: var(--chip); border: 1px solid var(--line); color: var(--cyan); font-size: 11px; padding: 1px 7px; border-radius: 10px; }
 
 /* ---------------- Main ---------------- */
