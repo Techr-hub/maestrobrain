@@ -69,20 +69,17 @@ export class BrainMap {
     this.c.width = r.width * dpr; this.c.height = r.height * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.cx = this.w / 2;
-    if (this.compact) {
-      this.cy = Math.max(105, this.h * 0.2);
-      this.R = Math.max(70, Math.min(this.w * 0.3, this.h * 0.16));
-    } else {
-      this.cy = Math.max(150, this.h * 0.4);
-      this.R = Math.max(110, Math.min(this.w * 0.36, this.h * 0.36));
-    }
+    // During a conversation the brain keeps its size (Ryan, 2026-11-02: don't zoom out) and only moves up,
+    // so the core stays visible above the chat.
+    this.cy = this.compact ? Math.max(130, this.h * 0.27) : Math.max(150, this.h * 0.4);
+    this.R = Math.max(110, Math.min(this.w * 0.36, this.h * 0.36));
     this.base = this.R / WR; // screen pixels per world unit at zoom 1
     // Default zoom that keeps the whole source orbit on screen.
-    this.fitZoom = clamp(Math.min((this.w / 2 - 55) / (ORBIT * this.base * 1.22), (this.h * (this.compact ? 0.3 : 0.55)) / (ORBIT * this.base * 0.62)), 0.35, 1.12);
+    this.fitZoom = clamp(Math.min((this.w / 2 - 55) / (ORBIT * this.base * 1.22), (this.h * 0.55) / (ORBIT * this.base * 0.62)), 0.35, 1.12);
     if (this.view && !this.touched) { this.view.zoom = this.goal.zoom = this.fitZoom; this.view.panX = this.goal.panX = 0; this.view.panY = this.goal.panY = 0; }
   }
 
-  // When the conversation is open, the brain moves up and shrinks so the core stays visible.
+  // When the conversation is open, the brain moves up (same size) so the core stays visible.
   setCompact(on) {
     if (this.compact === on) return;
     this.compact = on;
@@ -453,7 +450,7 @@ export class BrainMap {
   }
 
   drawCore(now, c) {
-    const ctx = this.ctx, cx = c.x, cy = c.y, K = clamp(c.k, 0.35, 4) * (this.compact ? 0.72 : 1);
+    const ctx = this.ctx, cx = c.x, cy = c.y, K = clamp(c.k, 0.35, 4) ;
     // The core only moves while the brain is listening, thinking or talking. Idle, it holds still.
     const speed = this.state === 'thinking' ? 4 : this.state === 'listening' ? 2 : this.state === 'speaking' ? 2.5 : 0;
     const dt = this.coreLast ? Math.min(50, now - this.coreLast) : 16; this.coreLast = now;
