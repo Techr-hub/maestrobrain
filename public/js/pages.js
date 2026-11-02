@@ -522,7 +522,7 @@ async function settingsPage(el, ctx) {
       <div class="two-col"><div class="field"><label>Voice</label><select class="input" id="v-voice"><option value="">Automatic: most natural ${c.voice.gender === 'female' ? 'woman' : 'man'}'s voice (${esc((voices.find((v) => voiceGender(v) === (c.voice.gender || 'male')) || voices[0] || { name: 'browser default' }).name)})</option>${voices.map((v) => `<option value="${esc(v.name)}" ${v.name === c.voice.voiceName ? 'selected' : ''}>${esc(v.name)}${voiceScore(v) >= 60 ? ' ★ natural' : ''}</option>`).join('')}</select>
         <span class="help">Switch between a man's and a woman's voice with Man / Woman at the top of the screen. For the most human voice use Edge ("Online (Natural)" voices), or on a Mac download a Premium or Enhanced voice: System Settings → Accessibility → Spoken Content → System voice → Manage Voices.</span></div>
       <div class="field"><label>Speed</label><input class="input" type="range" min="0.7" max="1.4" step="0.02" id="v-rate" value="${c.voice.rate}"></div></div>
-      <div class="field"><label>Pause between sentences</label><input class="input" type="range" min="0" max="4000" step="100" id="v-pause" value="${c.voice.pause != null ? c.voice.pause : 1000}"></div>
+      <div class="field"><label>Pause between sentences</label><input class="input" type="range" min="0" max="4000" step="100" id="v-pause" value="${c.voice.pause != null ? c.voice.pause : 1500}"></div>
       <div style="display:flex;gap:8px"><button class="btn primary" id="save-voice">${icon('save')} Save</button><button class="btn ghost" id="test-voice">${icon('volume-2')} Test voice</button></div>
     </div>
     <div data-pane="3" hidden>

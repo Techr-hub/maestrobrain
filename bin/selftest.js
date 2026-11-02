@@ -65,7 +65,11 @@ async function main() {
     const fd = await (await fetch(base + '/feed?limit=200')).json();
     await post('/settings', { voice: { gender: 'female' } }).catch(() => null);
     const vcfg = (await (await fetch(base + '/state')).json()).config.voice;
-    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 1000);
+    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 1500);
+    await post('/settings', { voice: { pause: 1200 } }).catch(() => null);
+    const pcfg = (await (await fetch(base + '/state')).json()).config.voice;
+    ok('voice: a pause chosen in Settings sticks', pcfg.pause === 1200);
+    await post('/settings', { voice: { pause: 1500 } }).catch(() => null);
     const fl = fd.items || fd;
     ok('remove event: no separate "Cancelled" card in the feed', !fl.some((i) => /^Cancelled: Design critique/.test(i.title)));
     const last = fl[fl.length - 1];

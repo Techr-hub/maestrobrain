@@ -130,7 +130,7 @@ export class Voice {
   // gender: 'male' | 'female' | '' (any). Falls back to the best voice of any gender if none match.
   bestVoice(gender = '') { const r = rankVoices(this.voices()); return (gender && r.find((v) => voiceGender(v) === gender)) || r[0] || null; }
 
-  speak(text, { voiceName, gender = '', rate = 0.92, pause = 1000, onStart, onEnd } = {}) {
+  speak(text, { voiceName, gender = '', rate = 0.92, pause = 1500, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
@@ -153,8 +153,15 @@ export class Voice {
       u.lang = voice ? voice.lang : this.lang;
       u.rate = Math.min(2, rate * manBoost);
       u.pitch = 1;
-      if (i === 0) u.onstart = () => onStart && onStart();
-      const after = () => { if (run !== this._run) return; this._timer = setTimeout(() => next(i + 1), i < parts.length - 1 ? pause : 0); };
+      // The pause is the whole silence between sentences (Ryan, 2026-11-02: 1.5 s). Voices take a moment to start
+      // each sentence (online "Natural" voices up to a second), so that start-up lag is measured and taken off the wait.
+      const asked = Date.now();
+      u.onstart = () => {
+        const lag = Math.min(1500, Date.now() - asked);
+        this._lag = this._lag == null ? lag : Math.round(this._lag * 0.5 + lag * 0.5);
+        if (i === 0 && onStart) onStart();
+      };
+      const after = () => { if (run !== this._run) return; this._timer = setTimeout(() => next(i + 1), i < parts.length - 1 ? Math.max(0, pause - (this._lag || 0)) : 0); };
       u.onend = after; u.onerror = after;
       speechSynthesis.speak(u);
     };

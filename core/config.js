@@ -31,7 +31,7 @@ function defaultConfig() {
       // Any OpenAI-compatible endpoint: Ollama (Hermes 3/4), LM Studio, OpenRouter, Nous Portal...
       compatible: { baseUrl: 'http://localhost:11434/v1', apiKey: '', model: 'hermes3', label: 'Hermes (Ollama)' },
     },
-    voice: { speakReplies: true, handsFree: false, voiceName: '', gender: 'male', rate: 0.92, pause: 1000, lang: 'en-US' },
+    voice: { speakReplies: true, handsFree: false, voiceName: '', gender: 'male', rate: 0.92, pause: 1500, lang: 'en-US' },
     connections: {
       business: demo(['outlook', 'email', 'gcal', 'slack', 'twilio_calls', 'icalendar']),
       personal: demo(['gmail', 'icalendar', 'twilio_sms', 'twilio_calls']),
@@ -124,8 +124,8 @@ function load() {
   if (!cfg.assistantName || /^jarvis$/i.test(cfg.assistantName)) cfg.assistantName = 'Maestro';
   // Older installs spoke at 1.05; Ryan asked for slower, calmer speech (2026-11-02).
   if (cfg.voice && (cfg.voice.rate === 1.05 || cfg.voice.rate === 1)) cfg.voice.rate = 0.92;
-  // The old default pause was 0.38 s; Ryan wants 2.5 s between sentences (2026-11-02).
-  if (cfg.voice && (cfg.voice.pause == null || cfg.voice.pause === 380 || cfg.voice.pause === 2500 || cfg.voice.pause === 2000)) cfg.voice.pause = 1000; // Ryan: 1 s (2026-11-02)
+  // Ryan (2026-11-02): at most 1.5 s of silence between sentences, now measured as the whole gap. Older saved pauses move to it once.
+  if (cfg.voice && (cfg.voice.pause == null || !(saved.voice && saved.voice.pauseRev === 2))) { cfg.voice.pause = 1500; cfg.voice.pauseRev = 2; }
   if (!path.isAbsolute(cfg.vaultPath)) cfg.vaultPath = path.resolve(ROOT, cfg.vaultPath);
   return cfg;
 }
