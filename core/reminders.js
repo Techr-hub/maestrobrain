@@ -40,6 +40,19 @@ function demoTasks() {
   return demoCache;
 }
 
+// Tasks with chosen reminders (Ryan, 2026-11-02: 1 day, 12 hours, 3 hours, 2 hours… before the deadline).
+// The deadline is the due date at its due time, or 5 PM without one. Each reminder posts one Insight card when its
+// moment arrives; if several have passed at once (a task added late), only the nearest one posts. Past the
+// deadline, one "Overdue" card.
+const LABEL = { '1d': 'Due in 1 day', '12h': 'Due in 12 hours', '3h': 'Due in 3 hours', '2h': 'Due in 2 hours', '1h': 'Due in 1 hour', '30m': 'Due in 30 minutes' };
+function deadlineOf(t) { return new Date(`${t.due}T${t.dueTime || '17:00'}:00`); }
+function alertStage(t, now = new Date()) {
+  const dl = deadlineOf(t);
+  if (now >= dl) return { key: 'overdue', label: 'Overdue' };
+  const fired = t.alerts.filter((a) => now >= new Date(dl - tasks.ALERTS[a] * 60000)).sort((a, b) => tasks.ALERTS[a] - tasks.ALERTS[b]);
+  return fired.length ? { key: 'alert-' + fired[0], label: LABEL[fired[0]] } : null;
+}
+
 function check(now = new Date()) {
   const demo = demoTasks();
   let posted = 0;
@@ -48,17 +61,17 @@ function check(now = new Date()) {
     try { list = tasks.list({ profile }); } catch { continue; }
     for (const t of list) {
       if (t.done || !t.due || (!t.created && demo.has(t.text))) continue;
-      const st = stageOf(t.due, now);
+      const st = t.alerts && t.alerts.length ? alertStage(t, now) : stageOf(t.due, now);
       if (!st) continue;
       const event = (t.text.match(/^(.+?): /) || t.text.match(/\(([^)]+)\)$/) || [])[1] || '';
       const item = feed.add({
         externalId: `remind:${profile}:${t.path}:${hash(t.text)}:${t.due}:${st.key}`,
         source: 'system', profile, category: 'INSIGHT', reminder: true, taskPath: t.path,
-        title: `${st.label}: ${t.text}`,
+        title: `${st.label}: ${t.text}`, alert: st.key,
         quote: event ? `For ${event}` : `In ${t.note}`,
         summary: st.key === 'overdue' ? `Was due ${new Date(t.due + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}` : 'From your task list',
         priority: t.priority || (st.key === 'tomorrow' ? '' : 'Medium'),
-        deadline: `Due ${new Date(t.due + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}`,
+        deadline: `Due ${new Date(t.due + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}${t.dueTime ? ' at ' + new Date(`${t.due}T${t.dueTime}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}`,
         notePath: t.path,
         actions: [],
       });
@@ -68,4 +81,4 @@ function check(now = new Date()) {
   return posted;
 }
 
-module.exports = { check, stageOf };
+module.exports = { check, stageOf, alertStage, deadlineOf };

@@ -4,7 +4,7 @@ import { renderMarkdown, stripMarkdown, esc } from './md.js';
 import { BrainMap, avatar as makeAvatar } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
-import { PAGES, onboarding, knowledgeModal, connectModal } from './pages.js';
+import { PAGES, onboarding, knowledgeModal, connectModal, dueFields, wireDueFields } from './pages.js';
 import { monthCalendar } from './calendar-ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -770,15 +770,14 @@ function eventTaskForm(item) {
   modal(`${modalHead('Create Task', esc(title))}
     <p class="et-ask">Say or type a note about this event, any action items, and when they need to be done.</p>
     <div class="field"><label for="et-note">Note</label><div class="dict-wrap"><textarea class="input et-text" id="et-note" rows="3" placeholder="e.g. Follow up with the speakers about sharing the recording"></textarea>${micBtn('et-note', 'Dictate the note')}</div></div>
-    <div class="field"><label for="et-items">Action items</label><div class="dict-wrap"><textarea class="input et-text" id="et-items" rows="4" placeholder="One per line, e.g.&#10;Send the slides to attendees by Friday&#10;Book the room for next month"></textarea>${micBtn('et-items', 'Dictate action items')}</div><span class="help">Deadlines you say, like “by Friday” or “due November 12”, are picked up for each item.</span></div>
-    <div class="et-row">
-      <div class="field"><label for="et-due">Deadline</label><input class="input" type="date" id="et-due"></div>
-      <div class="field"><label for="et-pri">Priority</label><select class="input" id="et-pri"><option value="">None</option><option>High</option><option>Medium</option><option>Low</option></select></div>
-    </div>
+    <div class="field"><label for="et-items">Action items</label><div class="dict-wrap"><textarea class="input et-text" id="et-items" rows="4" placeholder="One per line, e.g.&#10;Send the slides to attendees by Friday&#10;Book the room for next month"></textarea>${micBtn('et-items', 'Dictate action items')}</div><span class="help">Deadlines you say, like “by Friday” or “due November 12”, are picked up for each item. The due date, time and reminders below apply to the rest.</span></div>
+    ${dueFields('et')}
+    <div class="field et-pri"><label for="et-pri">Priority</label><select class="input" id="et-pri"><option value="">None</option><option>High</option><option>Medium</option><option>Low</option></select></div>
     <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="et-save">${icon('plus')} Add to tasks</button></div>`, {
     onClose: () => { stopDictation(); if (micWasOn && !voice.active) toggleMic(); },
     onMount: (el, close) => {
       el.querySelectorAll('[data-dict]').forEach((b) => (b.onclick = () => dictate(b, el.querySelector('#' + b.dataset.dict))));
+      const readDue = wireDueFields(el, 'et');
       const note = el.querySelector('#et-note');
       setTimeout(() => note.focus(), 50);
       // Maestro asks out loud when replies are spoken; if you were talking to it, it starts listening for the note.
@@ -787,7 +786,7 @@ function eventTaskForm(item) {
       }
       el.querySelector('#et-save').onclick = async () => {
         stopDictation();
-        const body = { section: 'calendar', event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, due: el.querySelector('#et-due').value, priority: el.querySelector('#et-pri').value };
+        const body = { section: 'calendar', event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, priority: el.querySelector('#et-pri').value, ...readDue() };
         if (!body.note && !body.items.trim()) { note.focus(); return toast('Add a note or an action item first', 'error'); }
         try {
           const r = await api('/tasks/event', body);
@@ -840,6 +839,10 @@ function connectStream() {
   es.addEventListener('feed', (e) => {
     const item = JSON.parse(e.data);
     if (!visibleNow(item)) return;
+    // Task reminders also pop up as a desktop notification when the browser allows it (Ryan, 2026-11-02).
+    if (item.reminder && 'Notification' in window && Notification.permission === 'granted') {
+      try { const n = new Notification(item.title, { body: [item.deadline, item.quote].filter(Boolean).join(' · '), tag: item.externalId || item.id }); n.onclick = () => { window.focus(); navigate('tasks'); }; } catch { /* not allowed here */ }
+    }
     mergeFeed([item]);
     renderFeed(true);
     const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;

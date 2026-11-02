@@ -22,14 +22,23 @@ function guessSection(text, folder = '') {
   return 'other';
 }
 
+// Due time and reminders (Ryan, 2026-11-02), kept on the task line so Obsidian shows them too:
+// "📅 2026-11-06 ⏰ 14:30 🔔 1d,12h,2h". Reminder codes: 1d, 12h, 3h, 2h, 1h, 30m.
+const ALERTS = { '1d': 1440, '12h': 720, '3h': 180, '2h': 120, '1h': 60, '30m': 30 };
+const normTime = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? `${String(Math.min(23, +m[1])).padStart(2, '0')}:${m[2]}` : ''; };
+const normAlerts = (a) => [...new Set((Array.isArray(a) ? a : String(a || '').split(/[\s,]+/)).map((x) => String(x).toLowerCase().trim()).filter((x) => ALERTS[x]))].sort((x, y) => ALERTS[y] - ALERTS[x]);
+
 function parseLine(text) {
+  const dueTime = normTime((text.match(/⏰\s*(\d{1,2}:\d{2})/) || [])[1]);
+  const alerts = normAlerts((text.match(/🔔\s*([\w,]+)/) || [])[1]);
+  text = text.replace(/⏰\s*\d{1,2}:\d{2}/g, '').replace(/🔔\s*[\w,]+/g, '');
   const tagged = (text.match(SECTION_TAG) || [])[1];
   text = text.replace(SECTION_TAG, '');
   const due = (text.match(/(?:📅|due:)\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const priority = /#(high|urgent|p1)\b|⏫|🔺/i.test(text) ? 'High' : /#(low|p3)\b|🔽/i.test(text) ? 'Low' : /#(medium|p2)\b|🔼/i.test(text) ? 'Medium' : '';
   const created = (text.match(/➕\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const clean = text.replace(/➕\s*\d{4}-\d{2}-\d{2}/g, '').replace(/(?:📅|due:)\s*\d{4}-\d{2}-\d{2}/g, '').replace(/[⏫🔺🔼🔽]/g, '').replace(/#(high|urgent|p1|p2|p3|low|medium)\b/gi, '').trim();
-  return { text: clean, due, priority, created, section: tagged ? tagged.toLowerCase() : '' };
+  return { text: clean, due, dueTime: due ? dueTime : '', alerts, priority, created, section: tagged ? tagged.toLowerCase() : '' };
 }
 
 function list({ profile, includeDone = false } = {}) {
@@ -67,12 +76,14 @@ function toggle(relPath, line) {
   return !done;
 }
 
-function add(text, { due, priority, file, indent = '', section = '' } = {}) {
+function add(text, { due, dueTime, alerts, priority, file, indent = '', section = '' } = {}) {
   if (!file) file = require('./config').load().profile === 'personal' ? 'Personal/Personal Tasks.md' : 'Tasks/Inbox.md';
   let line = `${indent}- [ ] ${text.trim().replace(/\s*\n\s*/g, ' ')}`;
   if (priority) line += ` #${priority.toLowerCase()}`;
   if (SECTIONS.includes(String(section).toLowerCase())) line += ` #${String(section).toLowerCase()}`;
   if (due) line += ` 📅 ${due}`;
+  if (due && normTime(dueTime)) line += ` ⏰ ${normTime(dueTime)}`;
+  if (due && normAlerts(alerts).length) line += ` 🔔 ${normAlerts(alerts).join(',')}`;
   line += ` ➕ ${iso(new Date())}`; // created date: marks tasks you made (Maestro's reminders skip the demo vault's own tasks)
   const root = vault.vaultRoot();
   const full = vault.safeJoin(root, file);
@@ -101,16 +112,16 @@ function splitItems(text) {
   return String(text || '').split(/\n|;|(?:^|\s)(?:\d+[.)]|[-*•])\s+|,?\s*\b(?:and then|then also|also)\b\s*/i)
     .map((x) => (x || '').replace(/^\s*([-*•]|\d+[.)])\s+/, '').replace(/^\s*(action items?|to ?dos?|tasks?)\s*:?\s*/i, '').trim()).filter((x) => x && x.length > 1);
 }
-function addForEvent({ event = '', note = '', items = '', due = '', priority = '', section = 'calendar' } = {}, now = new Date()) {
+function addForEvent({ event = '', note = '', items = '', due = '', dueTime = '', alerts = [], priority = '', section = 'calendar' } = {}, now = new Date()) {
   const title = String(event).replace(/^(New( recurring event)?|Moved|Cancelled): /, '').trim() || 'Event';
   const n = dueIn(note, now);
   const list = (Array.isArray(items) ? items : splitItems(items)).map((x) => dueIn(x, now));
   const main = due || n.due || ''; // items without their own date share this one
   const first = [main, ...list.map((x) => x.due)].filter(Boolean).sort()[0] || ''; // the main task is due with its earliest item
-  const lines = [add(`${title}: ${n.text || (list.length ? 'action items' : 'follow up')}`, { due: first, priority, section })];
+  const lines = [add(`${title}: ${n.text || (list.length ? 'action items' : 'follow up')}`, { due: first, dueTime: first === main ? dueTime : '', alerts, priority, section })];
   // Each action item names its event, since the task list sorts by priority and date, not by event.
-  for (const x of list) lines.push(add(`${x.text} (${title})`, { due: x.due || main, priority, section, indent: '  ' }));
+  for (const x of list) lines.push(add(`${x.text} (${title})`, { due: x.due || main, dueTime: x.due ? '' : dueTime, alerts, priority, section, indent: '  ' }));
   return { lines, due: first, count: lines.length };
 }
 
-module.exports = { list, toggle, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };
+module.exports = { ALERTS, list, toggle, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };

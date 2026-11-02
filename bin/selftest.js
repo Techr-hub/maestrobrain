@@ -71,6 +71,16 @@ async function main() {
     const back = feedAdd({ ...victim, id: undefined });
     const after2 = (await (await fetch(base + '/feed?limit=400')).json());
     ok('feed: the X clears a card and it never comes back', !(after2.items || after2).some((i) => i.title === victim.title && i.source === victim.source) && back === null);
+    {
+      const soon = new Date(Date.now() + 90 * 60000); // due in 1.5 hours, with a "2 hours before" reminder
+      const d = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, '0')}-${String(soon.getDate()).padStart(2, '0')}`;
+      const tm = `${String(soon.getHours()).padStart(2, '0')}:${String(soon.getMinutes()).padStart(2, '0')}`;
+      await post('/tasks', { text: 'Print the workshop handouts', due: d, dueTime: tm, alerts: ['1d', '2h'] });
+      const tl2 = await (await fetch(base + '/tasks')).json();
+      const pt = tl2.find((t) => t.text === 'Print the workshop handouts');
+      const fr = await (await fetch(base + '/feed?limit=400')).json();
+      ok('task reminders: due time and chosen reminders are saved, and the nearest one fires', pt && pt.dueTime === tm && pt.alerts.join() === '1d,2h' && (fr.items || fr).some((i) => i.title === 'Due in 2 hours: Print the workshop handouts') && !(fr.items || fr).some((i) => i.title === 'Due in 1 day: Print the workshop handouts'));
+    }
     const fd0 = await (await fetch(base + '/feed?limit=400')).json();
     ok('Insight cards: none from demo data', !(fd0.items || fd0).some((i) => i.category === 'INSIGHT' && !i.reminder));
     const tmr = new Date(Date.now() + 86400000); const tmrIso = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;

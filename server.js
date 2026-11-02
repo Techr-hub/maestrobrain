@@ -375,8 +375,8 @@ function start(port) {
   // calendars are checked every minute so new events reach the feed quickly
   every(() => calwatch.check().catch(() => {}), 60000);
   calwatch.check().catch(() => {});
-  // task reminders (the only Insight cards): checked every 5 minutes, and right after a task is added
-  every(() => { try { reminders.check(); } catch { /* best-effort */ } }, 5 * 60000);
+  // task reminders (the only Insight cards): checked every minute, and right after a task is added
+  every(() => { try { reminders.check(); } catch { /* best-effort */ } }, 60000); // every minute, so "2 hours before" lands on time
   try { reminders.check(); } catch { /* best-effort */ }
   feed.pollLive().catch(() => {});
 

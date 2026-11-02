@@ -329,6 +329,33 @@ export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real'
 }
 
 // ================================================================ TASKS
+// Due date, due time and reminders for a new task (Ryan, 2026-11-02). Reminders post an Insight card in the feed
+// (and a desktop notification when allowed) that long before the deadline. Used by the Tasks page and Create Task.
+export const REMINDERS = [['1d', '1 day'], ['12h', '12 hours'], ['3h', '3 hours'], ['2h', '2 hours'], ['1h', '1 hour']];
+export function dueFields(p, { label = true } = {}) {
+  return `<div class="due-fields">
+    <div class="field"><label for="${p}-due">${label ? 'Due date' : ''}</label><input class="input" type="date" id="${p}-due"></div>
+    <div class="field"><label for="${p}-time">Due time</label><input class="input" type="time" id="${p}-time" step="900"></div>
+    <div class="field rem-field"><label>Remind me before</label><div class="rem-chips" role="group" aria-label="Reminders">${REMINDERS.map(([k, v]) => `<button type="button" class="rem-chip" data-rem="${k}" aria-pressed="false">${icon('bell')}${v}</button>`).join('')}</div></div>
+  </div>`;
+}
+export function wireDueFields(root, p) {
+  const due = root.querySelector(`#${p}-due`);
+  root.querySelectorAll('[data-rem]').forEach((b) => (b.onclick = () => {
+    const on = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
+    if (on && !due.value) { const d = new Date(); d.setDate(d.getDate() + 1); due.value = d.toISOString().slice(0, 10); } // a reminder needs a date: tomorrow until you pick one
+    if (on && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+  }));
+  return () => ({ due: due.value || '', dueTime: due.value ? root.querySelector(`#${p}-time`).value || '' : '', alerts: [...root.querySelectorAll('[data-rem][aria-pressed=true]')].map((b) => b.dataset.rem) });
+}
+const fmtDue = (t) => {
+  if (!t.due) return '';
+  const d = new Date(`${t.due}T${t.dueTime || '12:00'}`);
+  return 'due ' + d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) + (t.dueTime ? ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
+};
+const fmtAlerts = (t) => (t.alerts && t.alerts.length ? `<span class="t-rem">${icon('bell')}${t.alerts.map((a) => (REMINDERS.find((r) => r[0] === a) || [a, a])[1]).join(', ')} before</span>` : '');
+
 // Tabs for each section of the brain (Ryan, 2026-11-02). Tasks added from a feed card, an event's "Create Task",
 // a project note or chat all land here, tagged with their section.
 const TASK_TABS = [
@@ -348,19 +375,20 @@ async function tasksPage(el, ctx) {
   const count = (id) => list.filter((t) => !t.done && (id === 'all' || (t.section || 'other') === id)).length;
   const sec = (id) => TASK_TABS.find((x) => x.id === id) || TASK_TABS[6];
   const row = (t) => { const x = sec(t.section || 'other'); return `<div class="task ${t.done ? 'done' : ''}"><input type="checkbox" ${t.done ? 'checked' : ''} data-p="${esc(t.path)}" data-l="${t.line}" aria-label="Done">
-    <div class="t-text"><span>${esc(t.text)}</span><small>${tab === 'all' ? `<span class="t-sec" style="--c:${x.c}">${icon(x.icon)}${x.name}</span> · ` : ''}${[t.priority && t.priority + ' priority', t.due && 'due ' + t.due].filter(Boolean).map((v) => v + ' · ').join('')}<a href="#" data-n="${esc(t.path)}">${esc(t.note)}</a></small></div>
+    <div class="t-text"><span>${esc(t.text)}</span><small>${tab === 'all' ? `<span class="t-sec" style="--c:${x.c}">${icon(x.icon)}${x.name}</span> · ` : ''}${[t.priority && t.priority + ' priority', fmtDue(t), fmtAlerts(t)].filter(Boolean).map((v) => v + ' · ').join('')}<a href="#" data-n="${esc(t.path)}">${esc(t.note)}</a></small></div>
     ${t.priority === 'High' ? '<span class="tag" style="color:#ff6b81;border-color:#5a1020">High</span>' : ''}</div>`; };
   const cur = sec(tab);
   el.innerHTML = head('Tasks', `Tasks are Obsidian checkboxes anywhere in your vault (${profileName()} profile). Tick them here, in Obsidian, or ask the brain: “add a task to…”.`) +
     `<div class="task-tabs" role="tablist">${TASK_TABS.map((t) => `<button role="tab" class="task-tab ${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}" data-tab="${t.id}" style="--c:${t.c}">${icon(t.icon)}<span>${t.name}</span><b>${count(t.id)}</b></button>`).join('')}</div>
-     <div class="composer-row" style="margin-bottom:16px"><div class="input-wrap" style="height:44px"><input id="t-new" placeholder="Add a task${tab !== 'all' && tab !== 'other' ? ` to ${cur.name}` : ''}… (add #high or a due date like 📅 2026-11-05)"></div><button class="btn primary" id="t-add" style="height:44px">${icon('plus')} Add</button></div>
+     <div class="task-new"><div class="composer-row"><div class="input-wrap" style="height:44px"><input id="t-new" placeholder="Add a task${tab !== 'all' && tab !== 'other' ? ` to ${cur.name}` : ''}… (add #high for high priority)"></div><button class="btn primary" id="t-add" style="height:44px">${icon('plus')} Add</button></div>${dueFields('t')}</div>
      <div class="section-title">Open · ${open.length}</div>${open.map(row).join('') || `<p style="color:var(--muted)">${tab === 'all' ? 'Inbox zero.' : `No open ${cur.name} tasks.`}</p>`}
      <div class="section-title">Done · ${done.length}</div>${done.slice(0, 20).map(row).join('')}`;
   el.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { S.taskTab = b.dataset.tab; tasksPage(el, ctx); }));
+  const readDue = wireDueFields(el, 't');
   const add = async () => {
     const v = el.querySelector('#t-new').value.trim(); if (!v) return;
     const pri = /#high/i.test(v) ? 'High' : undefined;
-    await api('/tasks', { text: v.replace(/#high/i, '').trim(), priority: pri, section: tab !== 'all' && tab !== 'other' ? tab : undefined });
+    await api('/tasks', { text: v.replace(/#high/i, '').trim(), priority: pri, section: tab !== 'all' && tab !== 'other' ? tab : undefined, ...readDue() });
     toast('Task added'); tasksPage(el, ctx);
   };
   el.querySelector('#t-add').onclick = add;
