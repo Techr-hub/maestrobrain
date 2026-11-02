@@ -135,33 +135,54 @@ export class Voice {
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
     // reads punctuation or symbols aloud (some voices say "dot", "end" or "point" for a trailing full stop).
     const sentences = splitSentences(text).map(speakable).filter(Boolean);
-    // Very long sentences get split at commas so Chrome doesn't cut them off.
-    const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
+    // Long sentences are said in shorter pieces (Ryan, 2026-11-02: the voice went silent halfway through "The … is
+    // being held on … at …"). Chrome's online voices stop a long utterance after a few seconds and then never report
+    // it ended, so pieces stay short, joined by only a breath, with a watchdog in case a piece still stalls.
+    const parts = sentences.flatMap((x) => chunk(x).map((t, k, a) => ({ text: t, last: k === a.length - 1 })));
     if (!parts.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice(gender);
     // Ryan (2026-11-02): the man's voice speaks 10% faster than the chosen speed.
     const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.1 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
     this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
-    const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
+    const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; clearInterval(this._keep); onEnd && onEnd(); }; // the echo can lag a moment
+    // Online voices also cut out after ~15 s of continuous speech unless nudged.
+    clearInterval(this._keep);
+    if (voice && voice.localService === false) this._keep = setInterval(() => { if (run !== this._run) return clearInterval(this._keep); if (speechSynthesis.speaking && !speechSynthesis.paused) { speechSynthesis.pause(); speechSynthesis.resume(); } }, 5000);
     const next = (i) => {
       if (run !== this._run) return;
       if (i >= parts.length) { finish(); return; }
-      const u = new SpeechSynthesisUtterance(parts[i]);
+      const part = parts[i];
+      const u = new SpeechSynthesisUtterance(part.text);
+      this._utt = u; // kept so Chrome doesn't garbage-collect it and drop its end event
       if (voice) u.voice = voice;
       u.lang = voice ? voice.lang : this.lang;
       u.rate = Math.min(2, rate * manBoost);
       u.pitch = 1;
-      // The pause is the whole silence between sentences (Ryan, 2026-11-02: 1.5 s). Voices take a moment to start
+      // The pause is the whole silence between sentences (Ryan, 2026-11-02). Voices take a moment to start
       // each sentence (online "Natural" voices up to a second), so that start-up lag is measured and taken off the wait.
       const asked = Date.now();
+      let started = false, done = false;
       u.onstart = () => {
+        started = true;
         const lag = Math.min(1500, Date.now() - asked);
         this._lag = this._lag == null ? lag : Math.round(this._lag * 0.5 + lag * 0.5);
         if (i === 0 && onStart) onStart();
       };
-      const after = () => { if (run !== this._run) return; this._timer = setTimeout(() => next(i + 1), i < parts.length - 1 ? Math.max(0, pause - (this._lag || 0)) : 0); };
+      const after = () => {
+        if (done || run !== this._run) return;
+        done = true; clearInterval(watch);
+        const gap = i >= parts.length - 1 ? 0 : part.last ? Math.max(0, pause - (this._lag || 0)) : 120; // a breath inside a sentence
+        this._timer = setTimeout(() => next(i + 1), gap);
+      };
       u.onend = after; u.onerror = after;
+      // Watchdog: if the piece never starts, or the engine has gone quiet without saying it finished, move on.
+      const budget = 4000 + (part.text.length / (14 * u.rate)) * 1000 * 2;
+      const watch = setInterval(() => {
+        if (done || run !== this._run) return clearInterval(watch);
+        const quiet = !speechSynthesis.speaking && !speechSynthesis.pending;
+        if ((started && quiet) || (!started && Date.now() - asked > 5000) || Date.now() - asked > budget) { if (!quiet) speechSynthesis.cancel(); after(); }
+      }, 700);
       speechSynthesis.speak(u);
     };
     next(0);
@@ -171,9 +192,19 @@ export class Voice {
     this._run = (this._run || 0) + 1;
     if (this._speaking) this._saidUntil = Date.now() + 1500;
     this._speaking = false;
-    clearTimeout(this._timer);
+    clearTimeout(this._timer); clearInterval(this._keep);
     if (voiceSupported.tts) speechSynthesis.cancel();
   }
+}
+
+// A sentence in pieces of about 110 characters at most, broken at commas, then before "from", "at", "to", "and"...
+export function chunk(x, max = 110) {
+  if (x.length <= max) return [x];
+  const bits = x.split(/(?<=[,;:])\s+|\s+(?=(?:from|at|until|and then|which|where|because|so that|with) )/i);
+  const out = [];
+  for (const b of bits) { const l = out.length - 1; if (l >= 0 && out[l].length + b.length + 1 <= max) out[l] += ' ' + b; else out.push(b); }
+  // anything still too long is split between words
+  return out.flatMap((p) => { if (p.length <= max * 1.4) return [p]; const w = p.split(' '), r = ['']; for (const t of w) { if ((r[r.length - 1] + ' ' + t).trim().length > max) r.push(t); else r[r.length - 1] = (r[r.length - 1] + ' ' + t).trim(); } return r.filter(Boolean); });
 }
 
 const words = (t) => String(t).toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
