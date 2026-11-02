@@ -184,7 +184,7 @@ a:hover { text-decoration: underline; }
 .agent-icon .icon { stroke-width: 1.6; }
 .activity-details { flex: 1; min-width: 0; padding: 0 0 14px 10px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; position: relative; }
 .a-time { color: var(--dim); font-size: 12px; }
-.a-title { font-weight: 600; font-size: 13px; padding-right: 110px; line-height: 1.25; }
+.a-title { font-weight: 600; font-size: 15px; padding-right: 110px; line-height: 1.25; }
 .a-quote { color: var(--muted); font-family: var(--font-cond); font-size: 12px; line-height: 1.3; }
 .a-summary { color: var(--muted); font-size: 13px; }
 .a-meta { display: flex; gap: 6px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-top: 2px; }
