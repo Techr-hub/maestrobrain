@@ -92,34 +92,61 @@ export class Voice {
 
   voices() { return voiceSupported.tts ? speechSynthesis.getVoices() : []; }
 
-  speak(text, { voiceName, rate = 1, onStart, onEnd } = {}) {
+  // The most natural-sounding English voice this browser has (Edge "Online (Natural)", macOS Premium/Enhanced,
+  // Google voices), skipping the novelty and robotic ones.
+  bestVoice() { return rankVoices(this.voices())[0] || null; }
+
+  speak(text, { voiceName, rate = 0.92, pause = 380, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
-    speechSynthesis.cancel();
-    // Speak in sentence-sized chunks: long utterances get cut off in Chrome.
-    // Each chunk is cleaned so the voice never reads punctuation or symbols aloud
-    // (some voices say "dot", "end" or "point" for a trailing full stop).
-    // Sentences are cleaned, then joined back into a few longer utterances (Chrome cuts off very long ones).
+    this.stopSpeaking();
+    // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
+    // reads punctuation or symbols aloud (some voices say "dot", "end" or "point" for a trailing full stop).
     const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(speakable).filter(Boolean);
-    const chunks = [];
-    for (const s of sentences) {
-      const last = chunks.length - 1;
-      if (last >= 0 && chunks[last].length + s.length < 220) chunks[last] += (/[?!]$/.test(chunks[last]) ? ' ' : '. ') + s;
-      else chunks.push(s);
-    }
-    if (!chunks.length) { onEnd && onEnd(); return; }
-    const voice = this.voices().find((v) => v.name === voiceName) || this.voices().find((v) => /en[-_]GB/i.test(v.lang) && /male|daniel|arthur|george/i.test(v.name)) || null;
-    chunks.forEach((chunk, i) => {
-      const u = new SpeechSynthesisUtterance(chunk);
+    // Very long sentences get split at commas so Chrome doesn't cut them off.
+    const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
+    if (!parts.length) { onEnd && onEnd(); return; }
+    const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice();
+    const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
+    const next = (i) => {
+      if (run !== this._run) return;
+      if (i >= parts.length) { onEnd && onEnd(); return; }
+      const u = new SpeechSynthesisUtterance(parts[i]);
       if (voice) u.voice = voice;
-      u.rate = rate; u.lang = voice ? voice.lang : this.lang;
+      u.lang = voice ? voice.lang : this.lang;
+      u.rate = rate;
+      u.pitch = 1;
       if (i === 0) u.onstart = () => onStart && onStart();
-      if (i === chunks.length - 1) { u.onend = () => onEnd && onEnd(); u.onerror = () => onEnd && onEnd(); }
+      const after = () => { if (run !== this._run) return; this._timer = setTimeout(() => next(i + 1), i < parts.length - 1 ? pause : 0); };
+      u.onend = after; u.onerror = after;
       speechSynthesis.speak(u);
-    });
+    };
+    next(0);
   }
 
-  stopSpeaking() { if (voiceSupported.tts) speechSynthesis.cancel(); }
+  stopSpeaking() {
+    this._run = (this._run || 0) + 1;
+    clearTimeout(this._timer);
+    if (voiceSupported.tts) speechSynthesis.cancel();
+  }
 }
+
+const ROBOTIC = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|fred|good news|hysterical|jester|junior|kathy|organ|pipe organ|princess|ralph|superstar|trinoids|whisper|wobble|zarvox|eloquence|espeak|microsoft (david|mark|zira) desktop)\b/i;
+// Score each voice: higher sounds more human.
+export function voiceScore(v) {
+  if (!/^en([-_]|$)/i.test(v.lang || '')) return -1000;
+  if (ROBOTIC.test(v.name)) return -500;
+  let s = 0;
+  if (/natural|neural/i.test(v.name)) s += 100;
+  if (/premium/i.test(v.name)) s += 90;
+  if (/enhanced/i.test(v.name)) s += 70;
+  if (/online/i.test(v.name)) s += 30;
+  if (/^google/i.test(v.name)) s += 35;
+  if (/\b(andrew|brian|guy|christopher|eric|roger|steffan|ryan|thomas|daniel|arthur|evan|nathan|aaron|tom|oliver|jamie|alex)\b/i.test(v.name)) s += 15;
+  if (/en[-_](us|gb|ca|au)/i.test(v.lang)) s += 8;
+  if (v.localService === false) s += 5;
+  return s;
+}
+export function rankVoices(list) { return list.filter((v) => voiceScore(v) > -500).sort((a, b) => voiceScore(b) - voiceScore(a)); }
 
 // Turn a chunk of reply text into something a speech engine reads naturally.
 export function speakable(s = '') {

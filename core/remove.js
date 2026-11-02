@@ -48,12 +48,28 @@ async function candidates(text, profile) {
   if (time != null) pool = pool.filter((e) => { const d = new Date(e.start); return d.getHours() * 60 + d.getMinutes() === time; });
   const words = m.replace(VERB, ' ').replace(/\b(from|off|my|the|calendar|please|can you|could you|for|at|on|in|tomorrow|today|tonight|next|this|am|pm|\d{1,2}(:\d{2})?)\b/g, ' ');
   const hit = lookup.matchEvents(words, pool);
-  if (hit) return hit.events;
-  return day || time != null ? pool : [];
+  const out = hit ? hit.events : day || time != null ? pool : [];
+  // a repeating event counts once: its next occurrence (unless a day was named)
+  const seen = new Set();
+  return out.filter((e) => { const k = e.uid ? `${e.source}|${e.uid}` : `${e.source}|${e.title}|${e.start}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 // Actually remove it. Returns a sentence saying what happened.
-async function perform(e, { profile, series = false } = {}) {
+async function perform(e, opts = {}) {
+  const r = await removeIt(e, opts);
+  const series = !!opts.series;
+  const prof = opts.profile || config.load().profile;
+  const label = calName(e);
+  // grey out this event's cards in the Intelligence Feed, then add one "Cancelled" card
+  try { const feed = require('./feed'); feed.markRemoved(feed.eventMatcher(e, { series })); } catch { /* best-effort */ }
+  // Same id the calendar watcher would use, so there's one "Cancelled" card, not two.
+  try {
+    require('./feed').add({ externalId: `cal:cancelled:${e.source}:${e.uid || e.title + '|' + e.start}:`, source: e.source === 'maestro' ? 'system' : e.source, profile: prof, category: 'MEETING', title: `Cancelled: ${e.title}`, quote: fmt(e.start, e.allDay) + (series ? ' · whole series' : ''), summary: `Removed by Maestro from your ${label}`, calendarName: e.calendarName || '', unread: false });
+  } catch { /* feed is best-effort */ }
+  return r;
+}
+
+async function removeIt(e, { profile, series = false } = {}) {
   const cfg = config.load();
   const prof = profile || cfg.profile;
   const conns = cfg.connections[prof] || {};
@@ -103,10 +119,6 @@ async function perform(e, { profile, series = false } = {}) {
       ? `It's gone from Maestro. To delete it in Apple Calendar too, add your Apple ID and an app-specific password to the iCalendar card, or run "Sync my calendar changes into my calendars" in Claude Desktop.`
       : `It's gone from Maestro. Claude Desktop deletes it in ${LABEL[e.source]} itself when you run "Sync my calendar changes into my calendars" (+ → Maestro).`;
   }
-  // Same id the calendar watcher would use, so there's one "Cancelled" card, not two.
-  try {
-    require('./feed').add({ externalId: `cal:cancelled:${e.source}:${e.uid || e.title + '|' + e.start}:`, source: e.source === 'maestro' ? 'system' : e.source, profile: prof, category: 'MEETING', title: `Cancelled: ${e.title}`, quote: fmt(e.start, e.allDay) + (series ? ' · whole series' : ''), summary: `Removed by Maestro from your ${label}`, calendarName: e.calendarName || '', unread: false });
-  } catch { /* feed is best-effort */ }
   return { done, note };
 }
 
@@ -123,8 +135,11 @@ async function handle(text, conv, { profile, name }) {
   let s = conv.pending && conv.pending.type === 'remove' ? conv.pending : null;
   if (s && Date.now() - (s.askedAt || 0) > 15 * 60000) { conv.pending = null; s = null; }
   if (!s) {
-    if (!wantsRemove(text)) return null;
+    const explicit = wantsRemove(text);
+    // "delete board prep": a remove verb plus the name of an event on the calendar also counts
+    if (!explicit && !(VERB.test(text.toLowerCase()) && !/\b(task|to-?do|note|memory|reminder|connection|connector|skill|agent|file|message|email)\b/i.test(text))) return null;
     const found = await candidates(text, profile);
+    if (!explicit && !found.length) return null;
     if (!found.length) return { reply: `I can't find that on your calendar in the next 90 days, ${name}. Tell me the event's name or when it is.` };
     s = { type: 'remove', options: found.slice(0, 6), askedAt: Date.now() };
     if (found.length > 1) { s.step = 'pick'; conv.pending = s; return { reply: `I found ${found.length} that match. Which one?\n${list(found)}`, pending: true }; }

@@ -446,3 +446,9 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .src-chip b { color: color-mix(in srgb, var(--sc) 70%, #fff); font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
 .src-chip i { font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .src-chip i::before { content: '·'; margin-right: 5px; color: var(--dim); }
+
+/* A calendar event that was removed: its cards stay in the feed, greyed out */
+.activity.removed { filter: grayscale(1); opacity: .5; }
+.activity.removed .a-title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.activity.removed:hover { opacity: .75; }
+.pill.removed-pill { --pill: #2a2f3a; --pill-text: #c3cad6; margin-left: 6px; }

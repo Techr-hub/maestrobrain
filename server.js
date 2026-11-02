@@ -32,15 +32,20 @@ function broadcast(type, data) {
 }
 const seenIds = new Set(feed.readAll().map((i) => i.id));
 feed.bus.on('item', (item) => { seenIds.add(item.id); broadcast('feed', item); });
+feed.bus.on('update', (item) => broadcast('feed-update', item));
 
 // Items written by another process (Claude Desktop via the MCP server) show up live too.
 let feedMtime = 0;
+let lastRemovedScan = Date.now();
 setInterval(() => {
   try {
     const st = fs.statSync(path.join(config.DATA_DIR, 'feed.json'));
     if (st.mtimeMs === feedMtime) return;
     feedMtime = st.mtimeMs;
-    for (const it of feed.readAll().slice(0, 20)) if (!seenIds.has(it.id)) { seenIds.add(it.id); broadcast('feed', it); }
+    const all = feed.readAll();
+    for (const it of all.slice(0, 20)) if (!seenIds.has(it.id)) { seenIds.add(it.id); broadcast('feed', it); }
+    for (const it of all) if (it.removedAt && it.removedAt > lastRemovedScan) broadcast('feed-update', it); // greyed out from Claude Desktop
+    lastRemovedScan = Date.now();
   } catch { /* no feed yet */ }
 }, 2000);
 

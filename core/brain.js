@@ -462,7 +462,7 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
       actions.push({ type: 'event', event: sched.event });
       try { const ev = sched.event;
       const calSrc = ev.calendarFor || (ev.target && ev.target.startsWith('caldav:') ? ev.target.split(':')[1] : 'system');
-      feed.add({ source: calSrc, category: 'MEETING', profile, title: `New: ${ev.title}`, quote: `${new Date(ev.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${ev.attendees.length ? ' · with ' + ev.attendees.join(', ') : ''}${ev.location ? ' · ' + ev.location : ''}`, summary: 'Created by Maestro', priority: '' }); } catch { /* feed is best-effort */ }
+      feed.add({ source: calSrc, category: 'MEETING', profile, eventKey: ev.uid, eventStart: ev.start, title: `New: ${ev.title}`, quote: `${new Date(ev.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${ev.attendees.length ? ' · with ' + ev.attendees.join(', ') : ''}${ev.location ? ' · ' + ev.location : ''}`, summary: 'Created by Maestro', priority: '' }); } catch { /* feed is best-effort */ }
     }
   }
 

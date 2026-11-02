@@ -3,7 +3,7 @@
 import { icon, CATEGORY } from './icons.js';
 import { renderMarkdown, esc } from './md.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, obsidianUrl } from './core.js';
-import { voiceSupported } from './voice.js';
+import { voiceSupported, Voice, rankVoices, voiceScore } from './voice.js';
 
 const head = (title, sub, actions = '') => `<div class="page-head"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${actions}</div></div>`;
 const cfg = () => S.state.config;
@@ -506,7 +506,7 @@ async function settingsPage(el, ctx) {
   await refreshState();
   const st = S.state, c = cfg();
   const prov = c.llm.provider;
-  const voices = voiceSupported.tts ? speechSynthesis.getVoices().filter((v) => /^en/i.test(v.lang)) : [];
+  const voices = voiceSupported.tts ? rankVoices(speechSynthesis.getVoices()) : []; // most natural first
   el.innerHTML = head('Settings', 'Make the brain yours. Keys are stored only on this computer in <code>data/config.json</code>.') +
     `<div class="tabs" id="tabs">${['You', 'AI engine', 'Voice', 'Vault', 'Claude Desktop', 'Demo'].map((t, i) => `<button data-tab="${i}" class="${i === 0 ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div data-pane="0">
@@ -525,8 +525,10 @@ async function settingsPage(el, ctx) {
       ${voiceSupported.stt ? '' : '<div class="callout" style="margin-bottom:12px"><span class="big-icon">' + icon('mic') + '</span><div><h4>Voice input is not available in this browser</h4><p>Use Chrome or Edge for talking to the brain. Spoken replies still work.</p></div></div>'}
       <div class="field" style="flex-direction:row;align-items:center;gap:12px"><label class="toggle"><input type="checkbox" id="v-speak" ${c.voice.speakReplies ? 'checked' : ''}><span></span></label><div>Speak replies out loud when I ask by voice</div></div>
       <div class="field" style="flex-direction:row;align-items:center;gap:12px"><label class="toggle"><input type="checkbox" id="v-hands" ${c.voice.handsFree ? 'checked' : ''}><span></span></label><div>Hands-free: keep listening and respond to “Hey ${esc(c.assistantName)}…”</div></div>
-      <div class="two-col"><div class="field"><label>Voice</label><select class="input" id="v-voice"><option value="">Automatic</option>${voices.map((v) => `<option ${v.name === c.voice.voiceName ? 'selected' : ''}>${esc(v.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Speed</label><input class="input" type="range" min="0.7" max="1.4" step="0.05" id="v-rate" value="${c.voice.rate}"></div></div>
+      <div class="two-col"><div class="field"><label>Voice</label><select class="input" id="v-voice"><option value="">Automatic (most natural: ${esc(voices[0] ? voices[0].name : 'browser default')})</option>${voices.map((v) => `<option value="${esc(v.name)}" ${v.name === c.voice.voiceName ? 'selected' : ''}>${esc(v.name)}${voiceScore(v) >= 60 ? ' ★ natural' : ''}</option>`).join('')}</select>
+        <span class="help">For the most human voice use Edge ("Online (Natural)" voices), or on a Mac download a Premium or Enhanced voice: System Settings → Accessibility → Spoken Content → System voice → Manage Voices.</span></div>
+      <div class="field"><label>Speed</label><input class="input" type="range" min="0.7" max="1.4" step="0.02" id="v-rate" value="${c.voice.rate}"></div></div>
+      <div class="field"><label>Pause between sentences</label><input class="input" type="range" min="0" max="900" step="20" id="v-pause" value="${c.voice.pause != null ? c.voice.pause : 380}"></div>
       <div style="display:flex;gap:8px"><button class="btn primary" id="save-voice">${icon('save')} Save</button><button class="btn ghost" id="test-voice">${icon('volume-2')} Test voice</button></div>
     </div>
     <div data-pane="3" hidden>
@@ -575,8 +577,8 @@ async function settingsPage(el, ctx) {
   el.querySelector('#save-ai').onclick = saveAi;
   el.querySelector('#test-ai').onclick = async () => { await saveAi(); try { const r = await api('/llm/test', {}); toast('✓ ' + r.reply); } catch (e) { toast(e.message, 'error'); } };
   el.querySelector('#save-you').onclick = async () => { await api('/settings', { user: { name: el.querySelector('#s-name').value.trim(), role: el.querySelector('#s-role').value.trim() }, assistantName: el.querySelector('#s-asst').value.trim() || 'Maestro' }); toast('Saved'); ctx.afterChange({ graph: false, feed: false }); };
-  el.querySelector('#save-voice').onclick = async () => { await api('/settings', { voice: { speakReplies: el.querySelector('#v-speak').checked, handsFree: el.querySelector('#v-hands').checked, voiceName: el.querySelector('#v-voice').value, rate: Number(el.querySelector('#v-rate').value) } }); await refreshState(); toast('Voice saved'); };
-  el.querySelector('#test-voice').onclick = () => { const u = new SpeechSynthesisUtterance(`Hello ${c.user.name}. Your second brain is online.`); const v = speechSynthesis.getVoices().find((x) => x.name === el.querySelector('#v-voice').value); if (v) u.voice = v; u.rate = Number(el.querySelector('#v-rate').value); speechSynthesis.speak(u); };
+  el.querySelector('#save-voice').onclick = async () => { await api('/settings', { voice: { speakReplies: el.querySelector('#v-speak').checked, handsFree: el.querySelector('#v-hands').checked, voiceName: el.querySelector('#v-voice').value, rate: Number(el.querySelector('#v-rate').value), pause: Number(el.querySelector('#v-pause').value) } }); await refreshState(); toast('Voice saved'); };
+  el.querySelector('#test-voice').onclick = () => { new Voice({}).speak(`Hello ${String(c.user.name).split(' ')[0]}. Your second brain is online. Let's get to work.`, { voiceName: el.querySelector('#v-voice').value, rate: Number(el.querySelector('#v-rate').value), pause: Number(el.querySelector('#v-pause').value) }); };
   el.querySelector('#save-vault').onclick = async () => { try { await api('/settings', { vaultPath: el.querySelector('#vault-path').value.trim() }); toast('Vault updated'); ctx.afterChange(); } catch (e) { toast(e.message, 'error'); } };
   el.querySelector('#cd').onclick = () => registerClaude(() => settingsPage(el, ctx));
   el.querySelector('#save-demo').onclick = async () => { await api('/settings', { demo: { liveFeed: el.querySelector('#d-live').checked, intervalSeconds: Number(el.querySelector('#d-int').value) } }); S.livePaused = !el.querySelector('#d-live').checked; toast('Saved'); ctx.afterChange({ graph: false, feed: false }); };

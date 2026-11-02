@@ -39,11 +39,12 @@ function snapshot(events) {
 }
 
 function post(profile, source, kind, key, e, extra = {}) {
+  if (kind === 'cancelled') feed.markRemoved((i) => i.source === source && i.eventKey === key);
   const name = (connectors.get(source) || {}).name || 'Calendar';
   const title = { new: e.recurring ? `New recurring event: ${e.title}` : `New: ${e.title}`, moved: `Moved: ${e.title}`, cancelled: `Cancelled: ${e.title}` }[kind];
   feed.add({
     externalId: `cal:${kind}:${source}:${key}:${kind === 'cancelled' ? '' : e.start}`,
-    ts: Date.now(), source, profile, category: 'MEETING', title,
+    ts: Date.now(), source, profile, category: 'MEETING', title, eventKey: key, eventStart: kind === 'cancelled' ? '' : e.start,
     quote: kind === 'moved' ? `Now ${when(e.start, e.allDay)} (was ${when(extra.was, e.allDay)})` : `${when(e.start, e.allDay)}${extra.with ? ' · with ' + extra.with.join(', ') : ''}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
     summary: e.calendly || source === 'calendly' ? 'Booked through Calendly' : kind === 'cancelled' ? `Removed from ${name}` : `${kind === 'new' ? 'Added to' : 'Updated in'} ${name}`,
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
@@ -83,7 +84,7 @@ function upcoming(profile, source, events, skip = new Set()) {
     const item = feed.add({
       externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
       ts: now - 1000 - Math.max(0, startsIn) / 10000, // just under brand-new notifications; sooner events sort higher, across all calendars
-      source, profile, category: 'MEETING',
+      source, profile, category: 'MEETING', eventKey: e.uid || e.title, eventStart: start.toISOString(),
       title: e.title,
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
       summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`,

@@ -86,6 +86,27 @@ function add(raw, { emit = true } = {}) {
   return item;
 }
 
+// Grey out cards about a calendar event that was removed (by Maestro or in the calendar itself).
+// match(item) decides which cards; each changed card is re-sent to open dashboards.
+function markRemoved(match) {
+  const items = readAll();
+  const hit = items.filter((i) => !i.removed && !/^Cancelled: /.test(i.title || '') && match(i));
+  hit.forEach((i) => { i.removed = true; i.removedAt = Date.now(); i.unread = false; });
+  if (hit.length) { writeAll(items); hit.forEach((i) => bus.emit('update', i)); }
+  return hit.length;
+}
+// Cards that belong to one event: agenda, new/moved notices and "New:" cards Maestro posted when creating it.
+function eventMatcher(e, { series = false } = {}) {
+  const key = e.uid || e.title;
+  const start = new Date(e.start).toISOString();
+  const srcs = e.source === 'maestro' ? ['maestro', 'system'] : [e.source];
+  return (i) => {
+    if (i.eventKey) return i.eventKey === key && (series || !i.eventStart || new Date(i.eventStart).toISOString() === start);
+    const x = i.externalId || '';
+    return ['up', 'new', 'moved'].some((k) => srcs.some((src) => x.startsWith(`cal:${k}:${src}:${key}:`) && (series || x.endsWith(':' + start) || x.endsWith(':' + e.start))));
+  };
+}
+
 function markRead(id) {
   const items = readAll();
   const it = items.find((i) => i.id === id);
@@ -175,4 +196,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { list, add, markRead, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { list, add, markRead, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

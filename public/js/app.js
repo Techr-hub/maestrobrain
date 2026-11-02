@@ -368,7 +368,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   setSubtitle(spoken.split(/(?<=[.!?])\s/)[0].slice(0, 140), true);
   const speakIt = viaVoice && S.state.config.voice.speakReplies && voiceSupported.tts;
   if (speakIt) {
-    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, onStart: () => setBrainState('speaking'), onEnd: () => { setBrainState('idle'); if (voice.handsFree && !voice.listening) voice.start({ handsFree: true }); } });
+    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => { setBrainState('idle'); if (voice.handsFree && !voice.listening) voice.start({ handsFree: true }); } });
   }
   await typeOut(body, res.reply);
   if (!speakIt) setTimeout(() => { if (brain.state === 'speaking') setBrainState('idle'); }, 600);
@@ -391,7 +391,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   tools.querySelectorAll('[data-src]').forEach((b) => b.onclick = () => openNote(b.dataset.src));
   tools.querySelector('[data-act=speak]').onclick = () => {
     setBrainState('speaking');
-    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, onEnd: () => setBrainState('idle') });
+    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => setBrainState('idle') });
   };
   tools.querySelector('[data-act=save]').onclick = async () => {
     const r = await api('/chat/save', { title: text.slice(0, 60), content: res.reply });
@@ -512,17 +512,17 @@ function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
   const calColor = CAL_MARK[i.source] && i.source !== 'maestro' ? ((S.state.connectors.find((x) => x.id === i.source) || {}).color || cat.c) : cat.c; // calendar cards take their calendar's colour
-  return `<div class="activity ${isNew ? 'new' : ''}" data-id="${i.id}" style="--c:${calColor}">
+  return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
       <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span></div>
       <div class="a-title">${esc(i.title)}</div>
-      <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.unread ? '<span class="unread-dot"></span>' : ''}</div>
+      <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}</div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
       ${meta ? `<div class="a-meta">${meta}</div>` : ''}
       ${typeof i.progress === 'number' ? `<div class="progress"><div class="track"><div class="bar" style="width:${i.progress}%"></div></div><span>${i.progress}%</span></div>` : ''}
-      ${i.actions && i.actions.length ? `<div class="a-actions">${i.actions.map((a) => `<button data-action="${esc(a)}">${esc(a)}</button>`).join('')}</div>` : ''}
+      ${i.actions && i.actions.length && !i.removed ? `<div class="a-actions">${i.actions.map((a) => `<button data-action="${esc(a)}">${esc(a)}</button>`).join('')}</div>` : ''}
     </div></div>`;
 }
 
@@ -749,6 +749,13 @@ function connectStream() {
     const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;
     if (brain) brain.pulseSource(item.source, cat.c);
     if (item.notePath) loadGraph();
+  });
+  es.addEventListener('feed-update', (e) => { // e.g. a removed calendar event: its cards turn grey
+    const item = JSON.parse(e.data);
+    if (!S.feed.some((x) => x.id === item.id)) return;
+    mergeFeed([item]);
+    if (S.sourceView && S.sourceData) { S.sourceData.items = (S.sourceData.items || []).map((x) => (x.id === item.id ? item : x)); }
+    renderFeed(false);
   });
   es.addEventListener('profile', () => afterChange());
 }
