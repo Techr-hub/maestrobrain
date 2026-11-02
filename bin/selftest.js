@@ -63,6 +63,9 @@ async function main() {
     const after = await (await fetch(base + '/calendar?days=7')).json();
     ok('remove event: confirms first, then removes it', /^Remove "Design critique.*Say yes to confirm/.test(r1.reply) && /^Removed "Design critique/.test(r2.reply) && !after.some((e) => /Design critique/.test(e.title)));
     const fd = await (await fetch(base + '/feed?limit=200')).json();
+    await post('/settings', { voice: { gender: 'female' } }).catch(() => null);
+    const vcfg = (await (await fetch(base + '/state')).json()).config.voice;
+    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 2500);
     ok('remove event: feed gets a "Cancelled" card', (fd.items || fd).some((i) => /^Cancelled: Design critique/.test(i.title)));
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));

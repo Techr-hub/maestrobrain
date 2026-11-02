@@ -66,6 +66,9 @@ a:hover { text-decoration: underline; }
 .profile-switch { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-deep); }
 .profile-switch button { border: 0; background: transparent; color: var(--muted); padding: 8px 12px; border-radius: 6px; font-size: 13px; display: flex; gap: 6px; align-items: center; }
 .profile-switch button.on { background: var(--nav-active); color: var(--text); box-shadow: inset 0 0 0 1px var(--cyan-deep); }
+/* Business/Personal and Man/Woman switches drop their icons on mid-size screens so they clear the clock */
+@media (max-width: 1500px) and (min-width: 1181px) { .profile-switch .icon { display: none; } .profile-switch button { padding: 8px 10px; } .actions { gap: 10px; } }
+@media (max-width: 1320px) and (min-width: 1181px) { .clock { left: 40%; } }
 
 .workspace { display: grid; grid-template-columns: 266px 1fr 463px; gap: 10px; min-height: 0; }
 .workspace.no-feed { grid-template-columns: 266px 1fr; }

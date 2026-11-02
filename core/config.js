@@ -31,7 +31,7 @@ function defaultConfig() {
       // Any OpenAI-compatible endpoint: Ollama (Hermes 3/4), LM Studio, OpenRouter, Nous Portal...
       compatible: { baseUrl: 'http://localhost:11434/v1', apiKey: '', model: 'hermes3', label: 'Hermes (Ollama)' },
     },
-    voice: { speakReplies: true, handsFree: false, voiceName: '', rate: 0.92, pause: 2500, lang: 'en-US' },
+    voice: { speakReplies: true, handsFree: false, voiceName: '', gender: 'male', rate: 0.92, pause: 2500, lang: 'en-US' },
     connections: {
       business: demo(['outlook', 'email', 'gcal', 'slack', 'twilio_calls', 'icalendar']),
       personal: demo(['gmail', 'icalendar', 'twilio_sms', 'twilio_calls']),

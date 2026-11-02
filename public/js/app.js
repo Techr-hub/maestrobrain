@@ -68,6 +68,18 @@ $('#sidebar-toggle').onclick = () => {
   applySidebar();
 };
 
+// Top-bar Man / Woman switch: picks the most natural voice of that kind and says hello in it.
+async function setVoiceGender(gender) {
+  if (S.state.config.voice.gender === gender && !S.state.config.voice.voiceName) return;
+  // A specific voice chosen in Settings would override the switch, so clear it.
+  S.state.config.voice = { ...S.state.config.voice, gender, voiceName: '' };
+  renderShell();
+  try { await api('/settings', { voice: { gender, voiceName: '' } }); } catch { /* the next save retries */ }
+  const v = voice.bestVoice(gender);
+  toast(v ? `Maestro now speaks as ${v.name.replace(/^Microsoft |^Google /, '').replace(/ Online \(Natural\)| - English.*$/, '')}` : 'Voice saved');
+  voice.speak("Hi, it's Maestro. How do I sound?", { gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause });
+}
+
 function renderShell() {
   applySidebar();
   const st = S.state, cfg = st.config;
@@ -79,6 +91,15 @@ function renderShell() {
   ps.querySelectorAll('button').forEach((b) => {
     b.classList.toggle('on', b.dataset.profile === cfg.profile);
     b.onclick = () => switchProfile(b.dataset.profile);
+  });
+  const vs = $('#voice-switch');
+  const gender = (cfg.voice && cfg.voice.gender) || 'male';
+  vs.querySelector('[data-gender=male]').innerHTML = `${icon('user-round')} Man`;
+  vs.querySelector('[data-gender=female]').innerHTML = `${icon('user-round')} Woman`;
+  vs.querySelectorAll('button').forEach((b) => {
+    const on = b.dataset.gender === gender;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+    b.onclick = () => setVoiceGender(b.dataset.gender);
   });
   $('#bell-icon').innerHTML = icon('bell');
   $('#bell-dot').hidden = !st.unread;
@@ -368,7 +389,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   setSubtitle(spoken.split(/(?<=[.!?])\s/)[0].slice(0, 140), true);
   const speakIt = viaVoice && S.state.config.voice.speakReplies && voiceSupported.tts;
   if (speakIt) {
-    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => { setBrainState('idle'); if (voice.handsFree && !voice.listening) voice.start({ handsFree: true }); } });
+    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => { setBrainState('idle'); if (voice.handsFree && !voice.listening) voice.start({ handsFree: true }); } });
   }
   await typeOut(body, res.reply);
   if (!speakIt) setTimeout(() => { if (brain.state === 'speaking') setBrainState('idle'); }, 600);
@@ -391,7 +412,7 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   tools.querySelectorAll('[data-src]').forEach((b) => b.onclick = () => openNote(b.dataset.src));
   tools.querySelector('[data-act=speak]').onclick = () => {
     setBrainState('speaking');
-    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => setBrainState('idle') });
+    voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => setBrainState('idle') });
   };
   tools.querySelector('[data-act=save]').onclick = async () => {
     const r = await api('/chat/save', { title: text.slice(0, 60), content: res.reply });

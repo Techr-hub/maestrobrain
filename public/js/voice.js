@@ -94,9 +94,10 @@ export class Voice {
 
   // The most natural-sounding English voice this browser has (Edge "Online (Natural)", macOS Premium/Enhanced,
   // Google voices), skipping the novelty and robotic ones.
-  bestVoice() { return rankVoices(this.voices())[0] || null; }
+  // gender: 'male' | 'female' | '' (any). Falls back to the best voice of any gender if none match.
+  bestVoice(gender = '') { const r = rankVoices(this.voices()); return (gender && r.find((v) => voiceGender(v) === gender)) || r[0] || null; }
 
-  speak(text, { voiceName, rate = 0.92, pause = 2500, onStart, onEnd } = {}) {
+  speak(text, { voiceName, gender = '', rate = 0.92, pause = 2500, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
@@ -105,7 +106,7 @@ export class Voice {
     // Very long sentences get split at commas so Chrome doesn't cut them off.
     const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
     if (!parts.length) { onEnd && onEnd(); return; }
-    const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice();
+    const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice(gender);
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
     const next = (i) => {
       if (run !== this._run) return;
@@ -141,10 +142,18 @@ export function voiceScore(v) {
   if (/enhanced/i.test(v.name)) s += 70;
   if (/online/i.test(v.name)) s += 30;
   if (/^google/i.test(v.name)) s += 35;
-  if (/\b(andrew|brian|guy|christopher|eric|roger|steffan|ryan|thomas|daniel|arthur|evan|nathan|aaron|tom|oliver|jamie|alex)\b/i.test(v.name)) s += 15;
   if (/en[-_](us|gb|ca|au)/i.test(v.lang)) s += 8;
   if (v.localService === false) s += 5;
   return s;
+}
+// Whether a voice sounds like a man or a woman, from its name (browsers don't report this).
+const FEMALE = /\b(female|woman|aria|jenny|ava|emma|michelle|sonia|libby|maisie|natasha|clara|samantha|victoria|karen|moira|tessa|fiona|serena|allison|susan|zoe|nicky|joanna|salli|kendra|kimberly|ivy|amy|olivia|emily|catherine|hazel|zira|ana|jane|nancy|sara|elizabeth|molly|ashley|cora|monica|heather|linda|kate|stephanie|sabina|ellie|isla|neerja|rosa|amber|hayley|abbi|bella|hollie|google us english)\b/i;
+const MALE = /\b(male|man|andrew|brian|guy|christopher|eric|roger|steffan|ryan|thomas|daniel|arthur|evan|nathan|aaron|tom|oliver|alex|davis|jason|tony|william|liam|connor|mitchell|james|rishi|lee|gordon|fred|matthew|joey|justin|russell|david|mark|george|reed|rocko|ralph|alfie|elliot|ethan|noah|ollie|kai|luke|prabhat|duncan)\b/i;
+export function voiceGender(v) {
+  const n = v.name || '';
+  if (/\bfemale\b/i.test(n)) return 'female';
+  if (/\bmale\b/i.test(n)) return 'male';
+  return FEMALE.test(n) ? 'female' : MALE.test(n) ? 'male' : '';
 }
 export function rankVoices(list) { return list.filter((v) => voiceScore(v) > -500).sort((a, b) => voiceScore(b) - voiceScore(a)); }
 
