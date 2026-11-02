@@ -786,8 +786,8 @@ function eventTaskForm(item, { prompt = '', viaVoice = false } = {}) {
       const readDue = wireDueFields(el, 'et');
       const note = el.querySelector('#et-note');
       setTimeout(() => note.focus(), 50);
-      // Maestro asks out loud when replies are spoken; if you were talking to it, it starts listening for the note.
-      if (S.state.config.voice && S.state.config.voice.speakReplies && voice && (!prompt || viaVoice)) {
+      // Maestro asks out loud only when you started the task by voice; then it listens for the note.
+      if (viaVoice && S.state.config.voice && S.state.config.voice.speakReplies && voice) { // only out loud when you asked by voice (Ryan, 2026-11-02)
         voice.speak(prompt || `What's your note about ${title}? Add any action items and when they're due.`, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => { if (listenAfter && document.body.contains(note) && !rec) dictate(el.querySelector('[data-dict=et-note]'), note); } });
       }
       el.querySelector('#et-save').onclick = async () => {
