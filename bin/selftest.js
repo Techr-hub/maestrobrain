@@ -78,6 +78,8 @@ async function main() {
     const fd1 = await (await fetch(base + '/feed?limit=400')).json();
     const rem = (fd1.items || fd1).filter((i) => i.category === 'INSIGHT');
     ok('Insight cards: a reminder when a task you created is due tomorrow (and not for demo tasks)', rem.some((i) => i.title === 'Due tomorrow: Send the workshop recap') && !rem.some((i) => /Write PRD/.test(i.title)));
+    const hi = await post('/chat', { message: 'Hey Maestro' });
+    ok('"Hey Maestro" opens with an upbeat greeting by name', /Ryan|there/.test(hi.reply) && /[!?]/.test(hi.reply) && hi.provider === 'greeting');
     const f1 = await post('/chat', { message: 'When is the design critique?' });
     const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
     ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));
@@ -88,11 +90,11 @@ async function main() {
     const fd = await (await fetch(base + '/feed?limit=200')).json();
     await post('/settings', { voice: { gender: 'female' } }).catch(() => null);
     const vcfg = (await (await fetch(base + '/state')).json()).config.voice;
-    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 1500);
+    ok('voice: Man / Woman choice is saved', vcfg.gender === 'female' && vcfg.pause === 750);
     await post('/settings', { voice: { pause: 1200 } }).catch(() => null);
     const pcfg = (await (await fetch(base + '/state')).json()).config.voice;
     ok('voice: a pause chosen in Settings sticks', pcfg.pause === 1200);
-    await post('/settings', { voice: { pause: 1500 } }).catch(() => null);
+    await post('/settings', { voice: { pause: 750 } }).catch(() => null);
     const fl = fd.items || fd;
     ok('remove event: no separate "Cancelled" card in the feed', !fl.some((i) => /^Cancelled: Design critique/.test(i.title)));
     const last = fl[fl.length - 1];

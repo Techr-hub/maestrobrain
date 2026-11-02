@@ -234,6 +234,48 @@ function stripWake(text, cfg) {
     .trim();
 }
 
+// "Hey Maestro" on its own opens a conversation (Ryan, 2026-11-02): answer fun, upbeat and enthusiastic, with the
+// user's name and the time of day, and invite the first thing to work on. A busy calendar gets a nod.
+function isWakeGreeting(raw, stripped) {
+  if (!stripped) return true;
+  return /^(hi|hello|hey|yo|hiya|howdy|hey there|hi there|good (morning|afternoon|evening)|morning|afternoon|evening)[\s,!.]*$/i.test(stripped);
+}
+function wakeGreeting(cfg, busy = 0, now = new Date()) {
+  const me = firstName(cfg);
+  const h = now.getHours();
+  const part = h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 22 ? 'evening' : 'night';
+  const lines = {
+    morning: [
+      `Hey ${me}, good morning! Ready to get started?`,
+      `Good morning ${me}, let's get after the day! What should we work on first?`,
+      `Hey ${me}, hope you had your coffee, because we have a ${busy >= 3 ? 'busy' : 'big'} day ahead!`,
+      `Morning ${me}! Fresh day, fresh brain. Where do you want to start?`,
+      `Good morning ${me}! I've been up for hours. Well, always. What are we crushing first?`,
+    ],
+    afternoon: [
+      `Hey ${me}, good afternoon! Ready to keep the momentum going?`,
+      `Good afternoon ${me}, let's make the rest of the day count! What's first?`,
+      `Hey ${me}! Second wind time. What should we knock out next?`,
+      `Afternoon ${me}! Coffee number two, or straight to business?`,
+    ],
+    evening: [
+      `Good evening ${me}! Let's finish strong. What do you need?`,
+      `Hey ${me}, good evening! Wrapping up the day, or just getting started?`,
+      `Evening ${me}! One more win before you call it a day?`,
+    ],
+    night: [
+      `Hey ${me}, burning the midnight oil? I'm in. What are we working on?`,
+      `Hey ${me}! Late-night brain session, love it. Where do we start?`,
+    ],
+  }[part];
+  const line = pick(lines);
+  if (!(busy >= 3 && part !== 'night') || /busy day/.test(line)) return line;
+  // the calendar nudge goes before the closing question: "…the day! You've got 4 things still on the calendar today. What's first?"
+  const m = line.match(/^(.*[!.])\s+([^!.]*\?)$/);
+  const nudge = `You've got ${busy} things still on the calendar today.`;
+  return m ? `${m[1]} ${nudge} ${m[2]}` : `${line} ${nudge}`;
+}
+
 function firstName(cfg) { return String(cfg.user.name || 'there').split(/\s+/)[0]; }
 function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
 
@@ -473,6 +515,10 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
   const taskMatch = text.match(/^(?:please\s+)?(?:add (?:a )?task(?: to)?|remind me to|todo:?)\s+(.+)/i);
   if (sched) {
     // handled above
+  } else if (!agent && !(conv.pending) && isWakeGreeting(raw, stripped) && conv.messages.length === 0) {
+    let busy = 0;
+    try { const today = new Date(); today.setHours(0, 0, 0, 0); busy = (await require('./calendar').list({ profile, from: today.toISOString(), to: new Date(+today + 86400000).toISOString() })).filter((e) => new Date(e.end) > Date.now()).length; } catch { /* no calendar */ }
+    reply = wakeGreeting(cfg, busy); providerUsed = 'greeting';
   } else if (rememberMatch) {
     const rel = remember(rememberMatch[1], agent ? '@' + agent.handle : 'chat');
     reply = `Got it. I saved that to [[Memory Log]] and will use it from now on.`;
@@ -530,4 +576,4 @@ function saveAnswer(title, content) {
   return rel;
 }
 
-module.exports = { chat, remember, gatherContext, contextText, demoAnswer, loadConversations, saveAnswer, ensureDaily, logToDaily, isoDate, timeOf, ago };
+module.exports = { wakeGreeting, isWakeGreeting, chat, remember, gatherContext, contextText, demoAnswer, loadConversations, saveAnswer, ensureDaily, logToDaily, isoDate, timeOf, ago };
