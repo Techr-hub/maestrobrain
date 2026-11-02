@@ -71,6 +71,7 @@ export class Voice {
       const heard = (final || interim).trim();
       if (!heard) return;
       // Maestro hearing its own voice through the speakers is not an interruption.
+      if (this.isSpeaking() && STOP.test(heard)) { this.stopSpeaking(); this.onInterrupt && this.onInterrupt(); this.onInterim && this.onInterim(''); return; } // "stop" always works
       if (this.isEcho(heard)) return;
       // You started talking while Maestro was speaking: stop and listen.
       if (this.isSpeaking() && (final || words(interim).length >= 2)) {
@@ -106,10 +107,11 @@ export class Voice {
   // Is this what Maestro is saying (or just said)? Most of the words match the reply being spoken.
   isEcho(heard) {
     if (!this._said || Date.now() > this._saidUntil) return false;
-    const w = words(heard);
-    if (!w.length) return true;
-    const hit = w.filter((x) => this._said.has(x)).length;
-    return hit / w.length >= 0.6;
+    const w = echoWords(heard);
+    if (!w.length) return true; // only filler ("p.m.", "the"): not you talking
+    const novel = w.filter((x) => !this._said.has(x)).length;
+    // It's you only when at least two words, and most of them, aren't in what Maestro is saying.
+    return novel < 2 || novel / w.length < 0.5;
   }
 
   isSpeaking() { return !!this._speaking; }
@@ -144,7 +146,7 @@ export class Voice {
     // Ryan (2026-11-02): the man's voice speaks 10% faster than the chosen speed.
     const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.1 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
-    this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
+    this._said = new Set(echoWords(text)); this._saidUntil = Infinity; this._speaking = true;
     const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
     // No pause()/resume() keep-alive (Ryan, 2026-11-02: it left Chrome stuck "paused", so the next answer was
     // silent while Maestro looked like it was talking). Pieces are short enough that Chrome doesn't cut them off.
@@ -211,6 +213,13 @@ export function chunk(x, max = 110) {
 }
 
 const words = (t) => String(t).toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+// Words compared for echo, so "5:30 PM to 8:00 PM" read back as "5:30 p.m. to 8 p.m." or "five thirty" still matches,
+// and "Centre" heard as "center" too (Ryan, 2026-11-02: the mic took Maestro's own times for an interruption).
+const NUM = { zero: '0', oh: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9', ten: '10', eleven: '11', twelve: '12', fifteen: '15', twenty: '20', thirty: '30', forty: '40', fortyfive: '45', fifty: '50' };
+const FILLER = new Set(['a', 'an', 'the', 'to', 'at', 'of', 'and', 'or', 'is', 'it', 'in', 'on', 'for', 'p', 'm', 'pm', 'am', "o'clock", 'oclock', '00', 'uh', 'um']);
+const echoWords = (t) => String(t).toLowerCase().replace(/(\d)\s*:\s*(\d\d)/g, '$1 $2').replace(/\b([ap])\.?\s?m\b\.?/g, ' ').replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/)
+  .map((w) => NUM[w] || w).map((w) => (/^\d+$/.test(w) ? String(Number(w)) : w.length > 4 ? w.replace(/re$/, 'er').replace(/(ies|s)$/, (m) => (m === 'ies' ? 'y' : '')) : w))
+  .filter((w) => w && !FILLER.has(w) && w !== '0');
 // Short commands that only mean "be quiet": they stop Maestro and aren't sent as a message.
 const STOP = /^(?:(?:hey |ok |okay )?(?:maestro|mistro)[,.!]?\s*)?(stop|stop talking|wait|hold on|hang on|quiet|be quiet|shush|shh+|pause|that's enough|enough|okay stop|ok stop)[.!]?$/i;
 
