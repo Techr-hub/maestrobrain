@@ -57,6 +57,7 @@ function post(profile, source, kind, key, e, extra = {}) {
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
     deadline: kind === 'cancelled' ? '' : `Starts ${when(e.start, e.allDay)}`,
     actions: kind === 'cancelled' ? [] : ['Prep me for this'],
+    description: feed.eventText(e),
   });
 }
 
@@ -96,6 +97,7 @@ function upcoming(profile, source, events, skip = new Set()) {
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
       summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`,
       calendarName: e.calendarName || '',
+      description: e.description === 'calendly' ? '' : feed.eventText(e), // 'calendly' only marks Calendly bookings
       priority: startsIn > 0 && startsIn < 2 * 3600000 ? 'Medium' : '',
       deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       unread: false,

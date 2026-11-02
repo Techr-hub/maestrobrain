@@ -99,6 +99,8 @@ async function main() {
     w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 5, 'A')]));
     const n = w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 7, 'A'), ev('b', 9, 'B')]));
     ok('calendar watcher: posts new and moved events', n === 2);
+    const et = require('../core/feed').eventText({ description: 'Bring a laptop\\nTickets: <a href="https://lu.ma/x">https://lu.ma/x</a> Q&amp;A' });
+    ok('event cards: description kept as plain text with line breaks', et === 'Bring a laptop\nTickets: https://lu.ma/x Q&A');
     const lk = require('../core/lookup');
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];
     ok('event questions: finds an event by its name', /^\*\*Board prep is/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*Kids soccer practice is/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));

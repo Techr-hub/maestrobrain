@@ -105,12 +105,30 @@ function list({ profile, source, category, limit = 60 } = {}) {
 
 function add(raw, { emit = true } = {}) {
   const items = readAll();
-  if (raw.externalId && items.some((i) => i.externalId === raw.externalId)) return null;
+  if (raw.externalId) {
+    const had = items.find((i) => i.externalId === raw.externalId);
+    if (had) {
+      // Cards posted before descriptions were kept pick theirs up the next time the calendar is read.
+      if (raw.description && had.description !== raw.description) { had.description = raw.description; writeAll(items); if (emit) bus.emit('update', had); }
+      return null;
+    }
+  }
   const item = normalize(raw);
   items.unshift(item);
   writeAll(items);
   if (emit) bus.emit('item', item);
   return item;
+}
+
+// An event's description as plain text for its feed card (Ryan, 2026-11-02): calendar escapes and HTML removed,
+// line breaks kept, Maestro's own "Created by Maestro" tag and bare vault-note paths left out.
+function eventText(e) {
+  let t = String((e && (e.description || (e.notes && !/^[\w -]+\/[\w .'&-]+$/.test(e.notes) ? e.notes : ''))) || '');
+  t = t.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n')
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, (m, h, x) => (x && x !== h ? `${x} ${h}` : h)).replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/^\s*Created by Maestro\.?\s*$/gim, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return t.slice(0, 2000);
 }
 
 // Grey out cards about a calendar event that was removed (by Maestro or in the calendar itself).
@@ -236,4 +254,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { list, add, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { list, add, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

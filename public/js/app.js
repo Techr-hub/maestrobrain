@@ -543,6 +543,7 @@ function feedItemHtml(i, isNew) {
       <div class="a-title">${esc(i.title)}</div>
       <div class="a-cat"><span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.unread && !i.removed ? '<span class="unread-dot"></span>' : ''}</div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
+      ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
       ${meta ? `<div class="a-meta">${meta}</div>` : ''}
       ${typeof i.progress === 'number' ? `<div class="progress"><div class="track"><div class="bar" style="width:${i.progress}%"></div></div><span>${i.progress}%</span></div>` : ''}
@@ -721,11 +722,15 @@ async function markRead(item) {
   renderFeed(false);
 }
 
+// Web links in an event description open in a new tab. Works on already-escaped text.
+const linkify = (h) => h.replace(/https?:\/\/[^\s<]+[^\s<.,;:)!?'"]/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+
 function openFeedItem(item) {
   markRead(item);
   const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;
   modal(`${modalHead(esc(item.title), `${esc(item.sourceName)} · ${timeAgo(item.ts)} · ${esc(item.category)}`)}
     ${item.quote ? `<blockquote class="md" style="border-left:3px solid ${cat.c};padding:8px 12px;background:rgba(0,45,76,.35);margin:0 0 10px">${esc(item.quote)}</blockquote>` : ''}
+    ${item.description ? `<div class="ev-desc">${linkify(esc(item.description)).replace(/\n/g, '<br>')}</div>` : ''}
     ${item.summary ? `<p>${esc(item.summary)}</p>` : ''}
     <p class="meta" style="color:var(--muted)">${[item.priority && item.priority + ' priority', item.deadline].filter(Boolean).map(esc).join(' · ')}</p>
     ${item.notePath ? `<p><a href="#" data-note>Open ${esc(item.notePath)}</a></p>` : ''}
