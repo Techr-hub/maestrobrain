@@ -58,7 +58,6 @@ export class BrainMap {
     this.resize();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
     this.bindInput();
-    this.buildControls();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -168,27 +167,6 @@ export class BrainMap {
     }, { passive: false });
     c.addEventListener('dblclick', () => this.resetView());
     c.style.cursor = 'grab';
-  }
-
-  buildControls() {
-    const el = document.createElement('div');
-    el.className = 'brain-controls';
-    el.innerHTML = `
-      <button data-z="in" title="Zoom in">${icon('plus')}</button>
-      <button data-z="out" title="Zoom out">${icon('minus')}</button>
-      <button data-z="spin" class="on" title="Auto-rotate on/off">${icon('orbit')}</button>
-      <button data-z="reset" title="Reset view (double-click the map)">${icon('crosshair')}</button>
-      <span class="brain-help">Drag to orbit · Right-drag or Shift to pan · Scroll to zoom</span>`;
-    el.addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      const z = b.dataset.z;
-      if (z === 'in') this.zoomBy(1.3);
-      if (z === 'out') this.zoomBy(1 / 1.3);
-      if (z === 'reset') this.resetView();
-      if (z === 'spin') { this.autoRotate = !this.autoRotate; b.classList.toggle('on', this.autoRotate); this.lastInteract = -1e9; }
-    });
-    this.c.parentElement.appendChild(el);
-    this.controls = el;
   }
 
   // ---------- data ----------

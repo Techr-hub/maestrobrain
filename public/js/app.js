@@ -1,7 +1,7 @@
 // Maestro Control Centre: shell, brain dashboard, chat + voice, and the live intelligence feed.
 import { icon, CATEGORY } from './icons.js';
 import { renderMarkdown, stripMarkdown, esc } from './md.js';
-import { BrainMap, avatar as makeAvatar, GROUP_COLORS } from './brainmap.js';
+import { BrainMap, avatar as makeAvatar } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
 import { PAGES, onboarding, knowledgeModal, connectModal } from './pages.js';
@@ -161,7 +161,6 @@ function buildDashboard() {
   dashboardEl.innerHTML = `
     <canvas class="brain-canvas" id="brain-canvas"></canvas>
     <div class="brain-tooltip" id="brain-tip"></div>
-    <div class="brain-hud" id="brain-hud"></div>
     <div class="brain-stats" id="brain-stats"></div>
     <div class="subtitle online" id="subtitle"><i class="dot"></i>Maestro Online</div>
     <div class="chat-panel" id="chat-panel">
@@ -207,7 +206,6 @@ function buildDashboard() {
     brain.setCompact(!c);
   };
   dashboardEl.querySelector('#chat-new').onclick = () => { newConversation(); };
-  renderHud();
   renderMentions();
   renderSuggestions();
   updateBrainSources();
@@ -220,16 +218,10 @@ function buildDashboard() {
   });
 }
 
-function renderHud() {
-  const groups = ['Memory', 'Projects', 'People', 'Agents', 'Skills', S.state.config.profile === 'personal' ? 'Personal' : 'Meetings'];
-  $('#brain-hud', dashboardEl).innerHTML = `<div class="hud-chip">${icon('brain')} Knowledge map · ${esc(S.state.vaultName)}</div>` + groups.map((g) => `<div class="hud-chip"><i style="background:${GROUP_COLORS[g]}"></i>${g}</div>`).join('');
-}
-
 async function loadGraph() {
   const g = await api('/graph');
   brain.setGraph(g);
   brain._noteCount = g.nodes.length;
-  renderHud();
   updateStats();
 }
 
