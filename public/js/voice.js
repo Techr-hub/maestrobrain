@@ -96,7 +96,7 @@ export class Voice {
   // Google voices), skipping the novelty and robotic ones.
   bestVoice() { return rankVoices(this.voices())[0] || null; }
 
-  speak(text, { voiceName, rate = 0.92, pause = 380, onStart, onEnd } = {}) {
+  speak(text, { voiceName, rate = 0.92, pause = 2500, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
