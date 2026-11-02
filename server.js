@@ -126,7 +126,7 @@ route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().prof
 route('POST', '/api/tasks', async (_q, body) => ({ line: tasks.add(body.text, body) }));
 route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(body.path, body.line) }));
 
-route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7) }));
+route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7), from: q.get('from') || undefined, to: q.get('to') || undefined }));
 
 // A hub (Email, Calendar, Messages, Calls, Projects) gathers every connected source of that kind.
 async function hubView(hid) {

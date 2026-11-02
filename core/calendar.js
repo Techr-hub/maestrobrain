@@ -22,13 +22,14 @@ async function liveEvents(url) {
   }
 }
 
-async function list({ profile, days = 7 } = {}) {
+// days: from the start of today; or an explicit from/to range (any date, for the month and week views).
+async function list({ profile, days = 7, from: fromArg, to: toArg } = {}) {
   const cfg = config.load();
   const prof = profile || cfg.profile;
   const conns = cfg.connections[prof] || {};
   const now = new Date();
-  const from = new Date(now); from.setHours(0, 0, 0, 0);
-  const to = new Date(from.getTime() + days * 86400000);
+  const from = fromArg ? new Date(fromArg) : new Date(new Date(now).setHours(0, 0, 0, 0));
+  const to = toArg ? new Date(toArg) : new Date(from.getTime() + days * 86400000);
   let events = [];
   const demoSources = CAL_SOURCES.filter((s) => conns[s] && conns[s].mode === 'demo');
   events.push(...demo.calendarEvents(prof, now).filter((e) => demoSources.includes(e.source)));

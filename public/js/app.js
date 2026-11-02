@@ -5,6 +5,7 @@ import { BrainMap, avatar as makeAvatar } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
 import { PAGES, onboarding, knowledgeModal, connectModal } from './pages.js';
+import { monthCalendar } from './calendar-ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -628,19 +629,7 @@ function renderSourceView() {
         <div class="a-actions"><button class="btn small connect" id="src-connect">${icon('plug')} Make Connection</button></div>
       </div></div>`;
   }
-  if (d.connected && d.kind === 'calendar') {
-    const byDay = new Map();
-    for (const e of d.events) { const k = dayLabel(e.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(e); }
-    const now = Date.now();
-    html += `<div class="section-title" style="margin:14px 4px 6px">Schedule · next 7 days</div>`;
-    html += byDay.size ? [...byDay].map(([day, evs]) => `<div class="sched-day"><div class="sched-label">${esc(day)}</div>${evs.map((e) => {
-      const st = new Date(e.start), en = new Date(e.end), past = en < now, nowOn = st <= now && en >= now;
-      return `<div class="sched-ev ${past ? 'past' : ''} ${nowOn ? 'now' : ''}" style="--c:${conn.color}" ${e.notes ? `data-note="${esc(e.notes)}"` : ''}>
-        <div class="sched-time">${st.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}<small>${Math.round((en - st) / 60000)} min</small></div>
-        <div class="sched-body"><b>${esc(e.title)}</b>${nowOn ? ' <span class="tag live">Now</span>' : ''}
-          ${e.attendees ? `<small>${icon('users-round')} ${esc(e.attendees.join(', '))}</small>` : ''}${e.location ? `<small>${icon('home')} ${esc(e.location)}</small>` : ''}${e.notes ? `<small class="lnk">${icon('file-text')} Prep notes</small>` : ''}</div></div>`;
-    }).join('')}</div>`).join('') : `<div class="feed-empty" style="padding:18px">Nothing on this calendar in the next 7 days.</div>`;
-  }
+  // Calendars show their month view only from the Calendar hub on the brain (Ryan, 2026-11-02).
   const items = d.connected ? S.feed.filter((i) => i.source === d.id) : [];
   if (d.connected) {
     html += `<div class="section-title" style="margin:14px 4px 6px">Recent activity</div>`;
@@ -673,20 +662,6 @@ function renderSourceView() {
   });
 }
 
-function scheduleHtml(events, color) {
-  const byDay = new Map();
-  for (const e of events) { const k = dayLabel(e.start); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(e); }
-  const now = Date.now();
-  return byDay.size ? [...byDay].map(([day, evs]) => `<div class="sched-day"><div class="sched-label">${esc(day)}</div>${evs.map((e) => {
-    const st = new Date(e.start), en = new Date(e.end), past = en < now, nowOn = st <= now && en >= now;
-    const src = S.state.connectors.find((c) => c.id === e.source);
-    return `<div class="sched-ev ${past ? 'past' : ''} ${nowOn ? 'now' : ''}" style="--c:${src ? src.color : color}" ${e.notes ? `data-note="${esc(e.notes)}"` : ''}>
-      <div class="sched-time">${st.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}<small>${Math.round((en - st) / 60000)} min</small></div>
-      <div class="sched-body"><b>${esc(e.title)}</b>${nowOn ? ' <span class="tag live">Now</span>' : ''}
-        ${e.attendees ? `<small>${icon('users-round')} ${esc(e.attendees.join(', '))}</small>` : ''}${e.location ? `<small>${icon('home')} ${esc(e.location)}</small>` : ''}${src ? `<small>${icon('calendar-days')} ${esc(src.name.replace(/ \/.*$/, ''))}</small>` : ''}${e.notes ? `<small class="lnk">${icon('file-text')} Prep notes</small>` : ''}</div></div>`;
-  }).join('')}</div>`).join('') : `<div class="feed-empty" style="padding:18px">Nothing scheduled in the next 7 days.</div>`;
-}
-
 // A hub (Email, Calendar, Messages, Calls, Projects): everything from its connected sources in one place.
 function renderHubView(d) {
   const list = $('#feed-list');
@@ -700,7 +675,7 @@ function renderHubView(d) {
       <div class="a-actions"><button class="btn small connect" data-make="${member || ''}">${icon('plug')} Make Connection</button></div></div></div>`;
   if (!on.length && d.kind !== 'projects') html += notice(`No ${esc(d.name.toLowerCase())} connected yet`, `Connect ${d.members.map((m) => esc(m.name)).join(', ').replace(/, ([^,]*)$/, ' or $1')} to ${d.kind === 'calendar' ? 'see your schedule here' : 'stream it into your feed'}.`, false, '');
   for (const m of bad) html += notice(`${esc(m.name)} connection failed`, esc(m.error), true, m.id);
-  if (d.kind === 'calendar' && on.length) html += `<div class="section-title" style="margin:14px 4px 6px">Schedule · next 7 days</div>` + scheduleHtml(d.events, d.color);
+  if (d.kind === 'calendar' && on.length) html += `<div id="hub-month"></div>`; // month calendar, filled in below
   if (d.kind === 'projects') {
     html += `<div class="section-title" style="margin:14px 4px 6px">Projects in your vault</div>` + (d.notes.length ? d.notes.map((n) => `<div class="sched-ev" style="--c:${d.color}" data-note="${esc(n.path)}"><div class="sched-body" style="flex:1"><b>${esc(n.title)}</b>${n.status ? `<small>${esc(n.status)}${n.due ? ' · due ' + esc(n.due) : ''}</small>` : ''}${typeof n.progress === 'number' && !isNaN(n.progress) ? `<div class="progress"><div class="track"><div class="bar" style="width:${n.progress}%"></div></div><span>${n.progress}%</span></div>` : ''}</div></div>`).join('') : '<div class="feed-empty" style="padding:18px">No project notes yet. Add notes to the Projects folder.</div>');
     if (!on.length) html += notice('Connect a project tool', 'Install a role pack, then connect Linear, Jira, Notion, GitHub or Figma to stream updates here.', false, '');
@@ -713,6 +688,8 @@ function renderHubView(d) {
   }
   list.innerHTML = html;
   list.querySelector('#src-back').onclick = closeSource;
+  const hm = list.querySelector('#hub-month');
+  if (hm) { const ids = new Set(on.map((m) => m.id)); monthCalendar(hm, { filter: (e) => ids.has(e.source) || e.source === 'maestro' || (e.created && !e.calendarFor), ask: (t) => ask(t) }); }
   const prof = S.state.config.profile;
   const openConnect = (mid) => {
     const c = S.state.connectors.find((x) => x.id === mid);

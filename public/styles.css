@@ -453,3 +453,85 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .pin-btn.on svg { fill: currentColor; fill-opacity: .25; }
 @media (hover: none) { .pin-btn { opacity: .7; } }
 .activity.pinned { background: linear-gradient(90deg, rgba(0, 229, 255, .06), transparent 70%); border-radius: 10px; }
+
+/* ---------------- Month calendar (Calendar hub in the feed) ---------------- */
+.mc { margin: 6px 4px 4px; }
+.mc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.mc-nav { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-deep); color: var(--text); cursor: pointer; transition: border-color .15s, color .15s; }
+.mc-nav:hover { border-color: var(--cyan-deep); color: var(--cyan); }
+.mc-nav svg { width: 16px; height: 16px; }
+.mc-tabs { display: flex; gap: 6px; }
+.mc-tab { appearance: none; background: var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2300e5ff' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: .5px; padding: 5px 24px 5px 10px; cursor: pointer; }
+.mc-tab:hover, .mc-tab:focus { border-color: var(--cyan-deep); outline: none; }
+.mc-week, .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.mc-week span { text-align: center; font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; padding: 4px 0 6px; }
+.mc-day { position: relative; aspect-ratio: 1 / .86; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-deep); color: var(--text); font-family: var(--font-display); font-weight: 700; font-size: 16px; display: grid; place-items: center; cursor: pointer; transition: border-color .15s, background .15s; padding: 0; }
+.mc-day:hover { border-color: var(--cyan-deep); }
+.mc-day.out { background: transparent; border-color: transparent; color: var(--dim); }
+.mc-day.has { background: var(--nav-active); color: var(--cyan); border-color: var(--cyan-deep); }
+.mc-day.today { box-shadow: inset 0 0 0 2px var(--cyan); }
+.mc-day.sel { background: var(--cyan-deep); color: #fff; border-color: var(--cyan); box-shadow: 0 0 14px rgba(0, 229, 255, .35); }
+.mc-day.sel.today { box-shadow: inset 0 0 0 2px #fff, 0 0 14px rgba(0, 229, 255, .35); }
+.mc-day em { position: absolute; bottom: 5px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
+.mc-day em i { width: 5px; height: 5px; border-radius: 50%; }
+.mc-agenda { margin-top: 14px; }
+.mc-agenda-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.mc-agenda-head b { font-family: var(--font-display); font-size: 17px; letter-spacing: .5px; }
+.mc-agenda-head span { color: var(--muted); font-size: 13px; }
+.mc-today { margin-left: auto; background: transparent; border: 1px solid var(--line); border-radius: 14px; color: var(--cyan); font-size: 12px; padding: 3px 10px; cursor: pointer; }
+.mc-ev { width: 100%; display: flex; gap: 12px; text-align: left; background: color-mix(in srgb, var(--c) 9%, var(--bg-deep)); border: 0; border-left: 3px solid var(--c); border-radius: 8px; padding: 9px 10px; margin-bottom: 6px; color: var(--text); cursor: pointer; transition: background .15s; }
+.mc-ev:hover { background: color-mix(in srgb, var(--c) 16%, var(--bg-deep)); }
+.mc-ev.past { opacity: .5; }
+.mc-ev.now { box-shadow: inset 0 0 0 1px var(--c); }
+.mc-ev-time { width: 62px; flex: none; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--c); display: flex; flex-direction: column; }
+.mc-ev-time small { color: var(--dim); font-weight: 500; font-family: var(--font); font-size: 11px; }
+.mc-ev-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mc-ev-body b { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.mc-ev-body b svg, .mc-ev-body small svg { width: 12px; height: 12px; flex: none; }
+.mc-ev-body small { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+.mc-free { color: var(--dim); font-size: 13px; padding: 10px 2px; }
+.cal-src { display: inline-flex; align-items: center; gap: 6px; color: var(--soft); font-size: 12px; }
+.cal-src i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c); flex: none; }
+
+/* ---------------- Week calendar (Calendar page) ---------------- */
+.wk { border: 1px solid var(--line); border-radius: 15px; background: var(--bg-deep); overflow: hidden; }
+.wk-top { display: flex; align-items: center; gap: 18px; padding: 16px 18px 10px; flex-wrap: wrap; }
+.wk-title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 34px; letter-spacing: .5px; color: var(--soft); }
+.wk-title b { font-weight: 700; color: var(--text); margin-right: 6px; }
+.wk-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.wk-nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.wk-today { height: 32px; padding: 0 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--chip); color: var(--text); font-family: var(--font-display); font-weight: 600; font-size: 14px; letter-spacing: .5px; cursor: pointer; }
+.wk-today:hover { border-color: var(--cyan-deep); color: var(--cyan); }
+.wk-head, .wk-allday { display: grid; grid-template-columns: 62px repeat(7, 1fr); }
+.wk-head { border-bottom: 1px solid var(--line); }
+.wk-dh { text-align: center; padding: 10px 0; font-family: var(--font-display); font-size: 17px; color: var(--muted); letter-spacing: .5px; }
+.wk-dh b { color: var(--text); font-weight: 600; }
+.wk-dh.wkend { color: var(--dim); }
+.wk-dh.today { color: var(--cyan); }
+.wk-dh.today b { display: inline-grid; place-items: center; min-width: 28px; height: 28px; border-radius: 50%; background: var(--cyan); color: var(--bg); margin-left: 2px; }
+.wk-allday { border-bottom: 2px solid var(--line); min-height: 34px; }
+.wk-allday > span { font-size: 11px; color: var(--dim); text-align: right; padding: 8px 8px 0 0; }
+.wk-allday > div { border-left: 1px solid var(--line); padding: 4px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wk-allday > div.wkend, .wk-col.wkend { background: rgba(255, 255, 255, .015); }
+.wk-chip { text-align: left; border: 0; border-radius: 12px; padding: 3px 9px; font-size: 12px; font-weight: 600; color: var(--text); background: color-mix(in srgb, var(--c) 22%, var(--bg-deep)); box-shadow: inset 3px 0 0 var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.wk-scroll { height: calc(100vh - 330px); min-height: 380px; overflow-y: auto; }
+.wk-grid { position: relative; display: grid; grid-template-columns: 62px repeat(7, 1fr); background-image: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 52px); }
+.wk-hours { position: relative; background: var(--bg-deep); }
+.wk-hours span { position: absolute; right: 8px; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-family: var(--font-display); letter-spacing: .5px; white-space: nowrap; }
+.wk-col { position: relative; border-left: 1px solid var(--line); }
+.wk-now { position: absolute; left: -1px; right: 0; height: 2px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); z-index: 3; }
+.wk-now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); }
+.wk-ev { position: absolute; z-index: 2; overflow: hidden; text-align: left; border: 0; border-left: 3px solid var(--c); border-radius: 6px; padding: 4px 6px; background: color-mix(in srgb, var(--c) 17%, var(--bg-deep)); color: var(--text); display: flex; flex-direction: column; gap: 2px; cursor: pointer; transition: background .15s; }
+.wk-ev:hover { background: color-mix(in srgb, var(--c) 28%, var(--bg-deep)); z-index: 4; }
+.wk-ev b { font-size: 13px; font-weight: 700; line-height: 1.2; color: color-mix(in srgb, var(--c) 40%, #fff); padding-right: 14px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wk-ev.short b { -webkit-line-clamp: 1; white-space: nowrap; text-overflow: ellipsis; display: block; }
+.wk-ev small { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-ev small svg { width: 11px; height: 11px; flex: none; color: var(--c); }
+.wk-ev.past { opacity: .55; }
+.wk-rep { position: absolute; top: 4px; right: 5px; color: var(--c); }
+.wk-rep svg { width: 12px; height: 12px; }
+.ev-detail { display: flex; flex-direction: column; gap: 9px; color: var(--soft); }
+.ev-detail > div { display: flex; align-items: center; gap: 8px; }
+.ev-detail svg { width: 15px; height: 15px; color: var(--cyan); flex: none; }
+.ev-detail p { margin: 4px 0 0; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--line); padding-top: 10px; }
+@media (max-width: 760px) { .wk-head, .wk-allday, .wk-grid { grid-template-columns: 40px repeat(7, minmax(44px, 1fr)); } .wk { overflow-x: auto; } .wk-title { font-size: 24px; } }

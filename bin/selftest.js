@@ -78,6 +78,9 @@ async function main() {
     ok('create event: everything said up front creates it without more questions', /^Creating "Dentist appointment" for .*3:15 PM to 4:00 PM, at Smile Dental, in your Maestro calendar/.test(full.reply));
     const full2 = await post('/chat', { message: 'Schedule a lunch with Sarah on Thursday at 12:30 at The Keg, description: discuss the partnership deal' });
     ok('create event: full request only asks which calendar', /^Which calendar/.test(full2.reply));
+    const wkFrom = new Date(); wkFrom.setDate(wkFrom.getDate() - 10); const wkTo = new Date(); wkTo.setDate(wkTo.getDate() + 20);
+    const ranged = await (await fetch(`${base}/calendar?from=${wkFrom.toISOString()}&to=${wkTo.toISOString()}`)).json();
+    ok('calendar API returns any date range (month and week views)', Array.isArray(ranged) && ranged.length > 0 && ranged.every((e) => new Date(e.end) >= wkFrom && new Date(e.start) <= wkTo));
     const about = await post('/chat', { message: 'What is the Sprint 24 Review about?' });
     ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
     const vague = await post('/chat', { message: 'Create a new calendar item' });

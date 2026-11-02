@@ -4,6 +4,7 @@ import { icon, CATEGORY } from './icons.js';
 import { renderMarkdown, esc } from './md.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, obsidianUrl } from './core.js';
 import { voiceSupported, Voice, rankVoices, voiceScore, voiceGender } from './voice.js';
+import { weekCalendar } from './calendar-ui.js';
 
 const head = (title, sub, actions = '') => `<div class="page-head"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${actions}</div></div>`;
 const cfg = () => S.state.config;
@@ -351,18 +352,11 @@ async function tasksPage(el, ctx) {
 }
 
 // ================================================================ CALENDAR
-const SRC_COLOR = { gcal: '#3d7bff', icalendar: '#00e5ff', outlook: '#2f8cff', gmail: '#ff5a4e', maestro: '#00f2af', calendly: '#4d9bff' };
 async function calendarPage(el, ctx) {
-  const events = await api('/calendar?days=7');
-  const days = [];
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 7; i++) { const d = new Date(start.getTime() + i * 86400000); days.push({ d, ev: events.filter((e) => new Date(e.start).toDateString() === d.toDateString()) }); }
-  const t = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const feedUrl = `${location.origin}/calendar.ics`;
-  el.innerHTML = head('Calendar', `Next 7 days from your connected calendars (${profileName()}). Ask “Hey Maestro, create a meeting tomorrow at 2pm with John” to add one. Maestro writes to iCloud (or any CalDAV calendar) when you add sign-in details to its card; otherwise events go to your Maestro calendar, which Apple Calendar or Outlook on this computer can subscribe to at <code>${esc(feedUrl)}</code>.`,
-    `<button class="btn" id="new-ev">${icon('plus')} New event</button><button class="btn" id="prep">${icon('sparkles')} Prep my next meeting</button>`) +
-    `<div class="week">${days.map(({ d, ev }, i) => `<div class="day ${i === 0 ? 'today' : ''}"><h4>${i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' })}<small>${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></h4>
-      ${ev.map((e) => `<div class="event" style="--c:${SRC_COLOR[e.source] || '#00e5ff'}"><b>${esc(e.title)}</b><span>${e.allDay ? 'All day' : t(e.start) + ' – ' + t(e.end)}${e.location ? ' · ' + esc(e.location) : ''}</span>${e.attendees ? `<br><span>${esc(e.attendees.join(', '))}</span>` : ''}${e.live ? '<br><span class="tag live" style="font-size:10px">live</span>' : ''}${e.created ? '<br><span class="tag" style="font-size:10px">created by Maestro</span>' : ''}</div>`).join('') || '<span style="color:var(--dim);font-size:12px">Free</span>'}</div>`).join('')}</div>`;
+  el.innerHTML = head('Calendar', `All your connected calendars in one week (${profileName()}). Say “Hey Maestro, create a meeting tomorrow at 2pm with John” to add one. Events Maestro creates go to iCloud when its card has sign-in details, otherwise to your Maestro calendar (<code>${esc(feedUrl)}</code>).`,
+    `<button class="btn" id="new-ev">${icon('plus')} New event</button><button class="btn" id="prep">${icon('sparkles')} Prep my next meeting</button>`) + '<div id="cal-week"></div>';
+  weekCalendar(el.querySelector('#cal-week'), { ask: (t) => ctx.ask(t) });
   el.querySelector('#prep').onclick = () => ctx.ask('Prep me for my next meeting');
   el.querySelector('#new-ev').onclick = () => ctx.ask('Create a new meeting');
 }
