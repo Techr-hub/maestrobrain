@@ -4,6 +4,7 @@ const config = require('./config');
 const demo = require('./demo');
 const connectors = require('./connectors');
 const created = require('./events');
+const removed = require('./removed');
 
 const CAL_SOURCES = ['gcal', 'icalendar', 'outlook', 'gmail'];
 const icsCache = new Map(); // url -> { at, events, error }
@@ -52,7 +53,8 @@ async function list({ profile, days = 7 } = {}) {
   // events Maestro created (skip ones already coming back through a live calendar link)
   const liveUids = new Set(events.filter((e) => e.uid).map((e) => e.uid));
   for (const e of created.list({ profile: prof })) if (!liveUids.has(e.uid)) events.push({ ...e, source: e.calendarFor && conns[e.calendarFor] ? e.calendarFor : 'maestro', created: true });
-  events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to);
+  const gone = removed.readAll();
+  events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to && !removed.isRemoved(e, gone));
   events.sort((a, b) => new Date(a.start) - new Date(b.start));
   return events;
 }

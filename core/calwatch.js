@@ -149,5 +149,6 @@ async function check() {
 }
 
 function calendlyUpcoming(profile) { return calendlyCache.get(profile) || []; }
+function forgetCalendly(profile, uri) { const list = calendlyCache.get(profile); if (list) calendlyCache.set(profile, list.filter((e) => e.uid !== uri)); }
 
-module.exports = { check, diff, snapshot, upcoming, calendlyUpcoming };
+module.exports = { check, diff, snapshot, upcoming, calendlyUpcoming, forgetCalendly };

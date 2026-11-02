@@ -25,8 +25,15 @@ You can use both at once. Tokens are never written into the vault.
 ### Creating events ("Hey Maestro, create a meeting tomorrow at 2pm with John")
 Maestro asks for anything missing (day, time, length, title, location, description), then asks **which calendar** when you have more than one connected ("1) Mac / iCloud Calendar, 2) Google Calendar, 3) Outlook Calendar, 4) Maestro"). Answer with the number or the name ("Google", "the Mac one").
 - **iCloud (and any CalDAV calendar: Fastmail, Nextcloud…):** on the iCalendar card, also enter your Apple ID and an **app-specific password** (appleid.apple.com → Sign-In and Security → App-Specific Passwords). Maestro finds your calendars and can write to any of them. For other CalDAV servers, fill in the server address too.
-- **Google Calendar and Outlook** only allow writing through a sign-in app (OAuth). The event is filed under that calendar in Maestro straight away (feed, Calendar page, answers). To copy it into Google or Outlook itself, connect them in Claude Desktop (Settings → Connectors) and run **+ → Maestro → Sync my new events into my calendars**; Claude creates each one and marks it synced.
+- **Google Calendar and Outlook** only allow writing through a sign-in app (OAuth). The event is filed under that calendar in Maestro straight away (feed, Calendar page, answers). To copy it into Google or Outlook itself, connect them in Claude Desktop (Settings → Connectors) and run **+ → Maestro → Sync my calendar changes into my calendars**; Claude creates each one and marks it synced.
 - Without any of these, events go to your **Maestro calendar**. It shows everywhere in Maestro, and Apple Calendar or Outlook on the same computer can subscribe to `http://localhost:4141/calendar.ics`.
+
+### Removing events ("Hey Maestro, cancel my meeting with John tomorrow")
+Maestro finds the event (asks which one if several match), asks "just this one or the whole series?" for repeating events, and always confirms first.
+- **iCloud / CalDAV** (Apple ID + app-specific password on the card): deleted on the server. One occurrence of a repeating event is skipped; the rest of the series stays.
+- **Calendly:** the booking is cancelled in Calendly, which emails the invitee.
+- **Events Maestro created:** removed from Maestro (and from iCloud if it was written there).
+- **Google Calendar, Outlook and read-only iCal links:** removed from Maestro right away. Run **+ → Maestro → Sync my calendar changes into my calendars** in Claude Desktop and Claude deletes it in the real calendar.
 
 ### New events in the feed
 Maestro checks every live calendar once a minute. New, moved and cancelled events appear in the Intelligence Feed (the first check only takes a snapshot, so connecting doesn't flood the feed). Calendly bookings are labelled **Booked through Calendly**.

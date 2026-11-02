@@ -209,4 +209,4 @@ function contextBlock(message, ctx) {
   return rows.length ? `# EXACT MATCHES FOR THIS QUESTION (answer from these first)\n${rows.join('\n')}` : '# EXACT MATCHES FOR THIS QUESTION\n(none found in the feed or calendar)';
 }
 
-module.exports = { find, answer, contextBlock, whenText, parse };
+module.exports = { find, answer, contextBlock, whenText, parse, matchEvents };

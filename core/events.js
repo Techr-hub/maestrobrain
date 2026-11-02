@@ -112,7 +112,7 @@ async function caldavPut(creds, calHref, ev) {
 // - iCloud / CalDAV with sign-in details: each writable calendar, written directly.
 // - Any other connected calendar (Google, Outlook, iCal links without sign-in): the event is filed under that
 //   calendar in Maestro right away, and Claude Desktop copies it in with its calendar connector
-//   ("Sync my new events into my calendars" prompt). These show as "via Claude Desktop".
+//   ("Sync my calendar changes into my calendars" prompt). These show as "via Claude Desktop".
 async function targets(profile) {
   const cfg = config.load();
   const prof = profile || cfg.profile;
@@ -157,7 +157,7 @@ async function create(input, { profile, target = 'maestro' } = {}) {
     ev.target = target; ev.calendarFor = id; ev.synced = false;
     const conn = (config.load().connections[prof] || {})[id] || {};
     where = `your ${CAL_LABEL[id] || id}`;
-    if (conn.mode !== 'demo') warning = `It's on your ${CAL_LABEL[id]} in Maestro now. To copy it into ${CAL_CONNECTORS[id]} itself, run "Sync my new events into my calendars" in Claude Desktop (+ → Maestro).${id === 'icalendar' ? ' Or add your Apple ID and an app-specific password to the iCalendar card, and Maestro will write it there directly.' : ''}`;
+    if (conn.mode !== 'demo') warning = `It's on your ${CAL_LABEL[id]} in Maestro now. To copy it into ${CAL_CONNECTORS[id]} itself, run "Sync my calendar changes into my calendars" in Claude Desktop (+ → Maestro).${id === 'icalendar' ? ' Or add your Apple ID and an app-specific password to the iCalendar card, and Maestro will write it there directly.' : ''}`;
   } else if (target && target.startsWith('caldav:')) {
     const [, id, ...rest] = target.split(':');
     const href = rest.join(':');
@@ -177,8 +177,58 @@ async function create(input, { profile, target = 'maestro' } = {}) {
   return { event: ev, where, warning };
 }
 
+function removeCreated(uid) { const all = readAll(); const i = all.findIndex((e) => e.uid === uid); if (i < 0) return null; const [e] = all.splice(i, 1); writeAll(all); return e; }
+
+async function caldavDelete(creds, url, etag) {
+  const res = await fetch(url, { method: 'DELETE', headers: { Authorization: creds.auth, ...(etag ? { 'If-Match': etag } : {}) } });
+  if (res.status === 401 || res.status === 403) throw new Error('The calendar rejected the sign-in.');
+  if (!res.ok && res.status !== 404) throw new Error(`Calendar server returned HTTP ${res.status}`);
+}
+
+// Find an event by UID in any of the user's CalDAV calendars. Returns { url, etag, ics, calendar } or null.
+async function caldavFind(creds, uid) {
+  const q = `<?xml version="1.0"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:prop-filter name="UID"><c:text-match collation="i;octet">${uid.replace(/[<&]/g, '')}</c:text-match></c:prop-filter></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
+  for (const cal of await discover(creds)) {
+    let r;
+    try { r = await dav(cal.href, creds.auth, 'REPORT', q, 1); } catch { continue; }
+    for (const resp of responses(r.text)) {
+      const href = (resp.match(/<(?:\w+:)?href[^>]*>([^<]+)</i) || [])[1];
+      const ics = tag(resp, 'calendar-data').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&#13;/g, '\r').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      if (href && ics.includes(uid)) return { url: new URL(href.trim(), r.url).href, etag: tag(resp, 'getetag').replace(/&quot;/g, '"').trim(), ics, calendar: cal.name };
+    }
+  }
+  return null;
+}
+
+// One occurrence of a repeating event: add an EXDATE to the series instead of deleting it.
+function withExdate(ics, startIso) {
+  const unfolded = ics.replace(/\r?\n[ \t]/g, '');
+  const blocks = unfolded.split(/(?=BEGIN:VEVENT)/);
+  const i = blocks.findIndex((b) => b.startsWith('BEGIN:VEVENT') && !/^RECURRENCE-ID/m.test(b.split('END:VEVENT')[0]));
+  if (i < 0) throw new Error('Could not find the repeating event');
+  const dt = blocks[i].match(/^DTSTART(;[^:\r\n]*)?:(\S+)/m);
+  if (!dt) throw new Error('The repeating event has no start time');
+  const params = dt[1] || '';
+  const d = new Date(startIso);
+  let val;
+  if (/VALUE=DATE(?!-)/.test(params)) val = d.toISOString().slice(0, 10).replace(/-/g, '');
+  else if (/TZID=/.test(params)) {
+    const tz = params.match(/TZID=("?)([^;:"]+)\1/)[2];
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(d).map((x) => [x.type, x.value]));
+    val = `${p.year}${p.month}${p.day}T${p.hour}${p.minute}${p.second}`;
+  } else val = d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  blocks[i] = blocks[i].replace(/^(DTSTART[^\r\n]*\r?\n)/m, `$1EXDATE${params.replace(/;?VALUE=DATE-TIME/, '')}:${val}\r\n`);
+  return blocks.join('');
+}
+
+async function caldavPutIf(creds, url, ics, etag) {
+  const res = await fetch(url, { method: 'PUT', headers: { Authorization: creds.auth, 'Content-Type': 'text/calendar; charset=utf-8', ...(etag ? { 'If-Match': etag } : {}) }, body: ics });
+  if (res.status === 412) throw new Error('The event changed on the server. Try again in a minute.');
+  if (!res.ok) throw new Error(`Calendar server returned HTTP ${res.status}`);
+}
+
 // Events Claude Desktop still needs to copy into Google / Outlook / iCloud, and marking them done.
 function pendingSync() { return readAll().filter((e) => e.calendarFor && !e.synced); }
 function markSynced(uid) { const all = readAll(); const e = all.find((x) => x.uid === uid); if (!e) return false; e.synced = true; e.syncedAt = Date.now(); writeAll(all); return true; }
 
-module.exports = { list, create, targets, toIcs, discover, caldavCreds, pendingSync, markSynced, CAL_CONNECTORS, CAL_LABEL };
+module.exports = { list, create, targets, toIcs, discover, caldavCreds, caldavFind, caldavDelete, caldavPutIf, withExdate, removeCreated, pendingSync, markSynced, CAL_CONNECTORS, CAL_LABEL };

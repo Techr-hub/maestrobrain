@@ -193,15 +193,31 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     run: async () => {
       const list = require('../core/events').pendingSync();
-      if (!list.length) return 'Nothing to sync. Every Maestro-created event is already in its calendar.';
-      return list.map((e) => JSON.stringify({ uid: e.uid, calendar: { gcal: 'Google Calendar', outlook: 'Outlook', icalendar: 'iCloud / Apple Calendar' }[e.calendarFor] || e.calendarFor, title: e.title, start: e.start, end: e.end, location: e.location || undefined, description: e.notes || undefined, attendees: e.attendees && e.attendees.length ? e.attendees : undefined })).join('\n');
+      const gone = require('../core/removed').pendingSync();
+      if (!list.length && !gone.length) return 'Nothing to sync. Every event created or removed in Maestro is already done in its calendar.';
+      const CAL = { gcal: 'Google Calendar', outlook: 'Outlook', icalendar: 'iCloud / Apple Calendar' };
+      return [...gone.map((r) => JSON.stringify({ action: 'delete', uid: r.uid, calendar: CAL[r.needsSync] || r.needsSync, title: r.title, start: r.start, whole_series: r.series || undefined })),
+        ...list.map((e) => JSON.stringify({ action: 'create', uid: e.uid, calendar: { gcal: 'Google Calendar', outlook: 'Outlook', icalendar: 'iCloud / Apple Calendar' }[e.calendarFor] || e.calendarFor, title: e.title, start: e.start, end: e.end, location: e.location || undefined, description: e.notes || undefined, attendees: e.attendees && e.attendees.length ? e.attendees : undefined }))].join('\n');
     },
   },
   {
     name: 'mark_event_synced',
-    description: 'Mark a Maestro-created event as copied into its real calendar (after creating it there with your calendar connector).',
-    inputSchema: { type: 'object', properties: { uid: { type: 'string' } }, required: ['uid'], additionalProperties: false },
-    run: async ({ uid }) => (require('../core/events').markSynced(uid) ? 'Marked as synced.' : 'No Maestro event with that uid.'),
+    description: 'Mark an item from list_unsynced_events as done in the real calendar (after creating or deleting it there with your calendar connector). Pass start too for a deletion of one occurrence.',
+    inputSchema: { type: 'object', properties: { uid: { type: 'string' }, start: { type: 'string' } }, required: ['uid'], additionalProperties: false },
+    run: async ({ uid, start }) => (require('../core/events').markSynced(uid) || require('../core/removed').markSynced(uid, start) ? 'Marked as synced.' : 'Nothing pending with that uid.'),
+  },
+  {
+    name: 'remove_event',
+    description: "Remove an event from the user's calendar through Maestro (iCloud/CalDAV directly, Calendly cancels the booking and notifies the invitee, Google/Outlook are queued for list_unsynced_events). Always confirm the exact event with the user first. Identify it by words from its title or attendees and, if needed, the day.",
+    inputSchema: { type: 'object', properties: { event: { type: 'string', description: 'Words from the title or attendee, e.g. "board prep" or "meeting with John"' }, date: { type: 'string', description: 'Optional day, e.g. "tomorrow" or "friday"' }, whole_series: { type: 'boolean', description: 'For repeating events: remove every occurrence' } }, required: ['event'], additionalProperties: false },
+    run: async ({ event, date, whole_series }) => {
+      const rm = require('../core/remove');
+      const found = await rm.candidates(`${event} ${date || ''}`, config.load().profile);
+      if (!found.length) return 'No upcoming event matches that.';
+      if (found.length > 1) return 'Several events match; ask the user which one, then call again with more detail:\n' + found.slice(0, 6).map((e) => `- ${e.title} · ${fmtTime(e.start)} (${e.source})`).join('\n');
+      const r = await rm.perform(found[0], { series: !!whole_series });
+      return r.done + (r.note ? ' ' + r.note : '');
+    },
   },
   {
     name: 'add_feed_items',
@@ -308,7 +324,7 @@ async function handle(msg) {
       case 'prompts/list': {
         const arg = [{ name: 'focus', description: 'Optional extra focus or details', required: false }];
         return reply(id, { prompts: [
-          { name: 'sync-calendar-events', title: 'Sync my new events into my calendars', description: 'Copy events you created in Maestro into Google Calendar, Outlook or iCloud using your Claude connectors.', arguments: arg },
+          { name: 'sync-calendar-events', title: 'Sync my calendar changes into my calendars', description: 'Copy events you created or removed in Maestro into Google Calendar, Outlook or iCloud using your Claude connectors.', arguments: arg },
           { name: 'sync-claude-sources', title: 'Sync my Claude connectors into Maestro', description: 'Read new activity from the sources you connected in Claude Desktop (Slack, Linear, Jira…) and put it in the Maestro feed.', arguments: arg },
           ...agents.skills().map((s) => ({ name: 'skill-' + s.slug, title: 'Skill: ' + s.name, description: s.description || s.name, arguments: arg })),
           ...agents.agents().map((a) => ({ name: 'agent-' + a.handle.toLowerCase(), title: `Agent: @${a.handle}`, description: a.description || a.role || a.name, arguments: arg })),
@@ -317,7 +333,7 @@ async function handle(msg) {
       case 'prompts/get': {
         const name = String(params.name || '');
         const focus = params.arguments && params.arguments.focus ? `\n\nFocus: ${params.arguments.focus}` : '';
-        if (name === 'sync-calendar-events') return reply(id, { description: 'Sync Maestro events into my calendars', messages: [{ role: 'user', content: { type: 'text', text: 'Call the Maestro list_unsynced_events tool. For each event, create it in the calendar it names (Google Calendar, Outlook or iCloud) with your connector for that calendar, using the same title, start, end, location, description and attendees. After each one is created, call mark_event_synced with its uid. If you have no connector for a calendar, skip those events and tell me which. Finish with one line per calendar: how many events you added.' + focus } }] });
+        if (name === 'sync-calendar-events') return reply(id, { description: 'Sync Maestro events into my calendars', messages: [{ role: 'user', content: { type: 'text', text: 'Call the Maestro list_unsynced_events tool. For each item with action "create", create it in the calendar it names (Google Calendar, Outlook or iCloud) with your connector for that calendar, using the same title, start, end, location, description and attendees. For each item with action "delete", find that event in the named calendar (same title and start time) and delete it (the whole series if whole_series is true, otherwise only that occurrence). After each one, call mark_event_synced with its uid (and start for deletions). If you have no connector for a calendar, skip those events and tell me which. Finish with one line per calendar: how many events you added.' + focus } }] });
         if (name === 'sync-claude-sources') return reply(id, { description: 'Sync Claude connectors into Maestro', messages: [{ role: 'user', content: { type: 'text', text: syncPrompt() + focus } }] });
         if (name.startsWith('agent-')) {
           const a = agents.findAgent(name.slice(6));

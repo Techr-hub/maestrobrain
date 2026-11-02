@@ -300,6 +300,15 @@ async function calendlyGet(token, url) {
   if (!res.ok) throw new Error('Calendly returned HTTP ' + res.status);
   return res.json();
 }
+// Cancels the booking for everyone; Calendly emails the invitee.
+async function calendlyCancel(token, eventUri, reason = 'Cancelled from Maestro') {
+  if (!token) throw new Error('Calendly token is missing');
+  const res = await fetch(eventUri.replace(/\/$/, '') + '/cancellation', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+  if (res.status === 401) throw new Error('Calendly rejected the token.');
+  if (res.status === 403) throw new Error('Calendly only lets the event host cancel this booking.');
+  if (!res.ok && res.status !== 201) throw new Error('Calendly returned HTTP ' + res.status);
+  return true;
+}
 async function calendlyMe(token) { const r = await calendlyGet(token, `${CALENDLY_API}/users/me`); return { uri: r.resource.uri, name: r.resource.name }; }
 async function calendlyEvents(token, userUri) {
   const q = new URLSearchParams({ user: userUri, min_start_time: new Date(Date.now() - 86400000).toISOString(), status: 'active', count: '50', sort: 'start_time:asc' });
@@ -444,4 +453,4 @@ async function testLiveRaw(id, fields) {
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }
 
-module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, slackHistory, slackChannels, twilioList, testLive };
+module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, calendlyCancel, slackHistory, slackChannels, twilioList, testLive };

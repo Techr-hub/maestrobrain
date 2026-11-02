@@ -58,6 +58,10 @@ async function main() {
     const m6 = /Which calendar/.test(m5.reply) ? await post('/chat', { message: 'Maestro', conversationId: m1.conversationId }) : m5;
     ok('create meeting: asks which calendar when several are connected', /Which calendar should I add it to: 1\) .*Google Calendar.*Maestro\?/.test(m5.reply));
     ok('create meeting: asks what is missing, then creates it', /How long/.test(m1.reply) && /call it/.test(m2.reply) && /Where is it/.test(m3.reply) && /description/.test(m4.reply) && /^Creating "Pricing follow-up" for tomorrow .*2:00 PM to 2:45 PM, with John, at Zoom/.test(m6.reply));
+    const r1 = await post('/chat', { message: 'Hey Maestro, cancel the design critique' });
+    const r2 = await post('/chat', { message: 'yes', conversationId: r1.conversationId });
+    const after = await (await fetch(base + '/calendar?days=7')).json();
+    ok('remove event: confirms first, then removes it', /^Remove "Design critique.*Say yes to confirm/.test(r1.reply) && /^Removed "Design critique/.test(r2.reply) && !after.some((e) => /Design critique/.test(e.title)));
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();

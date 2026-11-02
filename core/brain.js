@@ -452,7 +452,10 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
   let reply, sources = [], providerUsed = cfg.llm.provider, actions = [];
 
   // Creating calendar events: asks for what's missing, then creates it (works with every model).
-  const sched = await scheduler.handle(text, conv, { profile, name: firstName(cfg) });
+  // Removing events ("cancel my meeting with John tomorrow") is checked first, unless a new event is half-built.
+  const rem = conv.pending && conv.pending.type === 'event' ? null : await require('./remove').handle(text, conv, { profile, name: firstName(cfg) });
+  const sched = rem || await scheduler.handle(text, conv, { profile, name: firstName(cfg) });
+  if (rem && rem.removed) actions.push({ type: 'event-removed', event: rem.removed });
   if (sched) {
     reply = sched.reply; providerUsed = 'calendar';
     if (sched.event) {
