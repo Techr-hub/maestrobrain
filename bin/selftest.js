@@ -81,6 +81,9 @@ async function main() {
     const wkFrom = new Date(); wkFrom.setDate(wkFrom.getDate() - 10); const wkTo = new Date(); wkTo.setDate(wkTo.getDate() + 20);
     const ranged = await (await fetch(`${base}/calendar?from=${wkFrom.toISOString()}&to=${wkTo.toISOString()}`)).json();
     ok('calendar API returns any date range (month and week views)', Array.isArray(ranged) && ranged.length > 0 && ranged.every((e) => new Date(e.end) >= wkFrom && new Date(e.start) <= wkTo));
+    await post('/chat', { message: 'Add an event on Friday at 6pm called Brain Builder workshop at 100 Queen Street, description: tickets at https://lu.ma/brainbuilder, in my Maestro calendar' });
+    const tix = await post('/chat', { message: 'Where can I get tickets to the Brain Builder workshop?' });
+    ok('tickets: points to the ticket link in the event description', /^\*\*Get your ticket to the event from the \[Luma event page\]\(https:\/\/lu\.ma\/brainbuilder\)/.test(tix.reply));
     const about = await post('/chat', { message: 'What is the Sprint 24 Review about?' });
     ok('event "about" question: summary from its description, at most 2 sentences', /^\*\*Sprint 24 Review\*\*.*It covers demo/i.test(about.reply) && (about.reply.replace(/\*\*[^*]+\*\*,[^:]+:/, '').match(/[.!?](\s|$)/g) || []).length <= 2);
     const vague = await post('/chat', { message: 'Create a new calendar item' });

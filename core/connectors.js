@@ -255,10 +255,10 @@ function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new 
     if (rid) { if (!overrides.has(uid)) overrides.set(uid, new Set()); overrides.get(uid).add(rid.getTime()); }
     const exdates = new Set();
     for (const ex of all('EXDATE')) { const head = ex.slice(0, ex.lastIndexOf(':') + 1); for (const part of ex.slice(ex.lastIndexOf(':') + 1).split(',')) { const d = parseIcsDate(head + part); if (d) exdates.add(d.getTime()); } }
-    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 400), organizer: val('ORGANIZER').replace(/^mailto:/i, '') });
+    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 2000), url: val('URL'), organizer: val('ORGANIZER').replace(/^mailto:/i, '') });
   }
   for (const e of parsed) {
-    const base = { uid: e.uid, title: e.title, location: e.location, description: e.description, organizer: e.organizer, allDay: e.allDay };
+    const base = { uid: e.uid, title: e.title, location: e.location, description: e.description, url: e.url, organizer: e.organizer, allDay: e.allDay };
     const dur = e.end - e.start;
     if (e.rrule && !e.rid) {
       const skip = overrides.get(e.uid) || new Set();

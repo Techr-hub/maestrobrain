@@ -81,7 +81,7 @@ function personIn(i) {
 // "When is board prep?", "What time is Kids soccer?", "Where is the offsite?": match the words of the question
 // against event titles, attendees and locations, best match first, then soonest.
 const EVENT_FILLER = new Set(('happening happen happens scheduled schedule event events calendar calender booked planned plan start starts starting ' +
-  'begin begins day date held going taking place appointment meeting meetings meet call is are about details detail purpose agenda topic topics summary summarize summarise tell more covering cover covers').split(' '));
+  'begin begins day date held going taking place appointment meeting meetings meet call is are about details detail purpose agenda topic topics summary summarize summarise tell more covering cover covers ticket tickets get buy purchase register registration rsvp sign signup link page find can could where').split(' '));
 const stem = (t) => (t.length > 4 ? t.replace(/(ing|es|s)$/, '') : t);
 function matchEvents(m, events) {
   const words = tokens(m).filter((t) => t.length > 1 && !STOP.has(t));
@@ -103,6 +103,29 @@ function matchEvents(m, events) {
 }
 
 // Find feed items and events that answer the question. Returns null when it isn't a lookup question.
+// "Where can I get tickets to the Brain Builder workshop?", "How do I register for …?"
+const TICKETS = /\b(tickets?|register|registration|rsvp|sign ?up|buy (a )?(seat|spot|pass)|book (a )?(seat|spot)|admission|entry pass)\b/;
+const TICKET_SITES = [[/(^|\.)(lu\.ma|luma\.com)$/, 'Luma'], [/eventbrite\./, 'Eventbrite'], [/meetup\.com$/, 'Meetup'], [/ticketmaster\./, 'Ticketmaster'], [/(^|\.)ti\.to$|tito\.io$/, 'Tito'], [/universe\.com$/, 'Universe'], [/tickettailor\.com$/, 'Ticket Tailor'], [/humanitix\.com$/, 'Humanitix'], [/partiful\.com$/, 'Partiful'], [/zoom\.us$/, ''], [/teams\.microsoft\.com$|meet\.google\.com$/, '']];
+// Links in an event (description, location and URL), best ticket page first.
+function ticketLinks(e) {
+  const text = [e.url, e.description, e.notes, e.location].filter(Boolean).join(' ').replace(/\\n/g, ' ').replace(/\\,/g, ',');
+  const urls = [...new Set((text.match(/https?:\/\/[^\s<>"')\]]+|\b(?:lu\.ma|luma\.com|www\.eventbrite\.[a-z.]+|eventbrite\.[a-z.]+|meetup\.com)\/[^\s<>"')\]]+/gi) || []).map((u) => (/^https?:/i.test(u) ? u : 'https://' + u).replace(/[.,;:!?]+$/, '')))];
+  return urls.map((u) => {
+    let host = ''; try { host = new URL(u).hostname.replace(/^www\./, ''); } catch { return null; }
+    const site = TICKET_SITES.find(([re]) => re.test(host));
+    if (site && site[1] === '') return null; // meeting links aren't ticket pages
+    const score = (site ? 3 : 0) + (/ticket|register|rsvp|event|tix|book/i.test(u) ? 2 : 0);
+    return { url: u, name: site ? site[1] : host, score };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+}
+function ticketAnswer(e) {
+  const links = ticketLinks(e);
+  if (!links.length) return `**I don't see a ticket link in ${e.title}'s details.** Check the invite or the organiser's website.`;
+  const best = links[0];
+  // Ryan (2026-11-02): "Get your ticket to the event from the Luma event page."
+  return `**Get your ticket to the event from the [${best.name} event page](${best.url}).** ${e.title} is ${e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start)}.`;
+}
+
 // "What is board prep about?", "What's the Sprint Review about?", "Tell me about the offsite", "What's on the agenda for …"
 const ABOUT = /\b(what('?s| is| was| are)?\b.*\babout\b|tell me (more )?about|details (of|on|for|about)|what('?s| is) (on )?the agenda|summari[sz]e (the |my )?|what happens at|purpose of|what('?s| is) .* for\?)/;
 
@@ -127,7 +150,9 @@ function eventDescription(e) {
     if (!l) { flush(); continue; }
     if (/^#{2,}\s/.test(l)) { flush(); if (/agenda|topics?|purpose|goal|covering/i.test(l)) out.push('It covers'); continue; }
     if (/^([-*•]|\d+[.)])\s+/.test(l)) { list.push(clean(l.replace(/^([-*•]|\d+[.)])\s+/, ''))); continue; }
-    flush(); out.push(clean(l));
+    const c = clean(l);
+    if (!c || /:\s*$/.test(c)) continue; // a label whose link was removed ("Tickets: https://…")
+    flush(); out.push(c);
   }
   flush();
   return out.join(' ').replace(/It covers ([A-Z])/g, (m, c) => `It covers ${c.toLowerCase()}`).replace(/It covers\s*$/, '').trim();
@@ -149,6 +174,10 @@ function aboutAnswer(e) {
 
 function find(message, ctx) {
   const q = parse(message);
+  if (TICKETS.test(q.m)) {
+    const a = matchEvents(q.m, ctx.events || []);
+    if (a && (a.events.length || a.past) && a.byTitle) return { kind: 'tickets', q, subject: [], event: a.events[0] || a.past };
+  }
   if (!q.past && ABOUT.test(q.m)) {
     const a = matchEvents(q.m, ctx.events || []);
     if (a && (a.events.length || a.past) && a.byTitle) return { kind: 'about', q, subject: [], event: a.events[0] || a.past };
@@ -202,6 +231,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   const link = peopleNote ? `\n\n_More about them: [[${peopleNote.title}]]_` : '';
 
   if (r.kind === 'about') return aboutAnswer(r.event);
+  if (r.kind === 'tickets') return ticketAnswer(r.event);
   if (r.kind === 'event') {
     if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 90 days.`;
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
@@ -252,6 +282,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
 function contextBlock(message, ctx) {
   const r = find(message, ctx);
   if (!r) return '';
+  if (r.kind === 'tickets') { const l = ticketLinks(r.event); return `# EXACT MATCH FOR THIS QUESTION (recommend the ticket page)\n- EVENT ${r.event.title} · ${whenText(r.event.start)}\n  Ticket links: ${l.map((x) => `${x.name}: ${x.url}`).join(', ') || '(none in the event details)'}`; }
   if (r.kind === 'about') { const e = r.event; return `# EXACT MATCH FOR THIS QUESTION (summarize what this event is about in at most 2 sentences, from its description)\n- EVENT ${e.title} · ${whenText(e.start)}${e.attendees && e.attendees.length ? ' · with ' + e.attendees.join(', ') : ''}${e.location ? ' · at ' + e.location : ''}\n  Description: ${eventDescription(e) || '(none)'}`; }
   const rows = r.kind === 'event'
     ? r.events.slice(0, 6).map((e) => `- EVENT ${e.title} · ${whenText(e.start)} · ${e.attendees ? 'with ' + e.attendees.join(', ') : ''}`)
