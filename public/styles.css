@@ -7,7 +7,6 @@
   --line: #00314b;
   --line-2: #164481;
   --cyan: #00e5ff;
-  --blue: #2d8cff;
   --cyan-deep: #007caa;
   --nav-active: #002d4c;
   --chip: #002239;
@@ -72,7 +71,7 @@ a:hover { text-decoration: underline; }
 .workspace.no-feed { grid-template-columns: 266px 1fr; }
 
 /* ---------------- Sidebar ---------------- */
-.sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 0 4px 8px; border: 1px solid var(--blue); }
+.sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; padding: 0 4px 8px; border: 1px solid var(--line); }
 .brand { display: flex; flex-direction: column; align-items: center; padding: 10px 0 14px; }
 .brand-avatar { width: 150px; height: 150px; position: relative; cursor: pointer; }
 .brand-avatar canvas { width: 100%; height: 100%; }
