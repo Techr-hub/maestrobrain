@@ -61,6 +61,9 @@ async function main() {
     const tk = await post('/tasks/event', { event: 'New: Brain Builder Workshop', note: 'Share the recording with attendees', items: 'Send the slides by Friday\n- Book the room for December', priority: 'High' });
     const tl = await (await fetch(base + '/tasks')).json();
     ok('Create Task on an event: note and action items join the task list, with spoken deadlines', tk.count === 3 && tl.some((t) => t.text === 'Brain Builder Workshop: Share the recording with attendees' && t.priority === 'High') && tl.some((t) => t.text === 'Send the slides (Brain Builder Workshop)' && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) && tl.some((t) => t.text === 'Book the room for December (Brain Builder Workshop)' && !t.due));
+    await post('/tasks', { text: 'Reply to the venue', section: 'email' });
+    const ts = await (await fetch(base + '/tasks')).json();
+    ok('Tasks page: tasks carry their brain section (tagged or worked out)', ts.some((t) => t.text === 'Reply to the venue' && t.section === 'email') && ts.some((t) => t.text === 'Brain Builder Workshop: Share the recording with attendees' && t.section === 'calendar') && ts.some((t) => /^Call /.test(t.text) && t.section === 'calls'));
     const fd0 = await (await fetch(base + '/feed?limit=400')).json();
     ok('Insight cards: none from demo data', !(fd0.items || fd0).some((i) => i.category === 'INSIGHT' && !i.reminder));
     const tmr = new Date(Date.now() + 86400000); const tmrIso = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;

@@ -548,3 +548,13 @@ textarea.input.et-text { min-height: 0; font-family: inherit; font-size: 14px; p
 @keyframes dictPulse { 50% { box-shadow: 0 0 0 6px rgba(255,77,109,.25); } }
 .et-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 520px) { .et-row { grid-template-columns: 1fr; } }
+/* Tasks page: one tab per brain section (Ryan, 2026-11-02) */
+.task-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.task-tab { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--line); background: rgba(0,45,76,.25); color: var(--soft); cursor: pointer; font-family: var(--font-display); font-size: 14px; letter-spacing: .5px; }
+.task-tab svg { width: 15px; height: 15px; color: var(--c); }
+.task-tab b { font: 600 11px/1 var(--font-display); min-width: 20px; padding: 3px 6px; border-radius: 10px; background: rgba(255,255,255,.06); color: var(--muted); }
+.task-tab:hover { border-color: var(--c); }
+.task-tab.on { border-color: var(--c); color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 25%, transparent); }
+.task-tab.on b { background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); }
+.t-sec { display: inline-flex; align-items: center; gap: 4px; color: var(--c); }
+.t-sec svg { width: 12px; height: 12px; }

@@ -7,12 +7,29 @@ const vault = require('./vault');
 function iso(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 const TASK_RE = /^(\s*)[-*] \[( |x|X)\] (.+)$/;
 
+// Brain sections a task belongs to (Ryan, 2026-11-02), stored as a tag on the task line: #calendar #email #messages
+// #calls #projects. Tasks without a tag are placed by their note's folder and wording; the rest are "other".
+const SECTIONS = ['calendar', 'email', 'messages', 'calls', 'projects'];
+const SECTION_TAG = /\s#(calendar|email|messages|calls|projects)\b/i;
+function guessSection(text, folder = '') {
+  if (/^projects?$/i.test(folder)) return 'projects';
+  if (/^meetings?$/i.test(folder)) return 'calendar';
+  if (/^(call|phone|ring)\b|\bcall (back|him|her|them)\b|\bvoicemail\b/i.test(text)) return 'calls';
+  if (/\be-?mails?\b|\binbox\b|\bnewsletter\b/i.test(text)) return 'email';
+  if (/\b(slack|whatsapp|sms|text (him|her|them|back)|dm|message)\b/i.test(text)) return 'messages';
+  if (/\b(meeting|1:1|agenda|invite|event|workshop|webinar|conference|appointment)\b/i.test(text)) return 'calendar';
+  if (/\b(project|prd|sprint|roadmap|spec|milestones?|launch|release|designs?|handoff|pr)\b/i.test(text)) return 'projects';
+  return 'other';
+}
+
 function parseLine(text) {
+  const tagged = (text.match(SECTION_TAG) || [])[1];
+  text = text.replace(SECTION_TAG, '');
   const due = (text.match(/(?:📅|due:)\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const priority = /#(high|urgent|p1)\b|⏫|🔺/i.test(text) ? 'High' : /#(low|p3)\b|🔽/i.test(text) ? 'Low' : /#(medium|p2)\b|🔼/i.test(text) ? 'Medium' : '';
   const created = (text.match(/➕\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || '';
   const clean = text.replace(/➕\s*\d{4}-\d{2}-\d{2}/g, '').replace(/(?:📅|due:)\s*\d{4}-\d{2}-\d{2}/g, '').replace(/[⏫🔺🔼🔽]/g, '').replace(/#(high|urgent|p1|p2|p3|low|medium)\b/gi, '').trim();
-  return { text: clean, due, priority, created };
+  return { text: clean, due, priority, created, section: tagged ? tagged.toLowerCase() : '' };
 }
 
 function list({ profile, includeDone = false } = {}) {
@@ -27,7 +44,8 @@ function list({ profile, includeDone = false } = {}) {
       if (!m) return;
       const done = m[2].toLowerCase() === 'x';
       if (done && !includeDone) return;
-      out.push({ path: n.path, note: n.title, line: i, done, ...parseLine(m[3]) });
+      const t = parseLine(m[3]);
+      out.push({ path: n.path, note: n.title, line: i, done, ...t, section: t.section || guessSection(t.text, n.folder) });
     });
   }
   const rank = { High: 0, Medium: 1, '': 2, Low: 3 };
@@ -49,10 +67,11 @@ function toggle(relPath, line) {
   return !done;
 }
 
-function add(text, { due, priority, file, indent = '' } = {}) {
+function add(text, { due, priority, file, indent = '', section = '' } = {}) {
   if (!file) file = require('./config').load().profile === 'personal' ? 'Personal/Personal Tasks.md' : 'Tasks/Inbox.md';
   let line = `${indent}- [ ] ${text.trim().replace(/\s*\n\s*/g, ' ')}`;
   if (priority) line += ` #${priority.toLowerCase()}`;
+  if (SECTIONS.includes(String(section).toLowerCase())) line += ` #${String(section).toLowerCase()}`;
   if (due) line += ` 📅 ${due}`;
   line += ` ➕ ${iso(new Date())}`; // created date: marks tasks you made (Maestro's reminders skip the demo vault's own tasks)
   const root = vault.vaultRoot();
@@ -82,16 +101,16 @@ function splitItems(text) {
   return String(text || '').split(/\n|;|(?:^|\s)(?:\d+[.)]|[-*•])\s+|,?\s*\b(?:and then|then also|also)\b\s*/i)
     .map((x) => (x || '').replace(/^\s*([-*•]|\d+[.)])\s+/, '').replace(/^\s*(action items?|to ?dos?|tasks?)\s*:?\s*/i, '').trim()).filter((x) => x && x.length > 1);
 }
-function addForEvent({ event = '', note = '', items = '', due = '', priority = '' } = {}, now = new Date()) {
+function addForEvent({ event = '', note = '', items = '', due = '', priority = '', section = 'calendar' } = {}, now = new Date()) {
   const title = String(event).replace(/^(New( recurring event)?|Moved|Cancelled): /, '').trim() || 'Event';
   const n = dueIn(note, now);
   const list = (Array.isArray(items) ? items : splitItems(items)).map((x) => dueIn(x, now));
   const main = due || n.due || ''; // items without their own date share this one
   const first = [main, ...list.map((x) => x.due)].filter(Boolean).sort()[0] || ''; // the main task is due with its earliest item
-  const lines = [add(`${title}: ${n.text || (list.length ? 'action items' : 'follow up')}`, { due: first, priority })];
+  const lines = [add(`${title}: ${n.text || (list.length ? 'action items' : 'follow up')}`, { due: first, priority, section })];
   // Each action item names its event, since the task list sorts by priority and date, not by event.
-  for (const x of list) lines.push(add(`${x.text} (${title})`, { due: x.due || main, priority, indent: '  ' }));
+  for (const x of list) lines.push(add(`${x.text} (${title})`, { due: x.due || main, priority, section, indent: '  ' }));
   return { lines, due: first, count: lines.length };
 }
 
-module.exports = { list, toggle, add, addForEvent, splitItems, dueIn, parseLine };
+module.exports = { list, toggle, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };

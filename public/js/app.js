@@ -532,6 +532,10 @@ function sourceChip(i) {
   return `<span class="src-chip ${CAL_MARK[i.source] ? 'cal' : ''}" style="--sc:${color}">${mark}<b>${esc(name)}</b>${i.calendarName ? `<i>${esc(i.calendarName)}</i>` : ''}</span>`;
 }
 
+// Which brain section a card's tasks go under on the Tasks page (Ryan, 2026-11-02).
+const SECTION_OF = { MEETING: 'calendar', EMAIL: 'email', CONVERSATION: 'messages', SMS: 'messages', CALL: 'calls', PROJECT: 'projects', TASK: 'projects' };
+function sectionOf(item) { return SECTION_OF[item.category] || (CAL_MARK[item.source] ? 'calendar' : ''); }
+
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
@@ -584,7 +588,7 @@ function renderFeed(animateFirst) {
       try { await api('/feed/pin', { id: item.id, pinned }); } catch (err) { toast('Could not pin: ' + err.message, 'error'); }
     };
     el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => {
-      await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined });
+      await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
       toast(`Task added: ${b.dataset.action}`);
       markRead(item);
     });
@@ -659,7 +663,7 @@ function renderSourceView() {
   list.querySelectorAll('.activity[data-id]').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
   });
 }
 
@@ -702,7 +706,7 @@ function renderHubView(d) {
   list.querySelectorAll('.activity[data-id]').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
+    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
   });
 }
 
@@ -770,7 +774,7 @@ function eventTaskForm(item) {
       }
       el.querySelector('#et-save').onclick = async () => {
         stopDictation();
-        const body = { event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, due: el.querySelector('#et-due').value, priority: el.querySelector('#et-pri').value };
+        const body = { section: 'calendar', event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, due: el.querySelector('#et-due').value, priority: el.querySelector('#et-pri').value };
         if (!body.note && !body.items.trim()) { note.focus(); return toast('Add a note or an action item first', 'error'); }
         try {
           const r = await api('/tasks/event', body);
@@ -797,7 +801,7 @@ function openFeedItem(item) {
     </div>`, {
     onMount: (el, close) => {
       el.querySelector('[data-ask]').onclick = () => { close(); if (item.eventKey && !item.removed) return ask(`Tell me about ${item.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, '')}`); ask(`Help me with this ${item.category.toLowerCase()} from ${item.sourceName}: "${item.title}". ${item.quote || ''} What should I do?`); };
-      const mt = el.querySelector('[data-task]'); if (mt) mt.onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined }); toast('Task added'); close(); };
+      const mt = el.querySelector('[data-task]'); if (mt) mt.onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined, section: sectionOf(item) }); toast('Task added'); close(); };
       const et = el.querySelector('[data-event-task]'); if (et) et.onclick = () => { close(); eventTaskForm(item); };
       const n = el.querySelector('[data-note]'); if (n) n.onclick = (e) => { e.preventDefault(); close(); openNote(item.notePath); };
     },
