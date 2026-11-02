@@ -168,7 +168,6 @@ function buildDashboard() {
       <div class="chat-bar" id="chat-bar" hidden><span>${icon('message-circle')} Conversation</span><button id="chat-toggle" title="Hide or show the conversation">${icon('chevron-down')} Hide</button><button id="chat-new" title="Start a new conversation">${icon('plus')} New</button></div>
       <div class="chat-log" id="chat-log" aria-live="polite"></div>
       <div class="composer">
-        <div class="suggestions" id="suggestions"></div>
         <div class="composer-row">
           <div class="input-wrap">
             <input id="chat-input" autocomplete="off" placeholder="Message ${esc(S.state.config.assistantName)} or an agent..." aria-label="Message">
@@ -290,16 +289,8 @@ function renderMentions() {
   $('#more-agents', el).onclick = () => navigate('agents');
 }
 
-function renderSuggestions() {
-  const el = $('#suggestions', dashboardEl);
-  if ($('#chat-log', dashboardEl).children.length) { el.innerHTML = ''; return; }
-  const personal = S.state.config.profile === 'personal';
-  const list = personal
-    ? ['Brief me on my day', 'Any texts I need to answer?', 'What’s on this weekend?', 'Remember that Sam prefers Sunday tennis']
-    : ['Brief me on my day', 'Review my current sprint, identify blockers, and prepare an update for stakeholders', 'What needs a reply?', 'Prep me for my next meeting', 'Review the latest design feedback before developer handoff'];
-  el.innerHTML = list.map((s) => `<button class="suggestion">${esc(s)}</button>`).join('');
-  el.querySelectorAll('button').forEach((b) => b.onclick = () => ask(b.textContent));
-}
+// The quick-question chips above the chat box were removed (Ryan, 2026-11-02).
+function renderSuggestions() {}
 
 function setSubtitle(text, speaking = false, online = false) {
   const el = $('#subtitle', dashboardEl);
