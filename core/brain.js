@@ -485,6 +485,27 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
 }
 
 // ---------------------------------------------------------------- main entry
+// "Create a task for the Brain Builder workshop" (Ryan, 2026-11-02): finds the event or feed card it names, so the
+// app can open the Create Task form for it while Maestro asks for the note. "this event"/"it" is the event the
+// conversation is on. Returns { title, category, source, eventKey, section } or null.
+const TASK_FOR = /^(?:please\s+|can you\s+|could you\s+|i(?:'d| would) like to\s+|let'?s\s+)?(?:create|add|make|set up|start|open)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:task|to-?do)\s+(?:for|about|on|from)\s+(.+?)[\s.?!]*$/i;
+const TASK_STOP = new Set(['the', 'a', 'an', 'my', 'this', 'that', 'event', 'card', 'meeting', 'email', 'message', 'call', 'from', 'with', 'for', 'about', 'on', 'of', 'to', 'and', 'in', 'at', 'item', 'one', 'please']);
+const taskWords = (s) => String(s).toLowerCase().replace(/^(new( recurring event)?|moved|cancelled): /, '').replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter((w) => w.length > 1 && !TASK_STOP.has(w));
+async function taskTarget(what, profile, focus) {
+  const asEvent = (e) => ({ title: e.title, category: 'MEETING', source: e.source || 'calendar', eventKey: e.uid || e.title, section: 'calendar' });
+  if (/^(this|that|the)?\s*(event|meeting|workshop|session|one)$|^(it|this|that)$/i.test(what.trim())) return focus ? asEvent(focus) : null;
+  const want = taskWords(what);
+  if (!want.length) return null;
+  const score = (title) => { const have = new Set(taskWords(title)); const hit = want.filter((w) => have.has(w) || [...have].some((h) => h.length > 3 && (h.startsWith(w) || w.startsWith(h)))).length; return hit / want.length; };
+  let best = null;
+  const consider = (title, make) => { const sc = score(title); if (sc >= 0.6 && (!best || sc > best.sc)) best = { sc, make }; };
+  let events = [];
+  try { const today = new Date(); today.setHours(0, 0, 0, 0); events = await require('./calendar').list({ profile, from: new Date(+today - 7 * 86400000).toISOString(), days: 90 }); } catch { /* no calendar */ }
+  for (const e of events) consider(e.title, () => asEvent(e));
+  for (const it of feed.list({ profile, limit: 300 })) if (!it.removed) consider(it.title, () => ({ title: it.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, ''), category: it.category, source: it.source, eventKey: it.eventKey || '', id: it.id }));
+  return best ? best.make() : null;
+}
+
 async function chat({ message, agentHandle, conversationId, voice = false }) {
   const cfg = config.load();
   const profile = cfg.profile;
@@ -529,6 +550,12 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
   // Built-in memory protocol commands work with every model.
   const rememberMatch = text.match(/^(?:please\s+)?(?:remember(?: that)?|note that|don'?t forget(?: that)?)\s+(.+)/i);
   const taskMatch = text.match(/^(?:please\s+)?(?:add (?:a )?task(?: to)?|remind me to|todo:?)\s+(.+)/i);
+  const taskFor = !agent && !conv.pending ? text.match(TASK_FOR) : null;
+  let taskItem = null;
+  if (taskFor) {
+    const fe = conv.focusEvent && Date.now() - conv.focusEvent.at < 2 * 3600000 ? conv.focusEvent : null;
+    try { taskItem = await taskTarget(taskFor[1], profile, fe && { title: fe.title, uid: fe.uid }); } catch { taskItem = null; }
+  }
   if (sched) {
     // handled above
   } else if (!agent && !conv.pending && isWhatAreYou(text)) {
@@ -541,6 +568,15 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
     const rel = remember(rememberMatch[1], agent ? '@' + agent.handle : 'chat');
     reply = `Got it. I saved that to [[Memory Log]] and will use it from now on.`;
     sources = [rel]; providerUsed = 'memory'; actions.push({ type: 'memory', path: rel });
+  } else if (taskItem) {
+    // The app opens the Create Task form for it; this reply is what Maestro says while it opens.
+    reply = `Let's add a task for ${taskItem.title}. What's your note about it? Add any action items and when they're due.`;
+    providerUsed = 'tasks'; actions.push({ type: 'open-task', item: taskItem });
+  } else if (taskFor) {
+    const line = tasks.add(taskFor[1]); // nothing by that name, so it's the task itself ("create a task for buying milk")
+    try { require('./reminders').check(); } catch { /* reminders are best-effort */ }
+    reply = `Added to [[Inbox]]: ${line.replace('- [ ] ', '').replace(/ ➕ \S+/, '')}`;
+    sources = ['Tasks/Inbox.md']; providerUsed = 'tasks'; actions.push({ type: 'task' });
   } else if (taskMatch) {
     const line = tasks.add(taskMatch[1]);
     try { require('./reminders').check(); } catch { /* reminders are best-effort */ }

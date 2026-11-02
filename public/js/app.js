@@ -376,11 +376,14 @@ export async function ask(text, { voice: viaVoice = false } = {}) {
   if (res.actions.some((a) => a.type === 'memory' || a.type === 'task')) loadGraph();
   if (res.actions.some((a) => a.type === 'event')) brain.pulseSource('hub:calendar', '#00e5ff');
 
+  // "Create a task for <event or card>" (Ryan, 2026-11-02): the Create Task form opens while Maestro asks for the note.
+  const openTask = res.actions.find((a) => a.type === 'open-task');
+  if (openTask) eventTaskForm(openTask.item, { prompt: stripMarkdown(res.reply), viaVoice });
   // "Talking back": the logo spins while the answer is written out and/or spoken.
   setBrainState('speaking');
   const spoken = stripMarkdown(res.reply);
   setSubtitle(spoken.split(/(?<=[.!?])\s/)[0].slice(0, 140), true);
-  const speakIt = viaVoice && S.state.config.voice.speakReplies && voiceSupported.tts;
+  const speakIt = !openTask && viaVoice && S.state.config.voice.speakReplies && voiceSupported.tts; // the task form says it itself
   if (speakIt) {
     voice.speak(spoken, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onStart: () => setBrainState('speaking'), onEnd: () => setBrainState(voice.active ? 'listening' : 'idle') });
   }
@@ -744,10 +747,13 @@ const linkify = (h) => h.replace(/https?:\/\/[^\s<]+[^\s<.,;:)!?'"]/g, (u) => `<
 
 // "Create Task" on an event card (Ryan, 2026-11-02): say or type a note about the event, its action items and
 // deadlines; it all goes on Maestro's main task list (the note as the task, action items as sub-tasks).
-function eventTaskForm(item) {
+function eventTaskForm(item, { prompt = '', viaVoice = false } = {}) {
   const title = item.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, '');
+  const isEvent = !!(item.eventKey || item.category === 'MEETING');
+  const section = isEvent ? 'calendar' : sectionOf(item);
   const SRc = window.SpeechRecognition || window.webkitSpeechRecognition;
   const micWasOn = !!(voice && voice.active);
+  const listenAfter = micWasOn || (viaVoice && !!voice); // asked by voice: the note is taken by voice too
   if (micWasOn) { voice.stop(); voice.stopSpeaking(); } // the chat mic would send the dictation as a message
   let rec = null, target = null, base = '';
   const stopDictation = () => { if (rec) { try { rec.stop(); } catch { /* already stopped */ } } rec = null; document.querySelectorAll('.dict-btn.on').forEach((b) => b.classList.remove('on')); };
@@ -768,7 +774,7 @@ function eventTaskForm(item) {
   };
   const micBtn = (id, label) => `<button type="button" class="dict-btn" data-dict="${id}" title="Say it" aria-label="${label}">${icon('mic')}</button>`;
   modal(`${modalHead('Create Task', esc(title))}
-    <p class="et-ask">Say or type a note about this event, any action items, and when they need to be done.</p>
+    <p class="et-ask">Say or type a note about this ${isEvent ? 'event' : 'item'}, any action items, and when they need to be done.</p>
     <div class="field"><label for="et-note">Note</label><div class="dict-wrap"><textarea class="input et-text" id="et-note" rows="3" placeholder="e.g. Follow up with the speakers about sharing the recording"></textarea>${micBtn('et-note', 'Dictate the note')}</div></div>
     <div class="field"><label for="et-items">Action items</label><div class="dict-wrap"><textarea class="input et-text" id="et-items" rows="4" placeholder="One per line, e.g.&#10;Send the slides to attendees by Friday&#10;Book the room for next month"></textarea>${micBtn('et-items', 'Dictate action items')}</div><span class="help">Deadlines you say, like “by Friday” or “due November 12”, are picked up for each item. The due date, time and reminders below apply to the rest.</span></div>
     ${dueFields('et')}
@@ -781,12 +787,12 @@ function eventTaskForm(item) {
       const note = el.querySelector('#et-note');
       setTimeout(() => note.focus(), 50);
       // Maestro asks out loud when replies are spoken; if you were talking to it, it starts listening for the note.
-      if (S.state.config.voice && S.state.config.voice.speakReplies && voice) {
-        voice.speak(`What's your note about ${title}? Add any action items and when they're due.`, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => { if (micWasOn && document.body.contains(note) && !rec) dictate(el.querySelector('[data-dict=et-note]'), note); } });
+      if (S.state.config.voice && S.state.config.voice.speakReplies && voice && (!prompt || viaVoice)) {
+        voice.speak(prompt || `What's your note about ${title}? Add any action items and when they're due.`, { voiceName: S.state.config.voice.voiceName, gender: S.state.config.voice.gender, rate: S.state.config.voice.rate, pause: S.state.config.voice.pause, onEnd: () => { if (listenAfter && document.body.contains(note) && !rec) dictate(el.querySelector('[data-dict=et-note]'), note); } });
       }
       el.querySelector('#et-save').onclick = async () => {
         stopDictation();
-        const body = { section: 'calendar', event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, priority: el.querySelector('#et-pri').value, ...readDue() };
+        const body = { section: section || 'calendar', event: title, note: note.value.trim(), items: el.querySelector('#et-items').value, priority: el.querySelector('#et-pri').value, ...readDue() };
         if (!body.note && !body.items.trim()) { note.focus(); return toast('Add a note or an action item first', 'error'); }
         try {
           const r = await api('/tasks/event', body);
