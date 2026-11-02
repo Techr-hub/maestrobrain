@@ -165,7 +165,7 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
       const then = rest.find((x) => x.title === e.title);
       return [`**${e.title} is ${e.allDay ? whenText(e.start).replace(/ at .*/, '') : whenText(e.start)}${where} · ${len}.**`,
         e.location && !where ? `Location: ${e.location}.` : '', e.attendees && e.attendees.length ? `With ${e.attendees.join(', ')}.` : '',
-        then ? `After that, the next one is ${whenText(then.start)}.` : rest.length ? `Also matching: ${rest[0].title}, ${whenText(rest[0].start)}.` : ''].filter(Boolean).join('\n');
+        then ? `After that, the next one is ${whenText(then.start)}.` : ''].filter(Boolean).join('\n');
     }
     const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);
     return [`**${who ? `Your next meeting with ${who} is` : 'Next up:'} ${e.title}, ${whenText(e.start)} · ${mins} min.**`,

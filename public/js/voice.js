@@ -130,7 +130,7 @@ export class Voice {
   // gender: 'male' | 'female' | '' (any). Falls back to the best voice of any gender if none match.
   bestVoice(gender = '') { const r = rankVoices(this.voices()); return (gender && r.find((v) => voiceGender(v) === gender)) || r[0] || null; }
 
-  speak(text, { voiceName, gender = '', rate = 0.92, pause = 2500, onStart, onEnd } = {}) {
+  speak(text, { voiceName, gender = '', rate = 0.92, pause = 2000, onStart, onEnd } = {}) {
     if (!voiceSupported.tts || !text) { onEnd && onEnd(); return; }
     this.stopSpeaking();
     // One utterance per sentence, with a short breath between them. Each sentence is cleaned so the voice never
@@ -140,8 +140,8 @@ export class Voice {
     const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
     if (!parts.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice(gender);
-    // Ryan (2026-11-02): the man's voice speaks 5% faster than the chosen speed.
-    const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.05 : 1;
+    // Ryan (2026-11-02): the man's voice speaks 10% faster than the chosen speed.
+    const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.1 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
     this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
     const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
