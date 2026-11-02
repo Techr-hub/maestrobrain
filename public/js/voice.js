@@ -145,10 +145,10 @@ export class Voice {
     const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.1 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
     this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
-    const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; clearInterval(this._keep); onEnd && onEnd(); }; // the echo can lag a moment
-    // Online voices also cut out after ~15 s of continuous speech unless nudged.
+    const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
+    // No pause()/resume() keep-alive (Ryan, 2026-11-02: it left Chrome stuck "paused", so the next answer was
+    // silent while Maestro looked like it was talking). Pieces are short enough that Chrome doesn't cut them off.
     clearInterval(this._keep);
-    if (voice && voice.localService === false) this._keep = setInterval(() => { if (run !== this._run) return clearInterval(this._keep); if (speechSynthesis.speaking && !speechSynthesis.paused) { speechSynthesis.pause(); speechSynthesis.resume(); } }, 5000);
     const next = (i) => {
       if (run !== this._run) return;
       if (i >= parts.length) { finish(); return; }
@@ -181,11 +181,14 @@ export class Voice {
       const watch = setInterval(() => {
         if (done || run !== this._run) return clearInterval(watch);
         const quiet = !speechSynthesis.speaking && !speechSynthesis.pending;
-        if ((started && quiet) || (!started && Date.now() - asked > 5000) || Date.now() - asked > budget) { if (!quiet) speechSynthesis.cancel(); after(); }
+        if (!started && speechSynthesis.speaking) started = true; // some voices never fire onstart
+        if ((started && quiet) || (!started && Date.now() - asked > 5000) || Date.now() - asked > budget) { if (!quiet) speechSynthesis.cancel(); if (speechSynthesis.paused) speechSynthesis.resume(); after(); }
       }, 700);
+      if (speechSynthesis.paused) speechSynthesis.resume(); // a paused engine queues speech silently
       speechSynthesis.speak(u);
     };
-    next(0);
+    // Chrome drops a speak() made right after cancel(), so the first piece waits a moment.
+    this._timer = setTimeout(() => next(0), 80);
   }
 
   stopSpeaking() {
@@ -193,7 +196,7 @@ export class Voice {
     if (this._speaking) this._saidUntil = Date.now() + 1500;
     this._speaking = false;
     clearTimeout(this._timer); clearInterval(this._keep);
-    if (voiceSupported.tts) speechSynthesis.cancel();
+    if (voiceSupported.tts) { speechSynthesis.cancel(); if (speechSynthesis.paused) speechSynthesis.resume(); }
   }
 }
 
