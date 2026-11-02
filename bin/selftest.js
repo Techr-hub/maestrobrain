@@ -80,6 +80,8 @@ async function main() {
     ok('Insight cards: a reminder when a task you created is due tomorrow (and not for demo tasks)', rem.some((i) => i.title === 'Due tomorrow: Send the workshop recap') && !rem.some((i) => /Write PRD/.test(i.title)));
     const hi = await post('/chat', { message: 'Hey Maestro' });
     ok('"Hey Maestro" opens with an upbeat greeting by name', /Ryan|there/.test(hi.reply) && /[!?]/.test(hi.reply) && hi.provider === 'greeting');
+    const wy = await post('/chat', { message: 'Hey Maestro, what are you?' });
+    ok('"What are you?" is 2 upbeat sentences about being a second brain and command centre', /second brain/.test(wy.reply) && /command centre/.test(wy.reply) && (wy.reply.match(/[.!?](\s|$)/g) || []).length === 2);
     const f1 = await post('/chat', { message: 'When is the design critique?' });
     const f2 = await post('/chat', { message: 'Tell me about this event', conversationId: f1.conversationId });
     ok('event details: "this event" means the one just discussed', /Design critique/i.test(f2.reply));

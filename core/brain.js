@@ -236,6 +236,22 @@ function stripWake(text, cfg) {
 
 // "Hey Maestro" on its own opens a conversation (Ryan, 2026-11-02): answer fun, upbeat and enthusiastic, with the
 // user's name and the time of day, and invite the first thing to work on. A busy calendar gets a nod.
+// "What are you?" (Ryan, 2026-11-02): two short, upbeat sentences built on "I am your second brain, your knowledge
+// bank of information, all mapped out into an ecosystem of data that you can build upon and customize into your own
+// autonomous command centre."
+function isWhatAreYou(text) {
+  const m = String(text).toLowerCase().replace(/[?!.]+$/, '').trim();
+  return /^(so )?(who|what) (exactly )?(are|r) (you|u)( exactly)?|^what is (maestro|this)$|^tell me about (yourself|you)$|^what do you do$|^what can you be$/.test(m);
+}
+function whatAreYou(cfg) {
+  const me = firstName(cfg);
+  return pick([
+    `I'm your second brain, ${me}, your knowledge bank of information, all mapped out into an ecosystem of data! You can build on me and customize me into your own autonomous command centre.`,
+    `I am your second brain: your knowledge bank of information, all mapped out into one living ecosystem of data. Build on it, customize it, and turn me into your own autonomous command centre!`,
+    `Think of me as your second brain, ${me}, a knowledge bank of everything you know, mapped out into an ecosystem of data. Best of all, you can build on it and shape me into your very own autonomous command centre!`,
+  ]);
+}
+
 function isWakeGreeting(raw, stripped) {
   if (!stripped) return true;
   return /^(hi|hello|hey|yo|hiya|howdy|hey there|hi there|good (morning|afternoon|evening)|morning|afternoon|evening)[\s,!.]*$/i.test(stripped);
@@ -307,8 +323,8 @@ function smallTalk(message, cfg) {
   if (/^(thanks|thank you|thx|cheers|great|perfect|awesome|nice|cool|got it)( (so much|a lot|very much|maestro))?$/.test(m))
     return pick([`Anytime, ${me}.`, `You're welcome. I'll add it to my list of heroic deeds.`, `That's what I'm here for, ${me}.`]);
   if (/^(ok|okay|k|sure)$/.test(m)) return 'Okay.';
-  if (/^(who are you|what are you|what is maestro|what's your name|what is your name)$/.test(m))
-    return `I'm ${cfg.assistantName}, your second brain, ${me}. I remember your notes, calendar, messages and tasks so you don't have to.`;
+  if (/^(what('s| is) your name)$/.test(m)) return `I'm ${cfg.assistantName}, your second brain, ${me}!`;
+  if (isWhatAreYou(m)) return whatAreYou(cfg);
   if (/^(help|what can you do|what can i ask( you)?|how do (i|you) use (this|you))$/.test(m))
     return ['Plenty. Try asking:', '- "Summarize my day"', '- "When did Alex call me?"', '- "When is my next meeting with Sarah?"', '- "What are my tasks?"', '- "Remember that…" or "Add a task to…"'].join('\n');
   return null;
@@ -515,6 +531,8 @@ async function chat({ message, agentHandle, conversationId, voice = false }) {
   const taskMatch = text.match(/^(?:please\s+)?(?:add (?:a )?task(?: to)?|remind me to|todo:?)\s+(.+)/i);
   if (sched) {
     // handled above
+  } else if (!agent && !conv.pending && isWhatAreYou(text)) {
+    reply = whatAreYou(cfg); providerUsed = 'greeting'; // same answer with every AI model
   } else if (!agent && !(conv.pending) && isWakeGreeting(raw, stripped) && conv.messages.length === 0) {
     let busy = 0;
     try { const today = new Date(); today.setHours(0, 0, 0, 0); busy = (await require('./calendar').list({ profile, from: today.toISOString(), to: new Date(+today + 86400000).toISOString() })).filter((e) => new Date(e.end) > Date.now()).length; } catch { /* no calendar */ }
