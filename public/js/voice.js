@@ -140,6 +140,8 @@ export class Voice {
     const parts = sentences.flatMap((x) => (x.length <= 230 ? [x] : x.split(/(?<=,)\s+/).reduce((acc, p) => { const l = acc.length - 1; if (l >= 0 && acc[l].length + p.length < 230) acc[l] += ' ' + p; else acc.push(p); return acc; }, [])));
     if (!parts.length) { onEnd && onEnd(); return; }
     const voice = this.voices().find((v) => v.name === voiceName) || this.bestVoice(gender);
+    // Ryan (2026-11-02): the man's voice speaks 5% faster than the chosen speed.
+    const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.05 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
     this._said = new Set(words(text)); this._saidUntil = Infinity; this._speaking = true;
     const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
@@ -149,7 +151,7 @@ export class Voice {
       const u = new SpeechSynthesisUtterance(parts[i]);
       if (voice) u.voice = voice;
       u.lang = voice ? voice.lang : this.lang;
-      u.rate = rate;
+      u.rate = Math.min(2, rate * manBoost);
       u.pitch = 1;
       if (i === 0) u.onstart = () => onStart && onStart();
       const after = () => { if (run !== this._run) return; this._timer = setTimeout(() => next(i + 1), i < parts.length - 1 ? pause : 0); };
