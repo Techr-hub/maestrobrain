@@ -69,7 +69,7 @@ $('#sidebar-toggle').onclick = () => {
   applySidebar();
 };
 
-// Top-bar Man / Woman switch: picks the most natural voice of that kind and says hello in it.
+// Top-bar man / woman voice switch (icons only): picks the most natural voice of that kind and says hello in it.
 async function setVoiceGender(gender) {
   if (S.state.config.voice.gender === gender && !S.state.config.voice.voiceName) return;
   // A specific voice chosen in Settings would override the switch, so clear it.
@@ -95,8 +95,8 @@ function renderShell() {
   });
   const vs = $('#voice-switch');
   const gender = (cfg.voice && cfg.voice.gender) || 'male';
-  vs.querySelector('[data-gender=male]').innerHTML = `${icon('user-round')} Man`;
-  vs.querySelector('[data-gender=female]').innerHTML = `${icon('user-round')} Woman`;
+  vs.querySelector('[data-gender=male]').innerHTML = icon('man'); // icons only (Ryan, 2026-11-02)
+  vs.querySelector('[data-gender=female]').innerHTML = icon('woman');
   vs.querySelectorAll('button').forEach((b) => {
     const on = b.dataset.gender === gender;
     b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));

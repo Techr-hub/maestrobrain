@@ -622,3 +622,7 @@ button.wk-dh:hover b { color: var(--cyan); }
 .task .t-edit svg { width: 15px; height: 15px; }
 .task .t-edit:hover, .task .t-edit:focus-visible { color: var(--text, #e9e7ff); border-color: var(--line, #24314a); }
 #te-text { font-family: inherit; font-size: 15px; line-height: 1.45; resize: vertical; min-height: 64px; height: 64px; }
+
+/* Voice switch: man / woman icons only (Ryan, 2026-11-02) */
+.voice-switch button { padding: 7px 9px; }
+.voice-switch button .icon, .voice-switch button svg { display: block !important; width: 20px; height: 20px; }
