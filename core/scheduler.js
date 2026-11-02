@@ -85,7 +85,7 @@ function cap(s) { return s.replace(/\b\w/g, (c) => c.toUpperCase()); }
 function parseAttendees(text) {
   const m = text.match(new RegExp(`\\bwith\\s+(.+?)${STOP}`, 'i'));
   if (!m) return [];
-  return m[1].split(/\s*(?:,|\band\b|&)\s*/i).map((s) => s.trim()).filter((s) => s && !/^(me|my team|the team|everyone)$/i.test(s)).map((s) => (s === s.toLowerCase() ? cap(s) : s)).slice(0, 8);
+  return m[1].split(/\s*(?:,|\band\b|&)\s*/i).map((s) => s.trim()).filter((s) => s && !/^(me|us|my team|the team|the whole team|our team|everyone|everybody|the group)$/i.test(s)).map((s) => (s === s.toLowerCase() ? cap(s) : s)).slice(0, 8);
 }
 
 function parseTitle(text) {
@@ -97,29 +97,52 @@ function parseTitle(text) {
 }
 
 // "at Starbucks on King St", "in the Boardroom", "location is 100 Queen St", "on Zoom"
+const VENUE = '(?:restaurant|cafe|café|coffee|bar|pub|bistro|grill|hotel|office|offices|room|park|gym|clinic|hall|centre|center|building|studio|church|school|library|club|arena|stadium|mall|plaza|tower|campus|hq)';
 function parseLocation(text) {
-  let m = text.match(/\b(?:location(?: is|:)|address(?: is|:)|venue(?: is|:))\s*(.+?)(?:[.,!?]|$)/i);
+  let m = text.match(/\b(?:location|address|venue|place)(?:\s+is|\s+will be|\s*:|\s*-)?\s+(?!is\b)(.+?)(?=,|[.!?](?:\s|$)|$)/i);
   if (m) return m[1].trim();
+  m = text.match(/\b(?:at|in)\s+(\d+[A-Za-z]?\s+[A-Z][\w'.-]*(?:\s+(?:[A-Z][\w'.-]*|St|Ave|Rd|Blvd|Dr))*(?:,?\s+(?:Suite|Unit|Floor)\s+\w+)?)/);
+  if (m) return m[1].trim(); // "at 100 Queen Street"
+  m = text.match(/\b(?:in|at)\s+(the\s+|my\s+|our\s+)?(boardroom|board room|conference room|meeting room|office|lobby|cafeteria|kitchen|break room|my place|your place|home|gym|studio)\b/i);
+  if (m) return ((m[1] || '').trim() + ' ' + m[2]).trim().replace(/^\w/, (c) => c.toUpperCase());
   m = text.match(/\bon (zoom|teams|google meet|meet|a call|the phone|facetime)\b/i);
   if (m) return { zoom: 'Zoom', teams: 'Microsoft Teams', 'google meet': 'Google Meet', meet: 'Google Meet', 'a call': 'Phone call', 'the phone': 'Phone call', facetime: 'FaceTime' }[m[1].toLowerCase()];
-  m = text.match(/\b(?:at|in)\s+((?:the\s+)?[A-Z][\w'&.-]*(?:\s+(?:[A-Z][\w'&.-]*|on|of|and|&|St|Ave|Rd)){0,6})/);
-  if (m && !/^(the )?(morning|afternoon|evening|night|noon|midnight|january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(m[1])) return m[1].trim();
+  m = text.match(new RegExp(`\\b(?:at|in)\\s+((?:the\\s+)?[A-Z][\\w'&.-]*(?:\\s+(?:[A-Z][\\w'&.-]*|on|of|and|&|St|Ave|Rd)){0,6}(?:\\s+${VENUE}\\b)?)`));
+  if (m && !/^(Google|Outlook|Apple|iCloud|Mac|Maestro)\b/.test(m[1]) && !/^(the )?(morning|afternoon|evening|night|noon|midnight|january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(m[1])) return m[1].trim();
   return '';
 }
 
-function kindOf(m) { if (/\b(calendar )?(item|entry|invite|booking)\b/.test(m) && !/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|standup|appointment)\b/.test(m)) return 'event'; const x = m.match(/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|1:1|one[- ]on[- ]one|catch ?up|standup|appointment|event|meeting)\b/); return x ? x[1].replace(/one[- ]on[- ]one/, '1:1').replace(/catch ?up/, 'catch-up') : 'meeting'; }
+function kindOf(m) { if (/\b(calendar )?(item|entry|invite|booking)\b/.test(m) && !/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|standup|appointment)\b/.test(m)) return 'event'; const x = m.match(/\b(call|lunch|dinner|breakfast|coffee|demo|interview|review|sync|1:1|one[- ]on[- ]one|catch ?up|standup|appointment|party)\b/) || m.match(/\b(event|meeting)\b/); return x ? x[1].replace(/one[- ]on[- ]one/, '1:1').replace(/catch ?up/, 'catch-up') : 'meeting'; }
+
+// "description: discuss the deal", "notes: bring the projector", "the description is weekly planning",
+// "… to review the contract". Returns { notes, rest } where rest is the text without the notes.
+function parseNotes(text) {
+  let m = text.match(/(?:,\s*|\.\s*|\s)(?:and\s+)?(?:the\s+|with\s+(?:the\s+|a\s+)?)?(?:description|notes?|details|agenda)(?:\s+(?:is|are|says?|should say|will be)|\s*:|\s*-)?\s+(?!(?:is|are)\b)(.+?)(?=,\s*(?:in|on|to|at|location|address|for)\s|[.!?](?:\s|$)|$)/i);
+  if (m) return { notes: m[1].trim().replace(/^(to |that )/i, '').replace(/^\w/, (c) => c.toUpperCase()).replace(/[.!?]+$/, ''), rest: text.replace(m[0], ' ') };
+  m = text.match(/\bto (discuss|review|celebrate|talk about|talk through|go over|go through|plan|catch up on|prepare for|prep for|sign|finali[sz]e|brainstorm|kick off|present)\s+(.+?)(?=,\s*(?:in|on|at|location|for)\s|[.!?](?:\s|$)|$)/i);
+  if (m) return { notes: `${m[1]} ${m[2]}`.trim().replace(/^\w/, (c) => c.toUpperCase()), rest: text.replace(m[0], ' '), purpose: true };
+  return { notes: '', rest: text };
+}
+// "book a dentist appointment" -> "Dentist appointment"
+function titleFromNoun(m) {
+  const x = m.match(/\b(?:a|an|my|our)\s+((?!new\b|quick\b|short\b|calendar\b|the\b|recurring\b)[a-z]+(?:\s(?!new\b)[a-z]+)?)\s+(appointment|session|party|review|lesson|class|checkup|check-up|consultation|sync|standup|meeting|call|lunch|dinner|breakfast|coffee|interview|demo|workshop)\b/);
+  return x ? `${x[1]} ${x[2]}`.replace(/^\w/, (c) => c.toUpperCase()) : '';
+}
 
 // Pull every slot we can from one message.
 function extract(text, now) {
-  const m = text.toLowerCase();
+  const n = parseNotes(text);
   const out = {};
+  if (n.notes) out.notes = n.notes;
+  text = n.rest; // the description can't also be read as a place, guests or a title
+  const m = text.toLowerCase();
   const date = parseDate(m, now); if (date) out.date = date.getTime();
   const time = parseTime(m); if (time != null) out.time = time;
   // only read a length when the sentence states one ("for 45 minutes", "an hour", "half an hour")
   const lengthy = m.replace(/\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?)/g, ' ').replace(/\b(at|around|by)\s+\d{1,2}(:\d{2})?\b/g, ' ');
   if (/\b\d+(\.\d+)?\s*(minutes?|mins?|hours?|hrs?)\b|\b(half an hour|half hour|an hour|one hour|hour and a half|quarter of an hour)\b/.test(lengthy)) { const dur = parseDuration(lengthy); if (dur) out.minutes = dur; }
   const who = parseAttendees(text); if (who.length) out.attendees = who;
-  const title = parseTitle(text); if (title) out.title = title;
+  const title = parseTitle(text) || titleFromNoun(m); if (title) out.title = title;
   const place = parseLocation(text); if (place) out.location = place;
   out.kind = kindOf(m);
   return out;
@@ -206,8 +229,18 @@ async function handle(text, conv, { profile, name }) {
     s = { ...extract(text, now), type: 'event' };
     if (s.title === undefined) s.title = null;
     if (s.location === undefined) s.location = null;
-    s.notes = null;
+    if (s.notes === undefined) s.notes = null;
     if (targets.length === 1) s.target = targets[0].id;
+    const cal = text.match(/\b(google|gmail|outlook|microsoft|office 365|icloud|apple|mac|ical|maestro)\s+cal(?:endar)?\b/i);
+    if (cal && !s.target) answer('target', cal[0], s, targets, now);
+    // Everything said up front (day, time and a place, description or name): don't ask about the rest,
+    // just use sensible defaults (Ryan, 2026-11-02). A bare "meeting tomorrow at 2" still gets the questions.
+    if (s.date && s.time != null && (s.location || s.notes || s.title)) {
+      s.minutes = s.minutes || 30;
+      if (s.title == null) s.title = '';
+      if (s.location == null) s.location = '';
+      if (s.notes == null) s.notes = '';
+    }
   } else {
     const before = JSON.stringify(s);
     answer(s.ask, text, s, targets, now);

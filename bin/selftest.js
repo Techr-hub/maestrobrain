@@ -73,6 +73,10 @@ async function main() {
     const pinned = await (await fetch(base + '/feed?limit=5')).json();
     ok('feed: a pinned card moves to the top', pinned[0].id === last.id && pinned[0].pinned === true);
     await post('/feed/pin', { id: last.id, pinned: false });
+    const full = await post('/chat', { message: 'Hey Maestro, book a dentist appointment on Friday at 3:15pm at Smile Dental for 45 minutes, description: cleaning and checkup, in my Maestro calendar' });
+    ok('create event: everything said up front creates it without more questions', /^Creating "Dentist appointment" for .*3:15 PM to 4:00 PM, at Smile Dental, in your Maestro calendar/.test(full.reply));
+    const full2 = await post('/chat', { message: 'Schedule a lunch with Sarah on Thursday at 12:30 at The Keg, description: discuss the partnership deal' });
+    ok('create event: full request only asks which calendar', /^Which calendar/.test(full2.reply));
     const vague = await post('/chat', { message: 'Create a new calendar item' });
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();
