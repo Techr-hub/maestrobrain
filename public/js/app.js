@@ -50,7 +50,7 @@ export async function afterChange({ graph = true, feed = true } = {}) {
   updateBrainSources();
   if (graph) loadGraph();
   if (feed) await loadFeed();
-  updateStats();
+  refreshStats();
 }
 
 // Collapsible sidebar: icons only when collapsed (the default), remembered per browser.
@@ -223,6 +223,7 @@ async function loadGraph() {
   brain.setGraph(g);
   brain._noteCount = g.nodes.length;
   updateStats();
+  refreshStats();
 }
 
 // Shades of a hub's colour for its sub-categories: lighter to darker around the base hue.
@@ -265,12 +266,17 @@ function updateBrainSources() {
 
 function updateStats() {
   if (!dashboardEl) return;
-  const cfg = S.state.config;
-  const sources = Object.keys(cfg.connections[cfg.profile] || {}).length;
-  $('#brain-stats', dashboardEl).innerHTML = [
-    [brain._noteCount || 0, 'Notes'], [sources, 'Sources'], [S.state.agents.length, 'Agents'], [S.state.skills.length, 'Skills'],
-  ].map(([v, l]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join('');
+  const st = S.stats || { notes: brain._noteCount || 0, sources: Object.keys(S.state.config.connections[S.state.config.profile] || {}).length, agents: S.state.agents.length, skills: S.state.skills.length };
+  $('#brain-stats', dashboardEl).innerHTML = [[st.notes, 'Notes'], [st.sources, 'Sources'], [st.agents, 'Agents'], [st.skills, 'Skills']]
+    .map(([v, l]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join('');
 }
+// Fresh counts from the server (Ryan, 2026-11-03): on load, after changes, every 15 s and when you come back to the tab,
+// so notes added in Obsidian or agents made in Claude Desktop show up without a reload.
+async function refreshStats() {
+  try { S.stats = await api('/stats'); updateStats(); } catch { /* older server: keep the local counts */ }
+}
+setInterval(() => { if (!document.hidden) refreshStats(); }, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStats(); });
 
 function renderMentions() {
   const el = dashboardEl && $('#mentions', dashboardEl);

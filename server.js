@@ -134,6 +134,14 @@ route('POST', '/api/feed/pin', async (_q, body) => feed.setPinned(body.id, body.
 route('POST', '/api/feed/read-all', async () => { for (const i of feed.list({ limit: 300 })) if (i.unread) feed.markRead(i.id); return { ok: true }; });
 
 route('GET', '/api/graph', async () => vault.graph(config.load().profile));
+// The counts above the brain map (Ryan, 2026-11-03): read fresh each time, so they match the vault and connections now.
+// Notes are your knowledge notes for this profile; agents, skills and note templates are counted on their own or left out.
+route('GET', '/api/stats', async () => {
+  const cfg = config.load();
+  vault.invalidate();
+  const notes = vault.loadNotes().filter((n) => (n.profile === 'both' || n.profile === cfg.profile) && !['Agents', 'Skills', 'Templates'].includes(n.folder)).length;
+  return { notes, sources: Object.keys(cfg.connections[cfg.profile] || {}).length, agents: agents.agents().length, skills: agents.skills().length };
+});
 route('GET', '/api/vault/tree', async () => vault.tree());
 route('GET', '/api/vault/note', async (q) => vault.readNote(q.get('path')));
 route('POST', '/api/vault/note', async (_q, body) => ({ path: vault.writeNote(body.path, body.content, { append: !!body.append }) }));

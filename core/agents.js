@@ -9,8 +9,10 @@ function asList(v) {
   return Array.isArray(v) ? v : String(v).split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// Index notes ("Skills Library", tagged index) describe a folder; they aren't a skill or agent themselves.
+const isIndex = (n) => (n.tags || []).map(String).map((t) => t.toLowerCase()).includes('index');
 function agents() {
-  const list = vault.loadNotes().filter((n) => n.folder === 'Agents').map((n) => {
+  const list = vault.loadNotes().filter((n) => n.folder === 'Agents' && !isIndex(n)).map((n) => {
     const fm = n.frontmatter;
     return {
       path: n.path,
@@ -43,7 +45,7 @@ function findAgent(handle) {
 }
 
 function skills() {
-  return vault.loadNotes().filter((n) => n.folder === 'Skills').map((n) => ({
+  return vault.loadNotes().filter((n) => n.folder === 'Skills' && !isIndex(n)).map((n) => ({
     path: n.path,
     name: n.frontmatter.name || n.title,
     slug: path.basename(n.path, '.md').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
