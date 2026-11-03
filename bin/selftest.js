@@ -111,6 +111,14 @@ async function main() {
       ok('brain stats: notes leave out agents, skills and templates, skills leave out the index note, and new notes count at once',
         s1.skills === ag.skills().length && !ag.skills().some((k) => k.name === 'Skills Library') && s1.agents === ag.agents().length && s2.notes === s1.notes + 1 && s1.sources >= 0);
     }
+    {
+      // An older vault's Agents/Jarvis.md beside the new Maestro.md was a duplicate "Chief of staff" (Ryan, 2026-11-03).
+      const root = require('../core/vault').vaultRoot();
+      fs.writeFileSync(path.join(root, 'Agents', 'Jarvis.md'), '---\nname: Jarvis\nhandle: Jarvis\nrole: Chief of staff\n---\nYou are Jarvis.\n');
+      require('../core/vault').invalidate();
+      const list = require('../core/agents').agents();
+      ok('agents: no duplicate Chief of staff from an old Jarvis file (moved to .maestro/old)', list.filter((a) => /chief of staff/i.test(a.role)).length === 1 && !fs.existsSync(path.join(root, 'Agents', 'Jarvis.md')) && fs.existsSync(path.join(root, '.maestro', 'old', 'Jarvis.md')));
+    }
     const rf = await post('/feed/refresh', {});
     ok('feed refresh button: pulls every source now and reports what came in', rf.ok === true && typeof rf.added === 'number' && typeof rf.errors === 'number');
     const hi = await post('/chat', { message: 'Hey Maestro' });

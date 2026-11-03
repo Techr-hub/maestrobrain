@@ -33,9 +33,28 @@ function agents() {
     };
   });
   // Vaults from before the rename still have Agents/Jarvis.md: show it as Maestro.
-  for (const a of list) if (/^jarvis$/i.test(a.handle)) Object.assign(a, { name: 'Maestro', handle: 'Maestro', prompt: a.prompt.replace(/\bJarvis\b/g, 'Maestro') });
-  list.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  return list;
+  // If the vault also has the new Agents/Maestro.md, the old file is a duplicate "Chief of staff" (Ryan, 2026-11-03):
+  // it's moved out of Agents/ into .maestro/old/ (kept, not deleted) and left out of the list.
+  const hasNew = list.some((a) => /^maestro$/i.test(a.handle) && !/jarvis/i.test(a.path));
+  for (const a of list.filter((x) => /^jarvis$/i.test(x.handle) && hasNew)) retire(a.path);
+  let out = list.filter((a) => !(hasNew && /^jarvis$/i.test(a.handle)));
+  for (const a of out) if (/^jarvis$/i.test(a.handle)) Object.assign(a, { name: 'Maestro', handle: 'Maestro', prompt: a.prompt.replace(/\bJarvis\b/g, 'Maestro') });
+  // One agent per handle: a copy left by an older seed or import never shows twice.
+  const seen = new Set();
+  out = out.filter((a) => { const k = a.handle.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  out.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  return out;
+}
+
+function retire(rel) {
+  try {
+    const fs = require('fs'), root = vault.vaultRoot();
+    const from = vault.safeJoin(root, rel), to = vault.safeJoin(root, '.maestro/old/' + path.basename(rel));
+    if (!fs.existsSync(from)) return;
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.renameSync(from, to);
+    vault.invalidate();
+  } catch { /* read-only vault: it's still left out of the list */ }
 }
 
 function findAgent(handle) {
