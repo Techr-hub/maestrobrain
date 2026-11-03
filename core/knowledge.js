@@ -103,7 +103,11 @@ function connect({ type = 'obsidian', path: p, seed = true, create = false, cust
   const prior = config.readKbSettings(dir);
   config.update((c) => {
     const hasOwn = Object.values(c.connections || {}).some((p) => Object.values(p).some((x) => x.mode === 'live' || x.mode === 'claude'));
-    if (prior && !hasOwn) for (const k of ['user', 'assistantName', 'profile', 'llm', 'voice', 'connections', 'packs', 'workflows', 'dataMode']) if (prior[k] !== undefined) c[k] = prior[k];
+    if (prior && !hasOwn) for (const k of ['user', 'assistantName', 'profile', 'llm', 'voice', 'connections', 'packs', 'workflows']) if (prior[k] !== undefined) c[k] = prior[k];
+    // The demo / real choice just made on the first setup screen wins over what the vault remembers (2026-11-03:
+    // "Set up my real connections" came back full of demo connections after picking the starter vault).
+    if (c.dataMode === 'real') for (const conns of Object.values(c.connections || {})) for (const [id, x] of Object.entries(conns || {})) if (x.mode === 'demo') delete conns[id];
+    if (c.dataMode !== 'real') { const fresh = config.defaultConfig(); for (const prof of ['business', 'personal']) { const conns = c.connections[prof] || (c.connections[prof] = {}); for (const [id, k] of Object.entries(fresh.connections[prof] || {})) if (!conns[id]) conns[id] = k; } }
     c.vaultPath = dir;
     c.knowledge = {
       type: type === 'starter' ? 'obsidian' : type, connected: true, connectedAt: Date.now(),

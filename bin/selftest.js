@@ -119,6 +119,17 @@ async function main() {
       const list = require('../core/agents').agents();
       ok('agents: no duplicate Chief of staff from an old Jarvis file (moved to .maestro/old)', list.filter((a) => /chief of staff/i.test(a.role)).length === 1 && !fs.existsSync(path.join(root, 'Agents', 'Jarvis.md')) && fs.existsSync(path.join(root, '.maestro', 'old', 'Jarvis.md')));
     }
+    {
+      // "Set up my real connections", then the starter vault (which remembers demo settings): the choice holds.
+      const kbm = require('../core/knowledge'), cfgm = require('../core/config');
+      const keep = JSON.parse(JSON.stringify(cfgm.load()));
+      await post('/data-mode', { mode: 'real' });
+      kbm.connect({ type: 'markdown', path: require('../core/vault').vaultRoot() });
+      const after = cfgm.load();
+      ok('setup: the real-connections choice survives connecting a vault that remembers demo settings', after.dataMode === 'real' && !Object.values(after.connections.business || {}).some((x) => x.mode === 'demo'));
+      await post('/data-mode', { mode: 'demo' });
+      cfgm.update((c) => { c.connections = keep.connections; c.dataMode = keep.dataMode; c.demo = keep.demo; c.knowledge = keep.knowledge; c.vaultPath = keep.vaultPath; });
+    }
     const rf = await post('/feed/refresh', {});
     ok('feed refresh button: pulls every source now and reports what came in', rf.ok === true && typeof rf.added === 'number' && typeof rf.errors === 'number');
     const hi = await post('/chat', { message: 'Hey Maestro' });
