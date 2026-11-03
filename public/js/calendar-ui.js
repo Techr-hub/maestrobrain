@@ -53,6 +53,9 @@ export function openEvent(e, ask, createTask) {
 
 // ------------------------------------------------------------------ month
 // opts: { filter(e) → bool, ask(text), title }
+// The month view folds up like an accordion (Ryan, 2026-11-03); open or closed is remembered in maestro.feedMonthOpen.
+let monthOpen = true;
+try { monthOpen = localStorage.getItem('maestro.feedMonthOpen') !== '0'; } catch { /* storage blocked */ }
 export function monthCalendar(host, opts = {}) {
   const today = midnight(new Date());
   const st = { y: today.getFullYear(), m: today.getMonth(), sel: today, events: [], cache: new Map() };
@@ -87,7 +90,13 @@ export function monthCalendar(host, opts = {}) {
     const sel = (byDay.get(dayKey(st.sel)) || []).slice().sort((a, b) => new Date(a.start) - new Date(b.start));
     const selLabel = dayKey(st.sel) === dayKey(today) ? 'Today' : dayKey(st.sel) === dayKey(addDays(today, 1)) ? 'Tomorrow' : st.sel.toLocaleDateString([], { weekday: 'long' });
     const now = Date.now();
-    host.innerHTML = `<div class="mc">
+    const todayCount = (byDay.get(dayKey(today)) || []).length;
+    host.innerHTML = `<div class="mc ${monthOpen ? 'open' : ''}">
+      <button class="mc-acc" id="mc-acc" aria-expanded="${monthOpen}" aria-controls="mc-body">
+        ${icon('calendar-days')}<b>Month view</b><span>${MONTHS[st.m]} ${st.y}</span>
+        <small>${todayCount ? `${todayCount} today` : 'Nothing today'}</small>${icon('chevron-down', 'mc-chev')}
+      </button>
+      <div class="mc-body" id="mc-body" ${monthOpen ? '' : 'inert'}><div class="mc-inner">
       <div class="mc-head">
         <button class="mc-nav" data-step="-1" title="Previous month">${icon('chevron-left')}</button>
         <div class="mc-tabs"><select class="mc-tab" id="mc-m" aria-label="Month">${MONTHS.map((n, i) => `<option value="${i}" ${i === st.m ? 'selected' : ''}>${n.slice(0, 3)}</option>`).join('')}</select><select class="mc-tab" id="mc-y" aria-label="Year">${years.map((y) => `<option ${y === st.y ? 'selected' : ''}>${y}</option>`).join('')}</select></div>
@@ -104,7 +113,15 @@ export function monthCalendar(host, opts = {}) {
             <span class="mc-ev-body"><b>${esc(e.title)}${e.recurring ? ` ${icon('repeat')}` : ''}</b>${e.location ? `<small>${icon('map-pin')} ${esc(e.location)}</small>` : ''}<small class="cal-src" style="--c:${eventColor(e)}"><i></i>${esc(calName(e))}</small></span>
           </button>`;
         }).join('') : `<div class="mc-free">Nothing on this day.</div>`}
-      </div></div>`;
+      </div></div></div></div>`;
+    host.querySelector('#mc-acc').onclick = () => {
+      monthOpen = !monthOpen;
+      try { localStorage.setItem('maestro.feedMonthOpen', monthOpen ? '1' : '0'); } catch { /* storage blocked */ }
+      const mc = host.querySelector('.mc'), body = host.querySelector('#mc-body');
+      mc.classList.toggle('open', monthOpen);
+      host.querySelector('#mc-acc').setAttribute('aria-expanded', String(monthOpen));
+      body.toggleAttribute('inert', !monthOpen);
+    };
     host.querySelectorAll('.mc-nav').forEach((b) => b.onclick = () => { const d = new Date(st.y, st.m + Number(b.dataset.step), 1); st.y = d.getFullYear(); st.m = d.getMonth(); load(); });
     host.querySelector('#mc-m').onchange = (e) => { st.m = Number(e.target.value); load(); };
     host.querySelector('#mc-y').onchange = (e) => { st.y = Number(e.target.value); load(); };
