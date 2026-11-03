@@ -112,6 +112,19 @@ function renderShell() {
   $('#arrow').innerHTML = icon('arrow-right');
   $('#live-toggle').innerHTML = `${icon('circle-dot')} ${S.livePaused ? 'PAUSED' : 'LIVE'}`;
   $('#live-toggle').classList.toggle('paused', S.livePaused);
+  const rf = $('#feed-refresh');
+  rf.innerHTML = icon('refresh');
+  rf.onclick = async () => {
+    if (rf.classList.contains('spinning')) return;
+    rf.classList.add('spinning'); rf.disabled = true;
+    try {
+      const r = await api('/feed/refresh', {});
+      await afterChange(); // feed, brain map, sources and counts
+      toast(`${r.added ? `${r.added} new item${r.added === 1 ? '' : 's'}` : 'Up to date'}${r.errors ? ` · ${r.errors} connection${r.errors === 1 ? '' : 's'} need attention` : ''}${r.viaClaude && r.viaClaude.length ? ' · ask Claude Desktop to sync its connectors' : ''}`, r.errors ? 'error' : undefined);
+    }
+    catch (e) { toast('Could not refresh: ' + e.message, 'error'); }
+    finally { rf.classList.remove('spinning'); rf.disabled = false; }
+  };
   greet();
 }
 

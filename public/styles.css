@@ -626,3 +626,10 @@ button.wk-dh:hover b { color: var(--cyan); }
 /* Voice switch: man / woman icons only (Ryan, 2026-11-02) */
 .voice-switch button { padding: 7px 9px; }
 .voice-switch button .icon, .voice-switch button svg { display: block !important; width: 20px; height: 20px; }
+
+/* Refresh button beside LIVE on the Intelligence Feed (Ryan, 2026-11-03) */
+#feed-refresh { display: inline-grid; place-items: center; }
+#feed-refresh .icon { width: 15px; height: 15px; }
+#feed-refresh.spinning .icon { animation: feedspin .8s linear infinite; }
+@keyframes feedspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #feed-refresh.spinning .icon { animation: none; } }

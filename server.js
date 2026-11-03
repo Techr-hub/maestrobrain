@@ -131,6 +131,25 @@ route('GET', '/api/version', async () => ({ app: 'maestro', build: BUILD, root: 
 route('POST', '/api/shutdown', async (_q, body) => { if (!body || body.reason !== 'update') return { error: 'Not allowed' }; setTimeout(() => process.exit(0), 150); return { ok: true }; });
 route('POST', '/api/feed/dismiss', async (_q, body) => feed.dismiss(body.id) || { error: 'Card not found' });
 route('POST', '/api/feed/pin', async (_q, body) => feed.setPinned(body.id, body.pinned !== false) || { error: 'Card not found' });
+// The refresh button on the Intelligence Feed (Ryan, 2026-11-03): pull everything into Maestro now instead of waiting
+// for the timers: every live calendar and Calendly (new, moved, cancelled events), Slack, texts, WhatsApp and calls,
+// the vault (notes edited in Obsidian), and task reminders. The dashboard then reloads the feed, map and counts.
+route('POST', '/api/feed/refresh', async () => {
+  const cfg = config.load();
+  const before = new Set(feed.readAll().map((i) => i.id));
+  const live = [], viaClaude = [];
+  for (const conns of Object.values(cfg.connections || {})) for (const [id, c] of Object.entries(conns || {})) {
+    if (c.mode === 'live') live.push(id); else if (c.mode === 'claude') viaClaude.push(id);
+    try { calendar.forget(connectors.calendarUrls(c.fields || {})); } catch { /* not a calendar */ }
+  }
+  vault.invalidate();
+  await Promise.allSettled([feed.pollLive(), calwatch.check()]);
+  try { reminders.check(); } catch { /* best-effort */ }
+  const added = feed.readAll().filter((i) => !before.has(i.id)).length;
+  const now = config.load();
+  const errors = Object.values(now.connections[now.profile] || {}).filter((c) => c.lastError).length;
+  return { ok: true, at: Date.now(), added, live: [...new Set(live)].length, viaClaude: [...new Set(viaClaude)], errors };
+});
 route('POST', '/api/feed/read-all', async () => { for (const i of feed.list({ limit: 300 })) if (i.unread) feed.markRead(i.id); return { ok: true }; });
 
 route('GET', '/api/graph', async () => vault.graph(config.load().profile));

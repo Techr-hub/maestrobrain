@@ -111,6 +111,8 @@ async function main() {
       ok('brain stats: notes leave out agents, skills and templates, skills leave out the index note, and new notes count at once',
         s1.skills === ag.skills().length && !ag.skills().some((k) => k.name === 'Skills Library') && s1.agents === ag.agents().length && s2.notes === s1.notes + 1 && s1.sources >= 0);
     }
+    const rf = await post('/feed/refresh', {});
+    ok('feed refresh button: pulls every source now and reports what came in', rf.ok === true && typeof rf.added === 'number' && typeof rf.errors === 'number');
     const hi = await post('/chat', { message: 'Hey Maestro' });
     ok('"Hey Maestro" opens with an upbeat greeting by name', /Ryan|there/.test(hi.reply) && /[!?]/.test(hi.reply) && hi.provider === 'greeting');
     const wy = await post('/chat', { message: 'Hey Maestro, what are you?' });
