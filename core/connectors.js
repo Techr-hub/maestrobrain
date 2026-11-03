@@ -285,6 +285,8 @@ async function fetchIcs(url) {
     let host = 'the calendar server'; try { host = new URL(u).host; } catch { /* bad link */ }
     if (/^webcal:/i.test(url.trim())) { try { res = await get(u.replace(/^https:/, 'http:')); } catch { throw friendly(e, host); } } else throw friendly(e, host);
   }
+  // Google's "Public address" only works for a calendar shared publicly; otherwise it's a 404 (Ryan, 2026-11-03).
+  if (!res.ok && /calendar\.google\.com\/calendar\/ical\/.+\/public\//i.test(u)) throw new Error("That's your Google Calendar's public address, which only works if the calendar is public. In Google Calendar settings, under Integrate calendar, copy the Secret address in iCal format instead");
   if (!res.ok) throw new Error('Calendar link returned HTTP ' + res.status);
   const text = await res.text();
   if (!text.includes('BEGIN:VCALENDAR')) throw new Error('That link did not return an iCalendar file');
