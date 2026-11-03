@@ -229,6 +229,10 @@ async function main() {
   await post('/profile', { profile: 'business' });
   const wf = await post('/workflows/run', { id: 'morning_brief' });
   ok('morning brief workflow writes Daily note', wf.notePath && fs.existsSync(path.join(vaultCopy, wf.notePath)));
+  const tri = await post('/workflows/run', { id: 'inbox_triage' });
+  require('../core/feed').add({ source: 'system', category: 'BRIEF', title: 'Inbox triage ready', workflow: 'inbox_triage', externalId: 'old-triage' });
+  const fdT = await (await fetch(base + '/feed?limit=400')).json();
+  ok('Inbox triage posts no feed card, and old ones are gone', tri.notePath && !tri.item && !fdT.some((i) => /inbox triage/i.test(i.title)));
   const zip = await fetch(base + '/claude-skills/download');
   const buf = Buffer.from(await zip.arrayBuffer());
   ok('Claude Skills export is a zip', buf.slice(0, 2).toString() === 'PK' && buf.length > 500);
