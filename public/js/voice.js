@@ -2,6 +2,8 @@
 // that drives the pulsing avatar. Works best in Chrome and Edge (Safari partially, Firefox has no recognition).
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+window.maestroVoiceLog = () => { const l = window.__maestroVoice || []; console.log(l.join('\n')); return l.length + ' entries'; };
+
 export const voiceSupported = { stt: !!SR, tts: 'speechSynthesis' in window };
 
 export class Voice {
@@ -71,10 +73,11 @@ export class Voice {
       const heard = (final || interim).trim();
       if (!heard) return;
       // Maestro hearing its own voice through the speakers is not an interruption.
-      if (this.isSpeaking() && STOP.test(heard)) { this.stopSpeaking(); this.onInterrupt && this.onInterrupt(); this.onInterim && this.onInterim(''); return; } // "stop" always works
-      if (this.isEcho(heard)) return;
+      if (this.isSpeaking() && STOP.test(heard)) { this.log('stop-word', heard); this.stopSpeaking(); this.onInterrupt && this.onInterrupt(); this.onInterim && this.onInterim(''); return; } // "stop" always works
+      if (this.isEcho(heard)) { if (this.isSpeaking()) this.log('echo', heard); return; }
       // You started talking while Maestro was speaking: stop and listen.
-      if (this.isSpeaking() && (final || words(interim).length >= 2)) {
+      if (this.isSpeaking() && (final || words(interim).length >= 3)) {
+        this.log('barge-in', heard);
         this.stopSpeaking();
         this.onInterrupt && this.onInterrupt();
       }
@@ -105,14 +108,22 @@ export class Voice {
   }
 
   // Is this what Maestro is saying (or just said)? Most of the words match the reply being spoken.
+  // The mic often splits or blends Maestro's words ("workshop" heard as "work shop", "Ryan's" as "Ryans"), so a heard
+  // word also counts as Maestro's when it is part of one of his words, or of two of them run together.
+  // Ryan (2026-11-03): with longer answers, those near-misses added up to "you talking" and Maestro went quiet by
+  // the third sentence. While Maestro is speaking it now takes three new words, most of what was heard, to stop him.
   isEcho(heard) {
     if (!this._said || Date.now() > this._saidUntil) return false;
     const w = echoWords(heard);
     if (!w.length) return true; // only filler ("p.m.", "the"): not you talking
-    const novel = w.filter((x) => !this._said.has(x)).length;
-    // It's you only when at least two words, and most of them, aren't in what Maestro is saying.
-    return novel < 2 || novel / w.length < 0.5;
+    const novel = w.filter((x) => !this._said.has(x) && !(x.length >= 3 && this._saidJoined.some((s) => s.includes(x)))).length;
+    const speaking = this.isSpeaking();
+    return speaking ? novel < 3 || novel / w.length < 0.6 : novel < 2 || novel / w.length < 0.5;
   }
+
+  // A short record of what the voice did, for working out why it went quiet: open the browser console and run
+  // maestroVoiceLog() (Ryan, 2026-11-03).
+  log(...a) { const l = (window.__maestroVoice = window.__maestroVoice || []); l.push(`${new Date().toISOString().slice(11, 23)} ${a.join(' ')}`); if (l.length > 200) l.shift(); }
 
   isSpeaking() { return !!this._speaking; }
 
@@ -146,7 +157,10 @@ export class Voice {
     // Ryan (2026-11-02): the man's voice speaks 10% faster than the chosen speed.
     const manBoost = (voice ? voiceGender(voice) === 'male' : gender === 'male') ? 1.1 : 1;
     const run = (this._run = (this._run || 0) + 1); // a newer speak() or stopSpeaking() cancels this one
-    this._said = new Set(echoWords(text)); this._saidUntil = Infinity; this._speaking = true;
+    const said = echoWords(text);
+    this._said = new Set(said);
+    this._saidJoined = said.map((x, k) => x + (said[k + 1] || '')); // each word run into the next, for "work shop"
+    this.log('speak', parts.length + ' pieces', JSON.stringify(text.slice(0, 60))); this._saidUntil = Infinity; this._speaking = true;
     const finish = () => { this._speaking = false; this._saidUntil = Date.now() + 1500; onEnd && onEnd(); }; // the echo can lag a moment
     // No pause()/resume() keep-alive (Ryan, 2026-11-02: it left Chrome stuck "paused", so the next answer was
     // silent while Maestro looked like it was talking). Pieces are short enough that Chrome doesn't cut them off.
@@ -167,6 +181,7 @@ export class Voice {
       let started = false, done = false;
       u.onstart = () => {
         started = true;
+        this.log('start', i);
         const lag = Math.min(1500, Date.now() - asked);
         this._lag = this._lag == null ? lag : Math.round(this._lag * 0.5 + lag * 0.5);
         if (i === 0 && onStart) onStart();
@@ -174,19 +189,24 @@ export class Voice {
       const after = () => {
         if (done || run !== this._run) return;
         done = true; clearInterval(watch);
-        const gap = i >= parts.length - 1 ? 0 : part.last ? Math.max(0, pause - (this._lag || 0)) : 120; // a breath inside a sentence
+        let gap = i >= parts.length - 1 ? 0 : part.last ? Math.max(0, pause - (this._lag || 0)) : 120; // a breath inside a sentence
+        // A piece that ended while Chrome still says it's speaking leaves a ghost in the queue, and everything after it
+        // plays silently. Clear it, and give Chrome a moment before the next piece.
+        if (speechSynthesis.speaking || speechSynthesis.pending) { this.log('stale engine reset', i); speechSynthesis.cancel(); gap = Math.max(gap, 100); }
         this._timer = setTimeout(() => next(i + 1), gap);
       };
-      u.onend = after; u.onerror = after;
+      u.onend = () => { this.log('end', i); after(); };
+      u.onerror = (e) => { this.log('error', i, e && e.error); after(); };
       // Watchdog: if the piece never starts, or the engine has gone quiet without saying it finished, move on.
-      const budget = 4000 + (part.text.length / (14 * u.rate)) * 1000 * 2;
+      const budget = 3000 + (part.text.length / (14 * u.rate)) * 1000 * 1.6;
       const watch = setInterval(() => {
         if (done || run !== this._run) return clearInterval(watch);
         const quiet = !speechSynthesis.speaking && !speechSynthesis.pending;
         if (!started && speechSynthesis.speaking) started = true; // some voices never fire onstart
-        if ((started && quiet) || (!started && Date.now() - asked > 5000) || Date.now() - asked > budget) { if (!quiet) speechSynthesis.cancel(); if (speechSynthesis.paused) speechSynthesis.resume(); after(); }
+        if ((started && quiet) || (!started && Date.now() - asked > 4000) || Date.now() - asked > budget) { this.log('watchdog', i, started ? (quiet ? 'went quiet' : 'over time') : 'never started'); if (!quiet) speechSynthesis.cancel(); if (speechSynthesis.paused) speechSynthesis.resume(); after(); }
       }, 700);
       if (speechSynthesis.paused) speechSynthesis.resume(); // a paused engine queues speech silently
+      this.log('say', i, JSON.stringify(part.text.slice(0, 40)));
       speechSynthesis.speak(u);
     };
     // Chrome drops a speak() made right after cancel(), so the first piece waits a moment.
@@ -194,6 +214,7 @@ export class Voice {
   }
 
   stopSpeaking() {
+    if (this._speaking) this.log('stopSpeaking');
     this._run = (this._run || 0) + 1;
     if (this._speaking) this._saidUntil = Date.now() + 1500;
     this._speaking = false;
