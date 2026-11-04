@@ -666,6 +666,12 @@ function wireCard(el) {
     e.stopPropagation();
     if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } // note, action items, deadline
     if (b.dataset.action === 'Open project') { markRead(item); return navigate('projects'); }
+    if (/^(Mark project complete|Reopen project)$/.test(b.dataset.action)) { // Ryan, 2026-11-04
+      const path = item.projectPath || String(item.externalId || '').replace(/^project:/, '');
+      const done = b.dataset.action !== 'Reopen project';
+      try { await setProjectComplete(path, done); } catch (err) { toast(err.message, 'error'); }
+      return;
+    }
     await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
     toast(`Task added: ${b.dataset.action}`);
     markRead(item);
@@ -738,7 +744,7 @@ async function projectSource(id) {
     try {
       const p = await api('/projects/one?path=' + encodeURIComponent(path)); name = p.name;
       card = { id, ts: Date.now(), source: 'system', sourceName: 'Maestro', category: 'PROJECT', title: p.name, quote: [p.client && `Client: ${p.client}`, (p.start || p.completion) && `${p.start || '?'} → ${p.completion || '?'}`].filter(Boolean).join(' · '),
-        description: p.description, summary: [p.nextMilestone && `Next milestone: ${p.nextMilestone.name}`, `${p.tasks.open} open task${p.tasks.open === 1 ? '' : 's'}`].filter(Boolean).join(' · '), progress: p.tasks.total ? p.progress : undefined, actions: ['Open project'], unread: false };
+        description: p.description, summary: [p.nextMilestone && `Next milestone: ${p.nextMilestone.name}`, `${p.tasks.open} open task${p.tasks.open === 1 ? '' : 's'}`].filter(Boolean).join(' · '), progress: p.tasks.total ? p.progress : undefined, completed: p.completed, actions: ['Open project', p.completed ? 'Reopen project' : 'Mark project complete'], unread: false };
     } catch { /* gone */ }
   } else name = card.title.replace(/^New project: /, '');
   return { id, project: true, name, items: card ? [card] : [] };
@@ -755,7 +761,7 @@ function renderProjectView(d) {
 function projectListCard(p) {
   const open = (p.taskList || []).filter((t) => !t.done), done = (p.taskList || []).length - open.length;
   const today = new Date().toISOString().slice(0, 10);
-  return `<div class="activity proj-card" data-proj="${esc(p.path)}" style="--c:#00f2af" tabindex="0" role="button" aria-label="Open ${esc(p.name)}">
+  return `<div class="activity proj-card ${p.completed ? 'completed' : ''}" data-proj="${esc(p.path)}" style="--c:#00f2af" tabindex="0" role="button" aria-label="Open ${esc(p.name)}">
     <div class="agent-icon">${icon('folder')}</div>
     <div class="activity-details">
       <div class="a-title">${esc(p.name)}</div>
@@ -763,9 +769,19 @@ function projectListCard(p) {
       ${p.client ? `<div class="pc-client">${icon('briefcase')}${esc(p.client)}</div>` : ''}
       ${p.description ? `<div class="a-desc">${esc(p.description)}</div>` : ''}
       <div class="pc-tasks"><div class="pc-sub">Tasks <span>${open.length} open${done ? ` · ${done} done` : ''}</span></div>
-        ${open.length ? open.slice(0, 3).map((t) => `<div class="pc-task"><i></i><span>${esc(t.text)}</span>${t.due ? `<small class="${t.due < today ? 'late' : ''}">${new Date(t.due + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</small>` : ''}</div>`).join('') + (open.length > 3 ? `<div class="pc-more">+${open.length - 3} more</div>` : '') : `<div class="pc-none">${done ? 'All tasks done.' : 'No tasks yet.'}</div>`}</div>
+        ${open.length ? open.slice(0, 5).map((t) => `<label class="pc-task" title="Tick to mark done"><input type="checkbox" data-tp="${esc(t.path)}" data-tl="${t.line}" aria-label="Mark “${esc(t.text)}” done"><span>${esc(t.text)}</span>${t.due ? `<small class="${t.due < today ? 'late' : ''}">${new Date(t.due + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</small>` : ''}</label>`).join('') + (open.length > 5 ? `<div class="pc-more">+${open.length - 5} more</div>` : '') : `<div class="pc-none">${done ? 'All tasks done.' : 'No tasks yet.'}</div>`}</div>
       ${p.progress != null ? `<div class="progress"><div class="track"><div class="bar" style="width:${p.progress}%"></div></div><span>${p.progress}%</span></div>` : ''}
+      <div class="a-foot"><div class="a-actions"><button data-complete="${p.completed ? '0' : '1'}" class="${p.completed ? '' : 'task-btn'}">${icon(p.completed ? 'refresh' : 'check')}${p.completed ? 'Reopen project' : 'Mark project complete'}</button></div></div>
     </div></div>`;
+}
+// Finish or reopen a project, then refresh whatever is showing it.
+async function setProjectComplete(path, done) {
+  const p = await api('/projects/complete', { path, done });
+  toast(done ? `${p.name} marked complete` : `${p.name} reopened`);
+  const card = S.feed.find((x) => x.externalId === 'project:' + path);
+  if (card) Object.assign(card, { completed: p.completed, actions: ['Open project', p.completed ? 'Reopen project' : 'Mark project complete'], deadline: p.completed ? '' : card.deadline });
+  if (S.sourceView) showSource(S.sourceView); else renderFeed(false);
+  return p;
 }
 async function fillProjectList(el, hubId) {
   let list = [];
@@ -774,6 +790,15 @@ async function fillProjectList(el, hubId) {
   el.innerHTML = list.length ? list.map(projectListCard).join('') : `<div class="feed-empty" style="padding:18px">No projects yet. Create one on the <a href="#projects" data-go>Projects</a> page.</div>`;
   const go = el.querySelector('[data-go]'); if (go) go.onclick = (e) => { e.preventDefault(); navigate('projects'); };
   el.querySelectorAll('[data-proj]').forEach((c) => {
+    // tick a task or finish the project right on the card (Ryan, 2026-11-04)
+    c.querySelectorAll('.pc-task').forEach((l) => (l.onclick = (e) => e.stopPropagation()));
+    c.querySelectorAll('[data-tp]').forEach((x) => (x.onchange = async () => {
+      x.disabled = true;
+      try { await api('/tasks/toggle', { path: x.dataset.tp, line: Number(x.dataset.tl) }); toast('Task done'); } catch (err) { toast(err.message, 'error'); }
+      fillProjectList(el, hubId);
+    }));
+    const cb = c.querySelector('[data-complete]');
+    if (cb) cb.onclick = async (e) => { e.stopPropagation(); try { await setProjectComplete(c.dataset.proj, cb.dataset.complete === '1'); } catch (err) { toast(err.message, 'error'); } };
     const open = () => { S.sourceBack = hubId; showSource('project:' + c.dataset.proj); };
     c.onclick = open; c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
   });

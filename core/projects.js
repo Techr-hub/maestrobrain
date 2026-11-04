@@ -33,6 +33,7 @@ function view(n, allTasks) {
     milestones, nextMilestone: milestones.find((m) => m.date && m.date >= today) || null,
     tasks: { open: mine.length - done, done, total: mine.length },
     progress: mine.length ? Math.round((done / mine.length) * 100) : (fm.points_total ? Math.round((Number(fm.points_done) / Number(fm.points_total)) * 100) : null),
+    completed: /^(done|complete|completed|closed)$/i.test(String(fm.status || '').trim()), completedOn: day(fm.completed_on),
     made: fm.type === 'project', created: fm.created || '', modified: n.modified,
   };
 }
@@ -92,10 +93,29 @@ function update(relPath, input) {
   return get(relPath);
 }
 
+// Mark a project complete, or reopen it (Ryan, 2026-11-04): sets "status" in its frontmatter (and the day it finished).
+function setComplete(relPath, done = true) {
+  get(relPath); // must be a project
+  const full = vault.safeJoin(vault.vaultRoot(), relPath);
+  let text = fs.readFileSync(full, 'utf8');
+  const status = done ? 'status: "complete"' : 'status: "active"';
+  const on = done ? `completed_on: ${new Date().toISOString().slice(0, 10)}` : '';
+  const fmm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (fmm) {
+    let fm = fmm[1].replace(/^completed_on:.*(\r?\n|$)/m, '');
+    fm = /^status:.*$/m.test(fm) ? fm.replace(/^status:.*$/m, status) : `${fm}\n${status}`;
+    if (on) fm += `\n${on}`;
+    text = text.replace(fmm[0], `---\n${fm.replace(/\n+$/, '')}\n---`);
+  } else text = `---\n${status}${on ? '\n' + on : ''}\n---\n${text}`;
+  fs.writeFileSync(full, text);
+  vault.invalidate();
+  return get(relPath);
+}
+
 function addTask(relPath, { text, due, dueTime, alerts, priority } = {}) {
   if (!String(text || '').trim()) throw Object.assign(new Error('A task needs some text.'), { status: 400 });
   get(relPath); // must be a project
   return tasks.add(String(text), { file: relPath, section: 'projects', due, dueTime, alerts, priority });
 }
 
-module.exports = { list, get, create, update, addTask, parseMilestone };
+module.exports = { list, get, create, update, addTask, setComplete, parseMilestone };

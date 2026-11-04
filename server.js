@@ -210,15 +210,22 @@ const projectCard = (p) => ({
   description: p.description || '',
   summary: [p.nextMilestone && `Next milestone: ${p.nextMilestone.name}${p.nextMilestone.date ? ` (${fmtDay(p.nextMilestone.date)})` : ''}`, `${p.tasks.open} open task${p.tasks.open === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
   progress: p.tasks.total ? p.progress : undefined,
-  deadline: p.completion ? `Due ${fmtDay(p.completion)}` : '',
+  deadline: p.completed ? '' : p.completion ? `Due ${fmtDay(p.completion)}` : '',
+  completed: !!p.completed, // shows the "Completed" pill (Ryan, 2026-11-04)
+  actions: ['Open project', p.completed ? 'Reopen project' : 'Mark project complete'],
 });
 route('POST', '/api/projects', async (_q, body) => {
   const p = projects.create(body || {});
-  feed.add({ externalId: `project:${p.path}`, ts: Date.now(), source: 'system', profile: config.load().profile, category: 'PROJECT', projectPath: p.path, actions: ['Open project'], ...projectCard(p) });
+  feed.add({ externalId: `project:${p.path}`, ts: Date.now(), source: 'system', profile: config.load().profile, category: 'PROJECT', projectPath: p.path, ...projectCard(p) });
   return p;
 });
 route('POST', '/api/projects/update', async (_q, body) => {
   const p = projects.update(body.path, body);
+  feed.updateCards((i) => i.externalId === `project:${p.path}`, () => projectCard(p));
+  return p;
+});
+route('POST', '/api/projects/complete', async (_q, body) => {
+  const p = projects.setComplete(body.path, body.done !== false);
   feed.updateCards((i) => i.externalId === `project:${p.path}`, () => projectCard(p));
   return p;
 });

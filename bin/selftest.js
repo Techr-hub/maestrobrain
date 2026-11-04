@@ -298,6 +298,13 @@ async function main() {
     const look = await post('/chat', { message: 'How is the Launchpad project going?' });
     ok('focus: look up a project by name', /\*\*Selftest Launchpad\*\* for Globex/.test(look.reply) && /Next milestone: Selftest Gate, in 2 days/.test(look.reply) && /Fix the payment bug/.test(look.reply));
     await post('/settings', { reminders: { tasks: [], milestones: ['1w', '1d'] } });
+    // Ryan (2026-11-04): mark a project complete (and reopen it); its feed card follows.
+    const fin = await post('/projects/complete', { path: lp.path, done: true });
+    const fcard = (await (await fetch(base + '/feed?limit=400')).json()).find((i) => i.externalId === 'project:' + lp.path);
+    const listed = await post('/chat', { message: 'What projects do I have?' });
+    ok('projects: mark complete sets the status, updates its card and drops it from active projects', fin.completed && fin.status === 'complete' && fcard && fcard.completed && fcard.actions.includes('Reopen project') && !/Selftest Launchpad/.test(listed.reply));
+    const re = await post('/projects/complete', { path: lp.path, done: false });
+    ok('projects: reopen', !re.completed && re.status === 'active' && re.taskList.length === 2);
   }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));

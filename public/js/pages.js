@@ -753,7 +753,7 @@ export async function onboarding({ after, afterChange }) {
 // Each project is a note in Projects/ (name, description, client, start, milestones, completion) with its tasks.
 // Cards show the details and the attached tasks; tasks can be ticked and added right on the card.
 // "75% complete" (Ryan, 2026-11-04): on the Projects page and the Projects hub's list in the feed.
-export function projectStatus(p) { return p.progress == null ? 'No tasks yet' : p.progress >= 100 ? 'Complete' : `${p.progress}% complete`; }
+export function projectStatus(p) { return p.completed ? 'Completed' : p.progress == null ? 'No tasks yet' : p.progress >= 100 ? 'Complete' : `${p.progress}% complete`; }
 const fmtDay = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 async function projectsPage(el, ctx) {
   const list = await api('/projects');
@@ -762,7 +762,7 @@ async function projectsPage(el, ctx) {
     const pct = p.progress == null ? null : p.progress;
     const open = p.taskList.filter((t) => !t.done), done = p.taskList.filter((t) => t.done);
     const late = p.completion && p.completion < today && open.length;
-    return `<article class="card proj" data-k="${k}">
+    return `<article class="card proj ${p.completed ? 'proj-done' : ''}" data-k="${k}">
       <header class="proj-head"><span class="proj-icon">${icon('folder')}</span><div class="proj-title"><h3>${esc(p.name)}</h3>${p.client ? `<span class="proj-client">${icon('briefcase')}${esc(p.client)}</span>` : ''}</div>
         <button class="t-edit" data-edit="${k}" title="Edit project" aria-label="Edit ${esc(p.name)}">${icon('pencil')}</button></header>
       ${p.description ? `<p class="proj-desc">${esc(p.description)}</p>` : ''}
@@ -772,7 +772,7 @@ async function projectsPage(el, ctx) {
       <div class="proj-sub">Tasks <span>${open.length} open${done.length ? ` · ${done.length} done` : ''}</span></div>
       <div class="proj-tasks">${p.taskList.length ? p.taskList.slice(0, 12).map((t) => `<label class="proj-task ${t.done ? 'done' : ''}"><input type="checkbox" ${t.done ? 'checked' : ''} data-p="${esc(t.path)}" data-l="${t.line}"><span>${esc(t.text)}</span>${t.due ? `<small class="${!t.done && t.due < today ? 'late' : ''}">${fmtDay(t.due)}</small>` : ''}${t.priority === 'High' ? '<em>High</em>' : ''}</label>`).join('') + (p.taskList.length > 12 ? `<a href="#" class="proj-more" data-note="${esc(p.path)}">+${p.taskList.length - 12} more in the note</a>` : '') : '<p class="proj-none">No tasks yet.</p>'}</div>
       <div class="proj-add"><input class="input" placeholder="Add a task…" data-add="${k}" aria-label="Add a task to ${esc(p.name)}"><input class="input" type="date" data-due="${k}" aria-label="Due date"><button class="btn small primary" data-addbtn="${k}">${icon('plus')}</button></div>
-      <footer class="proj-foot"><a href="#" data-note="${esc(p.path)}">${icon('file-text')} Open note</a></footer>
+      <footer class="proj-foot"><button class="btn small ${p.completed ? 'ghost' : 'primary'}" data-pdone="${k}" data-v="${p.completed ? '0' : '1'}">${icon(p.completed ? 'refresh' : 'check')} ${p.completed ? 'Reopen project' : 'Mark project complete'}</button><a href="#" data-note="${esc(p.path)}">${icon('file-text')} Open note</a></footer>
     </article>`;
   };
   el.innerHTML = head('Projects', `Each project is a note in <code>Projects/</code> in your vault, with its milestones and tasks. New projects join the Projects hub on the brain map.`, `<button class="btn primary" id="p-new">${icon('plus')} New project</button>`)
@@ -781,6 +781,12 @@ async function projectsPage(el, ctx) {
   el.querySelector('#p-new').onclick = () => projectForm(null, async (p) => { await afterProject(ctx, p); reload(); });
   el.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => projectForm(list[Number(b.dataset.edit)], async () => { await ctx.afterChange({ feed: false }); reload(); }));
   el.querySelectorAll('[data-note]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openNote(a.dataset.note); });
+  // Finish or reopen a project (Ryan, 2026-11-04)
+  el.querySelectorAll('[data-pdone]').forEach((b) => b.onclick = async () => {
+    const p = list[Number(b.dataset.pdone)]; b.disabled = true;
+    try { const r = await api('/projects/complete', { path: p.path, done: b.dataset.v === '1' }); toast(r.completed ? `${r.name} marked complete` : `${r.name} reopened`); } catch (err) { toast(err.message, 'error'); }
+    reload();
+  });
   el.querySelectorAll('.proj-task input').forEach((c) => c.onchange = async () => { await api('/tasks/toggle', { path: c.dataset.p, line: Number(c.dataset.l) }); reload(); });
   el.querySelectorAll('[data-addbtn]').forEach((b) => {
     const k = b.dataset.addbtn, inp = el.querySelector(`[data-add="${k}"]`), due = el.querySelector(`[data-due="${k}"]`);
