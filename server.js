@@ -202,13 +202,39 @@ route('GET', '/api/conversations', async () => brain.loadConversations());
 // Projects page (Ryan, 2026-11-04)
 route('GET', '/api/projects', async () => projects.list());
 route('GET', '/api/projects/one', async (q) => projects.get(q.get('path')));
-route('POST', '/api/projects', async (_q, body) => projects.create(body || {}));
-route('POST', '/api/projects/update', async (_q, body) => projects.update(body.path, body));
-route('POST', '/api/projects/task', async (_q, body) => { const line = projects.addTask(body.path, body); reminders.check(); return { line }; });
+// A new project also gets a card in the Intelligence Feed (Ryan, 2026-11-04); editing the project keeps that card current.
+const fmtDay = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+const projectCard = (p) => ({
+  title: `New project: ${p.name}`,
+  quote: [p.client && `Client: ${p.client}`, (p.start || p.completion) && `${fmtDay(p.start) || '?'} → ${fmtDay(p.completion) || '?'}`].filter(Boolean).join(' · '),
+  description: p.description || '',
+  summary: [p.nextMilestone && `Next milestone: ${p.nextMilestone.name}${p.nextMilestone.date ? ` (${fmtDay(p.nextMilestone.date)})` : ''}`, `${p.tasks.open} open task${p.tasks.open === 1 ? '' : 's'}`].filter(Boolean).join(' · '),
+  progress: p.tasks.total ? p.progress : undefined,
+  deadline: p.completion ? `Due ${fmtDay(p.completion)}` : '',
+});
+route('POST', '/api/projects', async (_q, body) => {
+  const p = projects.create(body || {});
+  feed.add({ externalId: `project:${p.path}`, ts: Date.now(), source: 'system', profile: config.load().profile, category: 'PROJECT', projectPath: p.path, actions: ['Open project'], ...projectCard(p) });
+  return p;
+});
+route('POST', '/api/projects/update', async (_q, body) => {
+  const p = projects.update(body.path, body);
+  feed.updateCards((i) => i.externalId === `project:${p.path}`, () => projectCard(p));
+  return p;
+});
+route('POST', '/api/projects/task', async (_q, body) => {
+  const line = projects.addTask(body.path, body); reminders.check();
+  try { const p = projects.get(body.path); feed.updateCards((i) => i.externalId === `project:${p.path}`, () => projectCard(p)); } catch { /* card cleared */ }
+  return { line };
+});
 route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().profile, includeDone: q.get('done') === '1' }));
 route('POST', '/api/tasks', async (_q, body) => { const line = tasks.add(body.text, body); reminders.check(); return { line }; });
 route('POST', '/api/tasks/event', async (_q, body) => { const r = tasks.addForEvent(body || {}); reminders.check(); return r; });
-route('POST', '/api/tasks/toggle', async (_q, body) => ({ done: tasks.toggle(body.path, body.line) }));
+route('POST', '/api/tasks/toggle', async (_q, body) => {
+  const done = tasks.toggle(body.path, body.line);
+  if (/^Projects\//.test(body.path || '')) try { const p = projects.get(body.path); feed.updateCards((i) => i.externalId === `project:${p.path}`, () => projectCard(p)); } catch { /* not a project */ }
+  return { done };
+});
 route('POST', '/api/tasks/update', async (_q, body) => { const r = tasks.update(body.path, body.line, body.expect, body); reminders.check(); return r; });
 
 route('GET', '/api/calendar', async (q) => calendar.list({ days: Number(q.get('days') || 7), from: q.get('from') || undefined, to: q.get('to') || undefined }));

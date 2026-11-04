@@ -665,6 +665,7 @@ function wireCard(el) {
   el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();
     if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } // note, action items, deadline
+    if (b.dataset.action === 'Open project') { markRead(item); return navigate('projects'); }
     await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
     toast(`Task added: ${b.dataset.action}`);
     markRead(item);

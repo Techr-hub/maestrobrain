@@ -276,6 +276,8 @@ async function main() {
     const ed = await post('/projects/update', { ...pr, client: 'Acme Inc' });
     ok('projects: editing keeps the tasks', ed.client === 'Acme Inc' && ed.taskList.length === 2);
     const st = await (await fetch(base + '/state')).json();
+    const pcard = (await (await fetch(base + '/feed?limit=400')).json()).find((i) => i.externalId === 'project:' + made.path);
+    ok('projects: a new project gets a card in the Intelligence Feed, kept current', pcard && pcard.category === 'PROJECT' && pcard.title === 'New project: Selftest Rebuild' && /Client: Acme Inc/.test(pcard.quote) && /2 open tasks/.test(pcard.summary));
     ok('projects: new projects are listed for the brain map', st.projects.some((x) => x.path === made.path && x.made));
   }
   const brief = await post('/chat', { message: 'Brief me on my day' });
