@@ -15,7 +15,8 @@ const NAV = [
   ['connections', 'MCP Connections', 'plug'],
   ['tasks', 'Tasks', 'clipboard-check'],
   ['calendar', 'Calendar', 'calendar-days'],
-  ['vault', 'Knowledge', 'folder'],
+  ['projects', 'Projects', 'folder'],
+  ['vault', 'Knowledge', 'brain'],
   ['skills', 'Skills & Packs', 'box'],
   ['conversations', 'Conversations', 'message-circle'],
   ['workflows', 'Workflows', 'workflow'],
@@ -151,6 +152,8 @@ export function navigate(route) {
   if (route === 'dashboard') {
     main.replaceChildren(dashboardEl);
     requestAnimationFrame(() => brain && brain.resize());
+    // a project just created (or given a task) lights its node with the glow beam
+    if (S.pendingPulse && brain) { const id = S.pendingPulse; S.pendingPulse = null; setTimeout(() => brain.pulseSource(id, '#00f2af'), 450); }
     $('#chat-input') && $('#chat-input').focus();
   } else {
     const page = document.createElement('div');
@@ -196,7 +199,7 @@ function buildDashboard() {
 
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
-    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)), // hubs use 'hub:<id>'
+    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : String(n.id).startsWith('project:') ? navigate('projects') : showSource(n.id)), // hubs use 'hub:<id>'
     onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
   window.maestroBrain = brain;
@@ -257,6 +260,7 @@ function shade(hexColor, i, n) {
   return '#' + [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
 }
 
+const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'PR';
 function updateBrainSources() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
@@ -272,6 +276,12 @@ function updateBrainSources() {
       if (!c) return;
       list.push({ id: m, name: c.short || c.name, color: shade(h.color, i, subs.length), short: SHORT[m], parent: 'hub:' + h.id, connected: !!conns[m], error: !!(conns[m] && conns[m].lastError) });
     });
+  }
+  // Projects made on the Projects page attach to the Projects hub (Ryan, 2026-11-04).
+  const projHub = hubs.find((h) => h.projects);
+  if (projHub) {
+    const mine = (S.state.projects || []).filter((p) => p.made).slice(0, 10);
+    mine.forEach((p, i) => list.push({ id: 'project:' + p.path, name: p.name, color: shade(projHub.color, i, mine.length), short: initials(p.name), parent: 'hub:' + projHub.id, connected: true, project: p.path }));
   }
   brain && brain.setSources(list);
   updateStats();

@@ -736,7 +736,91 @@ export async function onboarding({ after, afterChange }) {
   render();
 }
 
+
+// ================================================================ PROJECTS (Ryan, 2026-11-04)
+// Each project is a note in Projects/ (name, description, client, start, milestones, completion) with its tasks.
+// Cards show the details and the attached tasks; tasks can be ticked and added right on the card.
+const fmtDay = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+async function projectsPage(el, ctx) {
+  const list = await api('/projects');
+  const today = new Date().toISOString().slice(0, 10);
+  const card = (p, k) => {
+    const pct = p.progress == null ? null : p.progress;
+    const open = p.taskList.filter((t) => !t.done), done = p.taskList.filter((t) => t.done);
+    const late = p.completion && p.completion < today && open.length;
+    return `<article class="card proj" data-k="${k}">
+      <header class="proj-head"><span class="proj-icon">${icon('folder')}</span><div class="proj-title"><h3>${esc(p.name)}</h3>${p.client ? `<span class="proj-client">${icon('briefcase')}${esc(p.client)}</span>` : ''}</div>
+        <button class="t-edit" data-edit="${k}" title="Edit project" aria-label="Edit ${esc(p.name)}">${icon('pencil')}</button></header>
+      ${p.description ? `<p class="proj-desc">${esc(p.description)}</p>` : ''}
+      <dl class="proj-dates"><div><dt>Start</dt><dd>${fmtDay(p.start) || '—'}</dd></div><div><dt>Completion</dt><dd class="${late ? 'late' : ''}">${fmtDay(p.completion) || '—'}</dd></div>${p.status ? `<div><dt>Status</dt><dd>${esc(p.status)}</dd></div>` : ''}</dl>
+      ${pct != null ? `<div class="progress"><div class="track"><div class="bar" style="width:${pct}%"></div></div><span>${pct}%</span></div>` : ''}
+      ${p.milestones.length ? `<div class="proj-sub">Milestones</div><ol class="proj-ms">${p.milestones.map((m) => `<li class="${m.date && m.date < today ? 'past' : ''} ${p.nextMilestone && m === p.milestones.find((x) => x.date === p.nextMilestone.date && x.name === p.nextMilestone.name) ? 'next' : ''}"><i></i><b>${esc(m.name || 'Milestone')}</b><span>${fmtDay(m.date) || 'No date'}</span></li>`).join('')}</ol>` : ''}
+      <div class="proj-sub">Tasks <span>${open.length} open${done.length ? ` · ${done.length} done` : ''}</span></div>
+      <div class="proj-tasks">${p.taskList.length ? p.taskList.slice(0, 12).map((t) => `<label class="proj-task ${t.done ? 'done' : ''}"><input type="checkbox" ${t.done ? 'checked' : ''} data-p="${esc(t.path)}" data-l="${t.line}"><span>${esc(t.text)}</span>${t.due ? `<small class="${!t.done && t.due < today ? 'late' : ''}">${fmtDay(t.due)}</small>` : ''}${t.priority === 'High' ? '<em>High</em>' : ''}</label>`).join('') + (p.taskList.length > 12 ? `<a href="#" class="proj-more" data-note="${esc(p.path)}">+${p.taskList.length - 12} more in the note</a>` : '') : '<p class="proj-none">No tasks yet.</p>'}</div>
+      <div class="proj-add"><input class="input" placeholder="Add a task…" data-add="${k}" aria-label="Add a task to ${esc(p.name)}"><input class="input" type="date" data-due="${k}" aria-label="Due date"><button class="btn small primary" data-addbtn="${k}">${icon('plus')}</button></div>
+      <footer class="proj-foot"><a href="#" data-note="${esc(p.path)}">${icon('file-text')} Open note</a></footer>
+    </article>`;
+  };
+  el.innerHTML = head('Projects', `Each project is a note in <code>Projects/</code> in your vault, with its milestones and tasks. New projects join the Projects hub on the brain map.`, `<button class="btn primary" id="p-new">${icon('plus')} New project</button>`)
+    + (list.length ? `<div class="proj-grid">${list.map(card).join('')}</div>` : `<div class="feed-empty">${icon('folder')}<br>No projects yet. Create your first one.</div>`);
+  const reload = () => projectsPage(el, ctx);
+  el.querySelector('#p-new').onclick = () => projectForm(null, async (p) => { await afterProject(ctx, p); reload(); });
+  el.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => projectForm(list[Number(b.dataset.edit)], async () => { await ctx.afterChange({ feed: false }); reload(); }));
+  el.querySelectorAll('[data-note]').forEach((a) => a.onclick = (e) => { e.preventDefault(); openNote(a.dataset.note); });
+  el.querySelectorAll('.proj-task input').forEach((c) => c.onchange = async () => { await api('/tasks/toggle', { path: c.dataset.p, line: Number(c.dataset.l) }); reload(); });
+  el.querySelectorAll('[data-addbtn]').forEach((b) => {
+    const k = b.dataset.addbtn, inp = el.querySelector(`[data-add="${k}"]`), due = el.querySelector(`[data-due="${k}"]`);
+    const go = async () => {
+      const v = inp.value.trim(); if (!v) return inp.focus();
+      try { await api('/projects/task', { path: list[Number(k)].path, text: v.replace(/#high/i, '').trim(), priority: /#high/i.test(v) ? 'High' : undefined, due: due.value || undefined }); toast('Task added'); S.pendingPulse = 'project:' + list[Number(k)].path; reload(); }
+      catch (e) { toast(e.message, 'error'); }
+    };
+    b.onclick = go; inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  });
+}
+// A new project joins the brain map; its node lights up with the glow beam when you're back on the dashboard.
+async function afterProject(ctx, p) {
+  await ctx.afterChange({ feed: false });
+  S.pendingPulse = 'project:' + p.path;
+  toast(`Project created: ${p.name}`);
+}
+function projectForm(p, done) {
+  const editing = !!p;
+  p = p || { name: '', client: '', description: '', start: new Date().toISOString().slice(0, 10), completion: '', milestones: [] };
+  let ms = p.milestones.map((m) => ({ ...m }));
+  const msRow = (m, i) => `<div class="pf-ms" data-i="${i}"><input class="input pf-ms-name" value="${esc(m.name)}" placeholder="Milestone, e.g. Design sign-off" aria-label="Milestone name"><input class="input pf-ms-date" type="date" value="${esc(m.date)}" aria-label="Milestone date"><button class="icon-btn" data-delms="${i}" title="Remove milestone" aria-label="Remove milestone">${icon('trash')}</button></div>`;
+  modal(`${modalHead(editing ? 'Edit project' : 'New project', editing ? esc(p.path) : 'Saved as a note in Projects/ in your vault.')}
+    <div class="field"><label for="pf-name">Project name</label><input class="input" id="pf-name" value="${esc(p.name)}" placeholder="Acme website rebuild" maxlength="80"></div>
+    <div class="field"><label for="pf-client">Client</label><input class="input" id="pf-client" value="${esc(p.client)}" placeholder="Acme Corp"></div>
+    <div class="field"><label for="pf-desc">Description</label><textarea class="input" id="pf-desc" rows="3" placeholder="What the project is and what done looks like">${esc(p.description)}</textarea></div>
+    <div class="due-fields"><div class="field"><label for="pf-start">Start date</label><input class="input" type="date" id="pf-start" value="${esc(p.start)}"></div><div class="field"><label for="pf-end">Completion date</label><input class="input" type="date" id="pf-end" value="${esc(p.completion)}"></div></div>
+    <div class="field"><label>Milestones</label><div id="pf-ms"></div><button class="btn small ghost" id="pf-addms" type="button">${icon('plus')} Add milestone</button></div>
+    ${editing ? '' : `<div class="field"><label for="pf-tasks">First tasks <span style="color:var(--dim)">(optional, one per line)</span></label><textarea class="input" id="pf-tasks" rows="3" placeholder="Kickoff call\nSend the SOW"></textarea></div>`}
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="pf-save">${icon('save')} ${editing ? 'Save changes' : 'Create project'}</button></div>`, {
+    wide: true,
+    onMount: (el, close) => {
+      const box = el.querySelector('#pf-ms');
+      const read = () => { ms = [...box.querySelectorAll('.pf-ms')].map((r) => ({ name: r.querySelector('.pf-ms-name').value, date: r.querySelector('.pf-ms-date').value })); };
+      const draw = () => { box.innerHTML = ms.map(msRow).join(''); box.querySelectorAll('[data-delms]').forEach((b) => b.onclick = () => { read(); ms.splice(Number(b.dataset.delms), 1); draw(); }); };
+      draw();
+      el.querySelector('#pf-addms').onclick = () => { read(); ms.push({ name: '', date: '' }); draw(); box.querySelector('.pf-ms:last-child .pf-ms-name').focus(); };
+      setTimeout(() => el.querySelector('#pf-name').focus(), 50);
+      el.querySelector('#pf-save').onclick = async () => {
+        read();
+        const body = { name: el.querySelector('#pf-name').value.trim(), client: el.querySelector('#pf-client').value.trim(), description: el.querySelector('#pf-desc').value.trim(),
+          start: el.querySelector('#pf-start').value, completion: el.querySelector('#pf-end').value, milestones: ms.filter((m) => m.name.trim() || m.date), status: p.status };
+        if (!body.name) { el.querySelector('#pf-name').focus(); return toast('Give the project a name', 'error'); }
+        try {
+          const r = editing ? await api('/projects/update', { ...body, path: p.path }) : await api('/projects', { ...body, tasks: el.querySelector('#pf-tasks').value.split('\n') });
+          close(); done(r);
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    },
+  });
+}
+
 export const PAGES = {
+  projects: projectsPage,
   agents: agentsPage,
   connections: connectionsPage,
   tasks: tasksPage,

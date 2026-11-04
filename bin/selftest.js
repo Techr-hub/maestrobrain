@@ -265,6 +265,19 @@ async function main() {
     ok('event categories: rename, add and remove', saved.some((t) => t.name === 'Phone call' && t.id === 'call') && saved.some((t) => t.id === 'webinar' && t.words.includes('livestream')) && !saved.some((t) => t.id === 'conference'));
     await post('/event-types', { types: et.DEFAULTS });
   }
+  {
+    // Ryan (2026-11-04): Projects page: create a project with its details, add tasks to it, and the card shows both.
+    const made = await post('/projects', { name: 'Selftest Rebuild', client: 'Acme Corp', description: 'A [[test]] project.', start: '2026-11-10', completion: '2027-02-28', milestones: [{ name: 'Beta', date: '2027-01-20' }, { name: 'Design sign-off', date: '2026-12-05' }], tasks: ['Kickoff call'] });
+    await post('/projects/task', { path: made.path, text: 'Send the SOW', due: '2026-11-12', priority: 'High' });
+    const all = await (await fetch(base + '/projects')).json();
+    const pr = all.find((x) => x.path === made.path);
+    ok('projects: created with client, dates and milestones in date order', pr && pr.client === 'Acme Corp' && pr.start === '2026-11-10' && pr.completion === '2027-02-28' && pr.milestones.map((m) => m.name).join() === 'Design sign-off,Beta' && pr.made && pr.description === 'A test project.');
+    ok('projects: tasks attach to the project and show on its card', pr && pr.taskList.length === 2 && pr.taskList.some((t) => t.text === 'Send the SOW' && t.due === '2026-11-12' && t.section === 'projects'));
+    const ed = await post('/projects/update', { ...pr, client: 'Acme Inc' });
+    ok('projects: editing keeps the tasks', ed.client === 'Acme Inc' && ed.taskList.length === 2);
+    const st = await (await fetch(base + '/state')).json();
+    ok('projects: new projects are listed for the brain map', st.projects.some((x) => x.path === made.path && x.made));
+  }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });

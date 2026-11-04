@@ -10,6 +10,7 @@ const vault = require('./core/vault');
 const knowledge = require('./core/knowledge');
 const feed = require('./core/feed');
 const eventtypes = require('./core/eventtypes');
+const projects = require('./core/projects');
 const calwatch = require('./core/calwatch');
 const calendar = require('./core/calendar');
 const tasks = require('./core/tasks');
@@ -105,6 +106,7 @@ route('GET', '/api/state', async () => {
   return {
     config: config.publicView(cfg),
     eventTypes: eventtypes.list(cfg),
+    projects: (() => { try { return projects.list().map(({ path, name, client, made }) => ({ path, name, client, made })); } catch { return []; } })(),
     providers: llm.PROVIDERS,
     connectors: connectorView(cfg),
     agents: agents.agents().map(({ prompt, ...a }) => a),
@@ -197,6 +199,12 @@ route('POST', '/api/chat', async (_q, body) => brain.chat({ message: body.messag
 route('POST', '/api/chat/save', async (_q, body) => ({ path: brain.saveAnswer(body.title || 'Brain answer', body.content || '') }));
 route('GET', '/api/conversations', async () => brain.loadConversations());
 
+// Projects page (Ryan, 2026-11-04)
+route('GET', '/api/projects', async () => projects.list());
+route('GET', '/api/projects/one', async (q) => projects.get(q.get('path')));
+route('POST', '/api/projects', async (_q, body) => projects.create(body || {}));
+route('POST', '/api/projects/update', async (_q, body) => projects.update(body.path, body));
+route('POST', '/api/projects/task', async (_q, body) => { const line = projects.addTask(body.path, body); reminders.check(); return { line }; });
 route('GET', '/api/tasks', async (q) => tasks.list({ profile: config.load().profile, includeDone: q.get('done') === '1' }));
 route('POST', '/api/tasks', async (_q, body) => { const line = tasks.add(body.text, body); reminders.check(); return { line }; });
 route('POST', '/api/tasks/event', async (_q, body) => { const r = tasks.addForEvent(body || {}); reminders.check(); return r; });
