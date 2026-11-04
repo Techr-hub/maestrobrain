@@ -666,8 +666,8 @@ button.wk-dh:hover b { color: var(--cyan); }
 
 /* Card footer (Ryan, 2026-11-04): actions on the left, the pin at the bottom right; the task button is the blue one. */
 .a-foot { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; min-height: 22px; }
-.a-foot .a-actions { margin-top: 0; }
-.a-foot .pin-btn { margin-left: auto; }
+.a-foot .a-actions { margin-top: 0; padding-top: 25px; } /* Ryan, 2026-11-04 */
+.a-foot .pin-btn { margin-left: auto; align-self: flex-end; margin-right: -4px; margin-bottom: 3px; } /* same row as the buttons, bottom right corner */
 .a-actions button.task-btn { display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(180deg, #3d8bff, #1f5fd6); border-color: #5aa0ff; color: #fff; font-weight: 600; cursor: pointer; }
 .a-actions button.task-btn:hover { filter: brightness(1.12); border-color: #5aa0ff; color: #fff; }
 .a-actions button.task-btn .icon { width: 12px; height: 12px; }
