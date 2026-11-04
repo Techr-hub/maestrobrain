@@ -686,7 +686,7 @@ function feedItemHtml(i, isNew) {
       <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
-      ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
+      ${i.summary && !/^Coming up\b/.test(i.summary) ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
       ${meta ? `<div class="a-meta">${meta}</div>` : ''}
       ${typeof i.progress === 'number' ? `<div class="progress"><div class="track"><div class="bar" style="width:${i.progress}%"></div></div><span>${i.progress}%</span></div>` : ''}
       <div class="a-foot">${i.actions && i.actions.length && !i.removed ? `<div class="a-actions">${i.actions.map((a) => `<button data-action="${esc(a)}" class="${/task/i.test(a) ? 'task-btn' : ''}">${/task/i.test(a) ? icon('plus') : ''}${esc(a)}</button>`).join('')}</div>` : ''}<button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${i.pinned ? '<span>Pinned</span>' : ''}${icon('pin')}</button></div>

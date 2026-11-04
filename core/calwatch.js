@@ -101,7 +101,7 @@ function upcoming(profile, source, events, skip = new Set()) {
       source, profile, category: 'MEETING', eventKey: e.uid || e.title, eventStart: start.toISOString(),
       title: e.title,
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
-      summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`,
+      summary: viaCalendly(e) ? 'Booked through Calendly' : '', // no "Coming up on your … calendar" line (Ryan, 2026-11-04)
       calendarName: e.calendarName || '', eventType: eventtypes.typeFor(e, source),
       eventTitle: e.title, eventEnd: new Date(e.end).toISOString(), eventLocation: e.location || '',
       description: e.description === 'calendly' ? '' : feed.eventText(e), // 'calendly' only marks Calendly bookings
@@ -150,7 +150,7 @@ function syncCards(source, events) {
         externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
         deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       });
-      if (!viaCalendly(e)) f.summary = `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`;
+      if (!viaCalendly(e)) f.summary = '';
     } else {
       f.deadline = `Starts ${when(e.start, e.allDay)}`;
     }
