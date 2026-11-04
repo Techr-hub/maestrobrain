@@ -165,7 +165,7 @@ route('POST', '/api/event-types', async (_q, body) => {
   });
   // every calendar card is labelled again with the new list
   const cfg = config.load();
-  feed.updateCards((i) => i.category === 'MEETING', (i) => ({ eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) }));
+  feed.updateCards((i) => i.category === 'MEETING', (i) => ({ eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Updated|Moved|Time changed|Cancelled): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) }));
   return eventtypes.list();
 });
 route('POST', '/api/feed/event-type', async (_q, body) => {

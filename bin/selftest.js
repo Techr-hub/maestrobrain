@@ -179,7 +179,7 @@ async function main() {
     const st = {}, ev = (uid, h, title) => ({ uid, title, start: new Date(Date.now() + h * 3600e3).toISOString(), end: new Date(Date.now() + (h + 1) * 3600e3).toISOString() });
     w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 5, 'A')]));
     const n = w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 7, 'A'), ev('b', 9, 'B')]));
-    ok('calendar watcher: posts new and moved events', n === 2);
+    ok('calendar watcher: posts new events, but no new notification for a changed one', n === 1);
     const et = require('../core/feed').eventText({ description: 'Bring a laptop\\nTickets: <a href="https://lu.ma/x">https://lu.ma/x</a> Q&amp;A' });
     ok('event cards: description kept as plain text with line breaks', et === 'Bring a laptop\nTickets: https://lu.ma/x Q&A');
     const lk = require('../core/lookup');
@@ -233,6 +233,12 @@ async function main() {
       const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       ok('calendar refresh: new-event cards are labelled with their calendar, and cards follow a changed time', newCard && newCard.calendarName === 'Work'
         && cards.length === 2 && cards.every((c) => c.eventStart === moved.start && c.quote.includes(hm(moved.start)) && c.quote.includes(hm(moved.end))));
+      ok('calendar refresh: a changed event is relabelled "Updated: <event>" instead of a new card', cards.every((c) => c.title === 'Updated: Workshop rehearsal' && c.updated)
+        && !fd.readAll().some((i) => i.eventKey === 'rw' && /^(Moved|Time changed): /.test(i.title)));
+      const same = { ...ev('rs', 12, 'Steady sync'), calendarName: 'Work' };
+      w.upcoming('business', 'icalendar', [same]); w.syncCards('icalendar', [same]); w.syncCards('icalendar', [same]);
+      const sc = fd.readAll().find((i) => i.eventKey === 'rs');
+      ok('calendar refresh: an unchanged event keeps its card as it was', sc && sc.title === 'Steady sync' && !sc.updated);
     }
   }
   {

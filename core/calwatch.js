@@ -57,6 +57,7 @@ function post(profile, source, kind, key, e, extra = {}) {
     ts: Date.now(), source, profile, category: 'MEETING', title, eventKey: key, eventStart: kind === 'cancelled' ? '' : e.start,
     quote: kind === 'moved' ? `Now ${when(e.start, e.allDay)}${until(e)} (was ${when(extra.was, e.allDay)}${extra.wasEnd ? until({ end: extra.wasEnd }) : ''})` : `${when(e.start, e.allDay)}${until(e)}${extra.with ? ' · with ' + extra.with.join(', ') : ''}${place(e)}`,
     calendarName: e.calendarName || '', eventType: eventtypes.typeFor(e, source),
+    eventTitle: e.title, eventEnd: kind === 'cancelled' ? '' : new Date(e.end).toISOString(), eventLocation: e.location || '',
     summary: e.calendly || source === 'calendly' ? 'Booked through Calendly' : kind === 'cancelled' ? `Removed from ${name}` : `${kind === 'new' ? 'Added to' : 'Updated in'} ${name}`,
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
     deadline: kind === 'cancelled' ? '' : `Starts ${when(e.start, e.allDay)}`,
@@ -74,7 +75,7 @@ function diff(state, stateKey, profile, source, fresh) {
   for (const [key, e] of Object.entries(fresh)) {
     if (/@maestro$/.test(key)) continue; // created by Maestro: already in the feed
     const old = prev.events[key];
-    if (!old) { post(profile, source, 'new', key, e); n++; } else if (!e.recurring && (old.start !== e.start || (old.end && old.end !== e.end))) { post(profile, source, 'moved', key, e, { was: old.start, wasEnd: old.end }); n++; }
+    if (!old) { post(profile, source, 'new', key, e); n++; } // a changed event isn't a new notification: syncCards relabels its card "Updated: …" (Ryan, 2026-11-04)
   }
   for (const [key, e] of Object.entries(prev.events)) {
     if (!fresh[key] && new Date(e.end) > Date.now() && !e.recurring) { post(profile, source, 'cancelled', key, e); n++; }
@@ -101,6 +102,7 @@ function upcoming(profile, source, events, skip = new Set()) {
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
       summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`,
       calendarName: e.calendarName || '', eventType: eventtypes.typeFor(e, source),
+      eventTitle: e.title, eventEnd: new Date(e.end).toISOString(), eventLocation: e.location || '',
       description: e.description === 'calendly' ? '' : feed.eventText(e), // 'calendly' only marks Calendly bookings
       priority: startsIn > 0 && startsIn < 2 * 3600000 ? 'Medium' : '',
       deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
@@ -125,16 +127,31 @@ function syncCards(source, events) {
     const start = new Date(e.start);
     const x = String(i.externalId || '');
     const f = { eventType: eventtypes.typeFor(e, source), calendarName: e.calendarName || i.calendarName || '', description: e.description === 'calendly' ? undefined : feed.eventText(e) || i.description };
+    if (!x.startsWith('cal:up:') && !x.startsWith('cal:new:')) return f;
+    // Ryan (2026-11-04): a changed event gets no new notification; its card is relabelled "Updated: <event>".
+    // Fields only count as changed when the card recorded them, so older cards aren't all flagged on the first read.
+    const base = String(i.eventTitle || i.title || '').replace(/^(New( recurring event)?|Updated|Moved|Time changed): /, '');
+    const changed = (i.eventStart && new Date(i.eventStart).toISOString() !== start.toISOString())
+      || (i.eventEnd && i.eventEnd !== new Date(e.end).toISOString())
+      || base !== e.title
+      || (i.eventLocation != null && i.eventLocation !== (e.location || ''))
+      || (i.description != null && e.description !== 'calendly' && i.description !== feed.eventText(e));
+    const updated = i.updated || changed;
+    Object.assign(f, {
+      title: updated ? `Updated: ${e.title}` : x.startsWith('cal:new:') ? `${/^New recurring/.test(i.title) ? 'New recurring event' : 'New'}: ${e.title}` : e.title,
+      eventTitle: e.title, eventStart: start.toISOString(), eventEnd: new Date(e.end).toISOString(), eventLocation: e.location || '',
+      quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`,
+    });
+    if (changed) Object.assign(f, { updated: true, updatedAt: Date.now(), unread: true });
     if (x.startsWith('cal:up:')) {
       Object.assign(f, {
-        title: e.title, eventStart: start.toISOString(), ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 10000,
+        ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 10000,
         externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
-        quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`,
         deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       });
       if (!viaCalendly(e)) f.summary = `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`;
-    } else if (x.startsWith('cal:new:')) {
-      Object.assign(f, { title: `${/^New recurring/.test(i.title) ? 'New recurring event' : 'New'}: ${e.title}`, eventStart: start.toISOString(), quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`, deadline: `Starts ${when(e.start, e.allDay)}` });
+    } else {
+      f.deadline = `Starts ${when(e.start, e.allDay)}`;
     }
     return f;
   });
@@ -229,7 +246,7 @@ async function run() {
             if (prev) for (const k of Object.keys(fresh)) if (!prev.events[k]) fresh[k].with = await connectors.calendlyInvitees(conn.fields.token, k);
             state[key] = { at: Date.now(), events: fresh };
             if (prev) {
-              for (const [k, e] of Object.entries(fresh)) if (!prev.events[k]) { post(profile, 'calendly', 'new', k, { ...e, calendly: true }, { with: e.with }); posted++; } else if (prev.events[k].start !== e.start) { post(profile, 'calendly', 'moved', k, e, { was: prev.events[k].start }); posted++; }
+              for (const [k, e] of Object.entries(fresh)) if (!prev.events[k]) { post(profile, 'calendly', 'new', k, { ...e, calendly: true }, { with: e.with }); posted++; }
               for (const [k, e] of Object.entries(prev.events)) if (!fresh[k] && new Date(e.end) > Date.now()) { post(profile, 'calendly', 'cancelled', k, e); posted++; }
             }
             posted += upcoming(profile, 'calendly', events.map((e) => ({ ...e, description: 'calendly' })), skipNew);

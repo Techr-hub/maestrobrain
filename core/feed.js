@@ -147,7 +147,7 @@ function list({ profile, source, category, limit = 60 } = {}) {
 // the dashboard goes through this, including live updates, so the label and its dropdown are always there.
 function withType(i, cfg = config.load(), types = eventtypes.list(cfg)) {
   if (!i || i.category !== 'MEETING' || (i.eventType && types.some((t) => t.id === i.eventType))) return i;
-  return { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled|Reminder|In [^:]+|Starting now|Happening now): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) };
+  return { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Updated|Moved|Time changed|Cancelled|Reminder|In [^:]+|Starting now|Happening now): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) };
 }
 
 function add(raw, { emit = true } = {}) {
