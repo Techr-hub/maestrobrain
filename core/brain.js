@@ -11,6 +11,7 @@ const agentsMod = require('./agents');
 const llm = require('./llm');
 const lookup = require('./lookup');
 const { converse } = require('./converse');
+const focus = require('./focus');
 const scheduler = require('./scheduler');
 
 const CONV_FILE = path.join(config.DATA_DIR, 'conversations.json');
@@ -100,6 +101,7 @@ function contextText(ctx, cfg, profile) {
   parts.push(`# INTELLIGENCE FEED (newest first)\n` + ctx.items.map((i) => `- [${i.category}] ${i.sourceName} · ${lookup.whenText(i.ts)} · ${i.title}${i.quote ? ' — ' + i.quote : ''}${i.summary ? ' (' + i.summary + ')' : ''}${i.priority ? ' · priority ' + i.priority : ''}${i.deadline ? ' · ' + i.deadline : ''}`).join('\n'));
   parts.push(`# CALENDAR (next 7 days)\n` + (ctx.events.map((e) => `- ${dayName(e.start)} ${timeOf(e.start)}–${timeOf(e.end)} · ${e.title}${e.attendees ? ' · with ' + e.attendees.join(', ') : ''}`).join('\n') || '(nothing scheduled)'));
   parts.push(`# OPEN TASKS\n` + (ctx.openTasks.map((t) => `- ${t.text}${t.priority ? ' · ' + t.priority : ''}${t.due ? ' · due ' + t.due : ''} (in [[${t.note}]])`).join('\n') || '(none)'));
+  try { parts.push(focus.contextBlock({ profile, events: ctx.allEvents || ctx.events || [], items: ctx.all || ctx.items })); } catch { /* projects are a bonus */ }
   return parts.join('\n\n');
 }
 
@@ -336,6 +338,11 @@ function demoAnswer(message, ctx, cfg, profile, agent) {
   if (talk) return talk;
   const deeper = dayDetail(message, ctx, cfg);
   if (deeper) return deeper;
+  // Projects, what matters most and what's in the way of your goals (Ryan, 2026-11-04).
+  // The sprint, design and engineering playbooks below keep their questions.
+  const playbook = /\bsprint\b|\bstakeholders?\b|design feedback|handoff|hand-off|design review|critique|pull requests?|\bprs?\b|github|technical status|\bci\b|v2\.4/.test(message.toLowerCase());
+  const focused = playbook ? null : (() => { try { return focus.answer(message, { profile, events: ctx.allEvents || ctx.events || [], items: ctx.all || ctx.items }); } catch { return null; } })();
+  if (focused) return focused;
   // Straight questions ("when did Alex call me?", "when is my meeting with Sarah?") get a straight answer first.
   const other = profile === 'business' ? 'personal' : 'business';
   const direct = lookup.answer(message, { items: ctx.all || ctx.items, events: ctx.allEvents || ctx.events, focus: ctx.focus, offered: ctx.offered, moreStep: ctx.moreStep }, { profile, otherProfileItems: feed.list({ profile: other, limit: 300 }) });

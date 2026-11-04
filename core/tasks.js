@@ -23,8 +23,9 @@ function guessSection(text, folder = '') {
 }
 
 // Due time and reminders (Ryan, 2026-11-02), kept on the task line so Obsidian shows them too:
-// "📅 2026-11-06 ⏰ 14:30 🔔 1d,12h,2h". Reminder codes: 1d, 12h, 3h, 2h, 1h, 30m.
-const ALERTS = { '1d': 1440, '12h': 720, '3h': 180, '2h': 120, '1h': 60, '30m': 30 };
+// "📅 2026-11-06 ⏰ 14:30 🔔 1d,12h,2h". Reminder codes: 1w, 2d, 1d, 12h, 8h, 3h, 2h, 1h, 30m (1w, 2d and 8h: Ryan, 2026-11-04).
+const ALERTS = { '1w': 10080, '2d': 2880, '1d': 1440, '12h': 720, '8h': 480, '3h': 180, '2h': 120, '1h': 60, '30m': 30 };
+const ALERT_NAMES = { '1w': '1 week', '2d': '2 days', '1d': '1 day', '12h': '12 hours', '8h': '8 hours', '3h': '3 hours', '2h': '2 hours', '1h': '1 hour', '30m': '30 minutes' };
 const normTime = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? `${String(Math.min(23, +m[1])).padStart(2, '0')}:${m[2]}` : ''; };
 const normAlerts = (a) => [...new Set((Array.isArray(a) ? a : String(a || '').split(/[\s,]+/)).map((x) => String(x).toLowerCase().trim()).filter((x) => ALERTS[x]))].sort((x, y) => ALERTS[y] - ALERTS[x]);
 
@@ -161,4 +162,4 @@ function addForEvent({ event = '', note = '', items = '', due = '', dueTime = ''
   return { lines, due: first, count: lines.length };
 }
 
-module.exports = { ALERTS, list, toggle, update, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };
+module.exports = { ALERTS, ALERT_NAMES, normAlerts, list, toggle, update, add, addForEvent, splitItems, dueIn, parseLine, guessSection, SECTIONS };

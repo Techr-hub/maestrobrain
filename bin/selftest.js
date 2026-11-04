@@ -280,6 +280,25 @@ async function main() {
     ok('projects: a new project gets a card in the Intelligence Feed, kept current', pcard && pcard.category === 'PROJECT' && pcard.title === 'New project: Selftest Rebuild' && /Client: Acme Inc/.test(pcard.quote) && /2 open tasks/.test(pcard.summary));
     ok('projects: new projects are listed for the brain map', st.projects.some((x) => x.path === made.path && x.made));
   }
+  {
+    // Ryan (2026-11-04): Maestro looks up projects, ranks what matters most, flags what's in the way of your goals,
+    // and reminds you of tasks and milestones at the times you pick in Settings → Reminders.
+    const dd = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const lp = await post('/projects', { name: 'Selftest Launchpad', client: 'Globex', start: dd(-20), completion: dd(10), milestones: [{ name: 'Selftest Gate', date: dd(2) }], tasks: ['Draft the launch plan'] });
+    await post('/projects/task', { path: lp.path, text: 'Fix the payment bug', due: dd(-1), priority: 'High' });
+    const set = await post('/settings', { reminders: { tasks: ['8h', 'bogus'], milestones: ['1w'] } });
+    const rs = (await (await fetch(base + '/state')).json()).config.reminders;
+    ok('reminder times: saved from Settings (unknown ones dropped)', set.ok && rs.tasks.join() === '8h' && rs.milestones.join() === '1w');
+    const fdm = await (await fetch(base + '/feed?limit=400')).json();
+    ok('milestone reminder: a card when a milestone is inside your reminder time, said in real days', fdm.some((i) => i.title === 'Milestone in 2 days: Selftest Gate' && i.reminder && /Selftest Launchpad/.test(i.quote)));
+    const first = await post('/chat', { message: 'What should I work on first?' });
+    ok('focus: the most important task first, with why', /^Start with \*\*Fix the payment bug\*\* \(overdue since yesterday, high priority/.test(first.reply));
+    const risk = await post('/chat', { message: "What's pressing that could stop me hitting my goals?" });
+    ok('focus: what could get in the way of your goals', /could get in the way of your goals/.test(risk.reply) && /Selftest Gate for Selftest Launchpad is in 2 days/.test(risk.reply) && /Best place to start/.test(risk.reply));
+    const look = await post('/chat', { message: 'How is the Launchpad project going?' });
+    ok('focus: look up a project by name', /\*\*Selftest Launchpad\*\* for Globex/.test(look.reply) && /Next milestone: Selftest Gate, in 2 days/.test(look.reply) && /Fix the payment bug/.test(look.reply));
+    await post('/settings', { reminders: { tasks: [], milestones: ['1w', '1d'] } });
+  }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });

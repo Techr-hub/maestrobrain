@@ -341,6 +341,11 @@ route('POST', '/api/settings', async (_q, body) => {
     if (body.assistantName) c.assistantName = body.assistantName;
     if (body.voice) c.voice = { ...c.voice, ...body.voice };
     if (body.demo) c.demo = { ...c.demo, ...body.demo };
+    if (body.reminders) { // Settings → Reminders (Ryan, 2026-11-04)
+      const r = { ...(c.reminders || {}) };
+      for (const k of ['tasks', 'milestones']) if (body.reminders[k] !== undefined) r[k] = tasks.normAlerts(body.reminders[k]);
+      c.reminders = r;
+    }
     if (body.vaultPath) {
       const p = path.resolve(body.vaultPath.replace(/^~(?=$|[\\/])/, require('os').homedir()));
       if (!fs.existsSync(p)) throw new Error('That folder does not exist: ' + p);
@@ -358,6 +363,7 @@ route('POST', '/api/settings', async (_q, body) => {
     if (body.onboarded !== undefined) c.onboarded = !!body.onboarded;
   });
   vault.invalidate();
+  if (body.reminders) { try { reminders.check(); } catch { /* best-effort */ } }
   return { ok: true };
 });
 

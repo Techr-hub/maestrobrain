@@ -331,7 +331,7 @@ export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real'
 // ================================================================ TASKS
 // Due date, due time and reminders for a new task (Ryan, 2026-11-02). Reminders post an Insight card in the feed
 // (and a desktop notification when allowed) that long before the deadline. Used by the Tasks page and Create Task.
-export const REMINDERS = [['1d', '1 day'], ['12h', '12 hours'], ['3h', '3 hours'], ['2h', '2 hours'], ['1h', '1 hour']];
+export const REMINDERS = [['1w', '1 week'], ['2d', '2 days'], ['1d', '1 day'], ['12h', '12 hours'], ['8h', '8 hours'], ['3h', '3 hours'], ['2h', '2 hours'], ['1h', '1 hour'], ['30m', '30 minutes']];
 export function dueFields(p, { label = true } = {}) {
   return `<div class="due-fields">
     <div class="field"><label for="${p}-due">${label ? 'Due date' : ''}</label><input class="input" type="date" id="${p}-due"></div>
@@ -578,7 +578,7 @@ async function settingsPage(el, ctx) {
   const prov = c.llm.provider;
   const voices = voiceSupported.tts ? rankVoices(speechSynthesis.getVoices()) : []; // most natural first
   el.innerHTML = head('Settings', 'Make the brain yours. Keys are stored only on this computer in <code>data/config.json</code>.') +
-    `<div class="tabs" id="tabs">${['You', 'AI engine', 'Voice', 'Vault', 'Claude Desktop', 'Demo'].map((t, i) => `<button data-tab="${i}" class="${i === 0 ? 'on' : ''}">${t}</button>`).join('')}</div>
+    `<div class="tabs" id="tabs">${['You', 'AI engine', 'Voice', 'Vault', 'Claude Desktop', 'Demo', 'Reminders'].map((t, i) => `<button data-tab="${i}" class="${i === 0 ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div data-pane="0">
       <div class="two-col"><div class="field"><label>Your name</label><input class="input" id="s-name" value="${esc(c.user.name)}"></div><div class="field"><label>What you do</label><input class="input" id="s-role" value="${esc(c.user.role)}"></div></div>
       <div class="field"><label>Assistant name (wake word)</label><input class="input" id="s-asst" value="${esc(c.assistantName)}"><span class="help">Used in greetings and for hands-free voice (“Hey ${esc(c.assistantName)}…”).</span></div>
@@ -615,6 +615,12 @@ async function settingsPage(el, ctx) {
       <div class="field" style="flex-direction:row;align-items:center;gap:12px"><label class="toggle"><input type="checkbox" id="d-live" ${c.demo.liveFeed ? 'checked' : ''}><span></span></label><div>Stream new demo notifications into the feed</div></div>
       <div class="field"><label>Seconds between demo notifications</label><input class="input" type="number" min="10" id="d-int" value="${c.demo.intervalSeconds}" style="width:120px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="save-demo">${icon('save')} Save</button><button class="btn ghost" id="reset-demo">${icon('refresh')} Reset demo feed</button><button class="btn ghost" id="rerun-onb">${icon('sparkles')} Run setup again</button></div>
+    </div>
+    <div data-pane="6" hidden>
+      <p style="color:var(--muted);margin-top:0">Pick how far ahead Maestro reminds you. Each reminder lands as a card in the Intelligence Feed, with a desktop notification when allowed.</p>
+      <div class="field"><label>Tasks</label><div class="rem-chips" role="group" aria-label="Task reminders">${REMINDERS.map(([k, v]) => `<button type="button" class="rem-chip${(c.reminders && c.reminders.tasks || []).includes(k) ? ' on' : ''}" data-set-rem="tasks" data-rem-key="${k}" aria-pressed="${(c.reminders && c.reminders.tasks || []).includes(k)}">${icon('bell')}${v}</button>`).join('')}</div><span class="help">Used for tasks that don't have their own reminders. Pick none to be reminded the day before and on the day.</span></div>
+      <div class="field"><label>Project milestones and completion dates</label><div class="rem-chips" role="group" aria-label="Milestone reminders">${REMINDERS.map(([k, v]) => `<button type="button" class="rem-chip${(c.reminders && c.reminders.milestones || ['1w', '1d']).includes(k) ? ' on' : ''}" data-set-rem="milestones" data-rem-key="${k}" aria-pressed="${(c.reminders && c.reminders.milestones || ['1w', '1d']).includes(k)}">${icon('bell')}${v}</button>`).join('')}</div><span class="help">Counted from 9 AM on the milestone's day. You also get a card on the day itself.</span></div>
+      <button class="btn primary" id="save-rem">${icon('save')} Save</button>
     </div>`;
   wireWikilinks(el);
   el.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => {
@@ -654,6 +660,12 @@ async function settingsPage(el, ctx) {
   el.querySelector('#save-demo').onclick = async () => { await api('/settings', { demo: { liveFeed: el.querySelector('#d-live').checked, intervalSeconds: Number(el.querySelector('#d-int').value) } }); S.livePaused = !el.querySelector('#d-live').checked; toast('Saved'); ctx.afterChange({ graph: false, feed: false }); };
   el.querySelector('#reset-demo').onclick = async () => { await api('/reset-demo', {}); toast('Demo feed reset'); ctx.afterChange({ graph: false }); };
   el.querySelector('#rerun-onb').onclick = () => onboarding(ctx);
+  el.querySelectorAll('[data-set-rem]').forEach((b) => (b.onclick = () => { const on = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on); }));
+  el.querySelector('#save-rem').onclick = async () => {
+    const pick = (k) => [...el.querySelectorAll(`[data-set-rem="${k}"][aria-pressed="true"]`)].map((b) => b.dataset.remKey);
+    await api('/settings', { reminders: { tasks: pick('tasks'), milestones: pick('milestones') } });
+    await refreshState(); toast('Reminder times saved'); ctx.afterChange({ graph: false });
+  };
 }
 
 // ================================================================ ONBOARDING

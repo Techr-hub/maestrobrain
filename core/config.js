@@ -44,6 +44,9 @@ function defaultConfig() {
       end_of_day: { enabled: false, time: '17:30' },
     },
     demo: { liveFeed: true, intervalSeconds: 35 },
+    // How long before a deadline Maestro reminds you (Ryan, 2026-11-04). tasks: for tasks without their own reminders
+    // (empty = the day before and the day of); milestones: for project milestones and completion dates.
+    reminders: { tasks: [], milestones: ['1w', '1d'] },
     port: 4141,
     onboarded: false,
     // 'demo' fills the brain with sample data; 'real' starts empty and only shows what the user connects.

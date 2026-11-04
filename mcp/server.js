@@ -121,6 +121,19 @@ const TOOLS = [
     run: async ({ include_done }) => tasks.list({ includeDone: !!include_done }).map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}${t.priority ? ' · ' + t.priority : ''}${t.due ? ' · due ' + t.due : ''} (path: ${t.path}, line: ${t.line})`).join('\n') || 'No open tasks.',
   },
   {
+    name: 'get_priorities',
+    description: "Look up the user's projects (dates, milestones, progress, open tasks), Maestro's ranking of the most important tasks, and the risks that could stop them hitting their goals (overdue work, milestones close with open tasks, projects behind schedule, a packed calendar, urgent messages). Use it when asked what to focus on, what matters most, what's at risk, or about a project.",
+    inputSchema: { type: 'object', properties: { project: { type: 'string', description: 'Optional project name to look up' } }, additionalProperties: false },
+    run: async ({ project }) => {
+      const focus = require('../core/focus');
+      const profile = config.load().profile;
+      let events = [];
+      try { events = await calendar.list({ profile, days: 30 }); } catch { /* no calendar */ }
+      if (project) { const a = focus.answer(`tell me about the ${project} project`, { profile, events }); if (a) return a; }
+      return focus.contextBlock({ profile, events });
+    },
+  },
+  {
     name: 'add_task',
     description: 'Add a task to the vault inbox (Tasks/Inbox.md).',
     inputSchema: { type: 'object', properties: { text: { type: 'string' }, due: { type: 'string', description: 'YYYY-MM-DD' }, priority: { type: 'string', enum: ['High', 'Medium', 'Low'] } }, required: ['text'], additionalProperties: false },
