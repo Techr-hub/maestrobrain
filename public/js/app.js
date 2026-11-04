@@ -199,7 +199,7 @@ function buildDashboard() {
 
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
-    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : String(n.id).startsWith('project:') ? navigate('projects') : showSource(n.id)), // hubs use 'hub:<id>'
+    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)), // a project node shows just its card (Ryan, 2026-11-04) // hubs use 'hub:<id>'
     onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
   window.maestroBrain = brain;
@@ -722,8 +722,33 @@ async function showSource(id) {
   S.sourceView = id;
   $('#feed').classList.add('open');
   $('#feed-list').innerHTML = '<div class="feed-empty">Loading…</div>';
-  try { S.sourceData = await api('/source?id=' + encodeURIComponent(id)); } catch (e) { S.sourceData = { id, name: id, connected: false, error: e.message, events: [], items: [] }; }
+  if (String(id).startsWith('project:')) S.sourceData = await projectSource(id);
+  else try { S.sourceData = await api('/source?id=' + encodeURIComponent(id)); } catch (e) { S.sourceData = { id, name: id, connected: false, error: e.message, events: [], items: [] }; }
   if (S.sourceView === id) { renderSourceView(); $('#feed-list').scrollTop = 0; }
+}
+
+// A project node on the brain map shows only that project's card in the feed (Ryan, 2026-11-04).
+async function projectSource(id) {
+  const path = id.slice('project:'.length);
+  let card = S.feed.find((x) => x.externalId === id);
+  if (!card) { try { card = (await api('/feed?limit=400')).find((x) => x.externalId === id); } catch { /* offline */ } }
+  let name = path.split('/').pop().replace(/\.md$/, '');
+  if (!card) {
+    // the card was cleared (or the project came from Obsidian): show the project as a card anyway
+    try {
+      const p = await api('/projects/one?path=' + encodeURIComponent(path)); name = p.name;
+      card = { id, ts: Date.now(), source: 'system', sourceName: 'Maestro', category: 'PROJECT', title: p.name, quote: [p.client && `Client: ${p.client}`, (p.start || p.completion) && `${p.start || '?'} → ${p.completion || '?'}`].filter(Boolean).join(' · '),
+        description: p.description, summary: [p.nextMilestone && `Next milestone: ${p.nextMilestone.name}`, `${p.tasks.open} open task${p.tasks.open === 1 ? '' : 's'}`].filter(Boolean).join(' · '), progress: p.tasks.total ? p.progress : undefined, actions: ['Open project'], unread: false };
+    } catch { /* gone */ }
+  } else name = card.title.replace(/^New project: /, '');
+  return { id, project: true, name, items: card ? [card] : [] };
+}
+function renderProjectView(d) {
+  const list = $('#feed-list');
+  list.innerHTML = `<div class="src-head" style="--c:#00f2af"><button class="src-back" id="src-back" title="Back to all activity">${icon('arrow-right')}</button><span class="agent-icon">${icon('folder')}</span><div><b>${esc(d.name)}</b><div><span class="tag live">Project</span></div></div></div>`
+    + (d.items.length ? d.items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">This project is no longer in your vault.</div>`);
+  list.querySelector('#src-back').onclick = closeSource;
+  list.querySelectorAll('.activity[data-id]').forEach((el) => wireCard(el));
 }
 
 function closeSource() { S.sourceView = null; S.sourceData = null; if (brain) brain.selectedSource = null; renderFeed(false); }
@@ -737,6 +762,7 @@ function dayLabel(d) {
 
 function renderSourceView() {
   const d = S.sourceData; if (!d) return;
+  if (d.project) return renderProjectView(d);
   if (d.hub) return renderHubView(d);
   const list = $('#feed-list');
   const conn = S.state.connectors.find((c) => c.id === d.id) || { name: d.name, color: '#00e5ff', icon: 'plug' };
