@@ -9,6 +9,7 @@ const config = require('./core/config');
 const vault = require('./core/vault');
 const knowledge = require('./core/knowledge');
 const feed = require('./core/feed');
+const eventtypes = require('./core/eventtypes');
 const calwatch = require('./core/calwatch');
 const calendar = require('./core/calendar');
 const tasks = require('./core/tasks');
@@ -103,6 +104,7 @@ route('GET', '/api/state', async () => {
   const cfg = config.load();
   return {
     config: config.publicView(cfg),
+    eventTypes: eventtypes.list(cfg),
     providers: llm.PROVIDERS,
     connectors: connectorView(cfg),
     agents: agents.agents().map(({ prompt, ...a }) => a),
@@ -149,6 +151,31 @@ route('POST', '/api/feed/refresh', async () => {
   const now = config.load();
   const errors = Object.values(now.connections[now.profile] || {}).filter((c) => c.lastError).length;
   return { ok: true, at: Date.now(), added, live: [...new Set(live)].length, viaClaude: [...new Set(viaClaude)], errors };
+});
+// Event types (Ryan, 2026-11-04): edit the list, or switch one card's event to another type.
+route('GET', '/api/event-types', async () => eventtypes.list());
+route('GET', '/api/event-types/defaults', async () => eventtypes.DEFAULTS);
+route('POST', '/api/event-types', async (_q, body) => {
+  const types = eventtypes.clean(body.types);
+  if (!types.length) throw Object.assign(new Error('Keep at least one category.'), { status: 400 });
+  config.update((c) => {
+    c.eventTypes = types;
+    const ids = new Set(types.map((t) => t.id));
+    for (const [k, v] of Object.entries(c.eventTypeOverrides || {})) if (!ids.has(v)) delete c.eventTypeOverrides[k];
+  });
+  // every calendar card is labelled again with the new list
+  const cfg = config.load();
+  feed.updateCards((i) => i.category === 'MEETING', (i) => ({ eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) }));
+  return eventtypes.list();
+});
+route('POST', '/api/feed/event-type', async (_q, body) => {
+  const card = feed.readAll().find((i) => i.id === body.id);
+  if (!card) throw Object.assign(new Error('That card is gone.'), { status: 404 });
+  if (!eventtypes.list().some((t) => t.id === body.type)) throw Object.assign(new Error('Unknown category.'), { status: 400 });
+  const key = eventtypes.keyOf(card.source, card.eventKey || card.id);
+  config.update((c) => { c.eventTypeOverrides = { ...(c.eventTypeOverrides || {}), [key]: body.type }; });
+  const n = feed.updateCards((i) => i.source === card.source && (card.eventKey ? i.eventKey === card.eventKey : i.id === card.id), () => ({ eventType: body.type }));
+  return { ok: true, updated: n };
 });
 route('POST', '/api/feed/read-all', async () => { for (const i of feed.list({ limit: 300 })) if (i.unread) feed.markRead(i.id); return { ok: true }; });
 

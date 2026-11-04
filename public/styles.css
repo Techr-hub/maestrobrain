@@ -646,3 +646,20 @@ button.wk-dh:hover b { color: var(--cyan); }
 #feed-refresh.spinning .icon { animation: feedspin .8s linear infinite; }
 @keyframes feedspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #feed-refresh.spinning .icon { animation: none; } }
+
+/* Event categories on calendar cards (Ryan, 2026-11-04): the label is a dropdown. */
+.pill.type-pill { --pill: color-mix(in srgb, var(--tc) 16%, transparent); --pill-text: var(--tc); border: 1px solid color-mix(in srgb, var(--tc) 45%, transparent); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-family: inherit; line-height: 1; }
+.pill.type-pill:hover, .pill.type-pill:focus-visible { border-color: var(--tc); outline: none; }
+.pill.type-pill .icon { width: 12px; height: 12px; }
+.type-menu { position: fixed; z-index: 60; min-width: 190px; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,.5); }
+.type-menu button { width: 100%; display: flex; align-items: center; gap: 9px; background: transparent; border: 0; border-radius: 7px; color: var(--text); padding: 8px 10px; font-size: 14px; text-align: left; cursor: pointer; }
+.type-menu button:hover, .type-menu button:focus-visible { background: var(--nav-active); outline: none; }
+.type-menu button i { width: 9px; height: 9px; border-radius: 50%; background: var(--tc); flex: none; }
+.type-menu button .icon { width: 14px; height: 14px; margin-left: auto; color: var(--cyan); }
+.type-menu [data-edit] .icon { margin-left: 0; color: var(--muted); }
+.type-menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 2px; }
+.et-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.et-row { display: grid; grid-template-columns: 38px minmax(110px, 1fr) 2.2fr 36px; gap: 8px; align-items: center; }
+.et-color { width: 38px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-deep); cursor: pointer; }
+.et-del { width: 36px; height: 36px; }
+@media (max-width: 640px) { .et-row { grid-template-columns: 38px 1fr 36px; } .et-words { grid-column: 1 / -1; } }

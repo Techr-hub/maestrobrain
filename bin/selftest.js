@@ -223,6 +223,25 @@ async function main() {
         && cards.length === 2 && cards.every((c) => c.eventStart === moved.start && c.quote.includes(hm(moved.start)) && c.quote.includes(hm(moved.end))));
     }
   }
+  {
+    // Ryan (2026-11-04): calendar cards are labelled Meeting / Event / Conference / Workshop / Call from their words,
+    // can be switched from the label, and the list of categories can be edited.
+    const et = require('../core/eventtypes');
+    ok('event categories: read from the title and description', et.classify({ title: 'AI Brain Builder Workshop' }) === 'workshop' && et.classify({ title: 'Acme renewal call' }) === 'call'
+      && et.classify({ title: 'Disrupt', description: 'The startup conference of the year' }) === 'conference' && et.classify({ title: 'Sprint review' }) === 'meeting' && et.classify({ title: 'Halloween party' }) === 'event');
+    const feedNow = await (await fetch(base + '/feed?limit=200')).json();
+    const items = feedNow.items || feedNow;
+    const mtg = items.find((i) => i.category === 'MEETING');
+    const types = await (await fetch(base + '/event-types')).json();
+    const other = types.find((t) => t.id !== (mtg && mtg.eventType));
+    const sw = mtg && other ? await post('/feed/event-type', { id: mtg.id, type: other.id }) : null;
+    const after = (await (await fetch(base + '/feed?limit=200')).json());
+    const again = (after.items || after).find((i) => i.id === (mtg && mtg.id));
+    ok('event categories: calendar cards carry one, and the dropdown choice sticks', !!(mtg && mtg.eventType && sw && sw.ok && again && again.eventType === other.id));
+    const saved = await post('/event-types', { types: [...types.map((t) => (t.id === 'call' ? { ...t, name: 'Phone call' } : t)), { name: 'Webinar', color: '#123456', words: 'webinar, livestream' }].filter((t) => t.id !== 'conference') });
+    ok('event categories: rename, add and remove', saved.some((t) => t.name === 'Phone call' && t.id === 'call') && saved.some((t) => t.id === 'webinar' && t.words.includes('livestream')) && !saved.some((t) => t.id === 'conference'));
+    await post('/event-types', { types: et.DEFAULTS });
+  }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });

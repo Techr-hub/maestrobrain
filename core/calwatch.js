@@ -9,6 +9,7 @@ const path = require('path');
 const config = require('./config');
 const connectors = require('./connectors');
 const feed = require('./feed');
+const eventtypes = require('./eventtypes');
 
 const FILE = path.join(config.DATA_DIR, 'calendar-seen.json');
 const ICS_SOURCES = ['icalendar', 'gcal', 'outlook'];
@@ -35,7 +36,7 @@ function snapshot(events) {
     if (new Date(e.end) < now || new Date(e.start) - now > HORIZON) continue;
     const key = e.uid || `${e.title}|${e.start}`;
     if (out[key] && out[key].start <= e.start) continue; // keep the next occurrence of a series
-    out[key] = { title: e.title, start: e.start, end: e.end, allDay: !!e.allDay, recurring: !!e.recurring, location: e.location || '', calendarName: e.calendarName || '', calendly: viaCalendly(e) };
+    out[key] = { title: e.title, start: e.start, end: e.end, allDay: !!e.allDay, recurring: !!e.recurring, location: e.location || '', description: String(e.description || '').slice(0, 600), calendarName: e.calendarName || '', calendly: viaCalendly(e) };
   }
   return out;
 }
@@ -55,7 +56,7 @@ function post(profile, source, kind, key, e, extra = {}) {
     externalId: `cal:${kind}:${source}:${key}:${kind === 'cancelled' ? '' : e.start}${kind === 'moved' ? ':' + e.end : ''}`,
     ts: Date.now(), source, profile, category: 'MEETING', title, eventKey: key, eventStart: kind === 'cancelled' ? '' : e.start,
     quote: kind === 'moved' ? `Now ${when(e.start, e.allDay)}${until(e)} (was ${when(extra.was, e.allDay)}${extra.wasEnd ? until({ end: extra.wasEnd }) : ''})` : `${when(e.start, e.allDay)}${until(e)}${extra.with ? ' · with ' + extra.with.join(', ') : ''}${place(e)}`,
-    calendarName: e.calendarName || '',
+    calendarName: e.calendarName || '', eventType: eventtypes.typeFor(e, source),
     summary: e.calendly || source === 'calendly' ? 'Booked through Calendly' : kind === 'cancelled' ? `Removed from ${name}` : `${kind === 'new' ? 'Added to' : 'Updated in'} ${name}`,
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
     deadline: kind === 'cancelled' ? '' : `Starts ${when(e.start, e.allDay)}`,
@@ -99,7 +100,7 @@ function upcoming(profile, source, events, skip = new Set()) {
       title: e.title,
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
       summary: viaCalendly(e) ? 'Booked through Calendly' : `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`,
-      calendarName: e.calendarName || '',
+      calendarName: e.calendarName || '', eventType: eventtypes.typeFor(e, source),
       description: e.description === 'calendly' ? '' : feed.eventText(e), // 'calendly' only marks Calendly bookings
       priority: startsIn > 0 && startsIn < 2 * 3600000 ? 'Medium' : '',
       deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
@@ -123,7 +124,7 @@ function syncCards(source, events) {
     if (!e) return null;
     const start = new Date(e.start);
     const x = String(i.externalId || '');
-    const f = { calendarName: e.calendarName || i.calendarName || '', description: e.description === 'calendly' ? undefined : feed.eventText(e) || i.description };
+    const f = { eventType: eventtypes.typeFor(e, source), calendarName: e.calendarName || i.calendarName || '', description: e.description === 'calendly' ? undefined : feed.eventText(e) || i.description };
     if (x.startsWith('cal:up:')) {
       Object.assign(f, {
         title: e.title, eventStart: start.toISOString(), ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 10000,

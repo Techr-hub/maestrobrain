@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
 const config = require('./config');
+const eventtypes = require('./eventtypes');
 const demo = require('./demo');
 const connectors = require('./connectors');
 
@@ -139,7 +140,10 @@ function list({ profile, source, category, limit = 60 } = {}) {
   if (source && source !== 'all') items = items.filter((i) => i.source === source);
   if (category && category !== 'all') items = items.filter((i) => i.category === category);
   items.sort(byPinThenTime);
-  return items.slice(0, limit);
+  // Calendar cards carry an event type (Meeting, Workshop, Call…) for their label (Ryan, 2026-11-04).
+  const types = eventtypes.list(cfg);
+  return items.slice(0, limit).map((i) => (i.category === 'MEETING' && !(i.eventType && types.some((t) => t.id === i.eventType))
+    ? { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) } : i));
 }
 
 function add(raw, { emit = true } = {}) {

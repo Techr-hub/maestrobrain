@@ -561,6 +561,79 @@ document.addEventListener('click', async (e) => {
   try { await api('/feed/dismiss', { id }); } catch (err) { toast('Could not clear it: ' + err.message, 'error'); }
 }, true);
 
+// ---------------------------------------------------------------- event types (Ryan, 2026-11-04)
+// Calendar cards are labelled Meeting, Event, Conference, Workshop, Call… (read from the event's title and description).
+// The label is a dropdown: pick another type for that event, or edit the list of types.
+const eventTypes = () => S.state.eventTypes || [];
+function typePill(i) {
+  if (i.category !== 'MEETING' || !i.eventType) return '';
+  const t = eventTypes().find((x) => x.id === i.eventType);
+  if (!t) return '';
+  return `<button class="pill type-pill" data-type style="--tc:${t.color}" aria-haspopup="menu" title="Change the category">${esc(t.name.toUpperCase())}${icon('chevron-down')}</button>`;
+}
+function closeTypeMenu() { document.querySelectorAll('.type-menu').forEach((m) => m.remove()); document.removeEventListener('mousedown', typeMenuOutside, true); document.removeEventListener('keydown', typeMenuKey, true); }
+function typeMenuOutside(e) { if (!e.target.closest('.type-menu')) closeTypeMenu(); }
+function typeMenuKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closeTypeMenu(); } }
+function typeMenu(btn, item) {
+  const was = document.querySelector('.type-menu');
+  closeTypeMenu();
+  if (was && was.dataset.for === item.id) return; // a second click closes it
+  const m = document.createElement('div');
+  m.className = 'type-menu'; m.setAttribute('role', 'menu'); m.dataset.for = item.id;
+  m.innerHTML = eventTypes().map((t) => `<button role="menuitemradio" aria-checked="${t.id === item.eventType}" data-t="${esc(t.id)}" style="--tc:${t.color}"><i></i>${esc(t.name)}${t.id === item.eventType ? icon('check') : ''}</button>`).join('')
+    + `<hr><button role="menuitem" data-edit>${icon('pencil')} Edit categories…</button>`;
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+  m.style.top = (r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  m.querySelectorAll('[data-t]').forEach((b) => b.onclick = async () => {
+    closeTypeMenu();
+    const type = b.dataset.t;
+    if (type === item.eventType) return;
+    const same = (x) => x.source === item.source && (item.eventKey ? x.eventKey === item.eventKey : x.id === item.id);
+    S.feed.forEach((x) => { if (same(x)) x.eventType = type; });
+    renderFeed(false);
+    try { await api('/feed/event-type', { id: item.id, type }); } catch (err) { toast('Could not change it: ' + err.message, 'error'); }
+  });
+  m.querySelector('[data-edit]').onclick = () => { closeTypeMenu(); editEventTypes(); };
+  (m.querySelector('[aria-checked=true]') || m.querySelector('button')).focus();
+  setTimeout(() => { document.addEventListener('mousedown', typeMenuOutside, true); document.addEventListener('keydown', typeMenuKey, true); });
+}
+function editEventTypes() {
+  let rows = eventTypes().map((t) => ({ ...t, words: (t.words || []).join(', ') }));
+  const rowHtml = (t, k) => `<div class="et-row" data-k="${k}">
+      <input type="color" class="et-color" value="${esc(t.color)}" aria-label="Colour">
+      <input class="input et-name" value="${esc(t.name)}" placeholder="Name" aria-label="Category name" maxlength="30">
+      <input class="input et-words" value="${esc(t.words)}" placeholder="Words that pick it, e.g. webinar, demo" aria-label="Words that pick this category">
+      <button class="icon-btn et-del" title="Remove" aria-label="Remove ${esc(t.name)}">${icon('trash')}</button></div>`;
+  modal(`${modalHead('Event categories', 'Calendar cards get the category whose words appear in the event title or description. Rename, recolour, add or remove them.')}
+    <div class="et-list"></div>
+    <button class="btn ghost" data-add>${icon('plus')} Add category</button>
+    <div class="modal-foot"><button class="btn ghost" data-reset>Reset to defaults</button><button class="btn primary" data-save>Save</button></div>`, {
+    wide: true,
+    onMount: (el, close) => {
+      const list = el.querySelector('.et-list');
+      const read = () => { rows = [...list.querySelectorAll('.et-row')].map((r) => ({ ...rows[Number(r.dataset.k)], color: r.querySelector('.et-color').value, name: r.querySelector('.et-name').value, words: r.querySelector('.et-words').value })); };
+      const draw = () => {
+        list.innerHTML = rows.map(rowHtml).join('');
+        list.querySelectorAll('.et-del').forEach((b) => b.onclick = () => { read(); if (rows.length < 2) return toast('Keep at least one category.', 'error'); rows.splice(Number(b.closest('.et-row').dataset.k), 1); draw(); });
+      };
+      draw();
+      el.querySelector('[data-add]').onclick = () => { read(); rows.push({ name: '', color: '#8bb8ff', words: '' }); draw(); list.querySelector('.et-row:last-child .et-name').focus(); };
+      el.querySelector('[data-reset]').onclick = async () => { try { rows = (await api('/event-types/defaults')).map((t) => ({ ...t, words: t.words.join(', ') })); draw(); } catch (err) { toast(err.message, 'error'); } };
+      el.querySelector('[data-save]').onclick = async () => {
+        read();
+        try {
+          S.state.eventTypes = await api('/event-types', { types: rows.filter((r) => r.name.trim()).map((r) => ({ id: r.id, name: r.name, color: r.color, words: r.words.split(',') })) });
+          close(); toast('Categories saved');
+          await loadFeed();
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    },
+  });
+}
+
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
@@ -570,7 +643,7 @@ function feedItemHtml(i, isNew) {
     <div class="activity-details">
       <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span><button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${icon('pin')}${i.pinned ? '<span>Pinned</span>' : ''}</button></div>
       <div class="a-title">${esc(i.title)}</div>
-      <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span><button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
+      <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
@@ -602,9 +675,11 @@ function renderFeed(animateFirst) {
   list.querySelectorAll('.activity').forEach((el) => {
     const item = S.feed.find((x) => x.id === el.dataset.id);
     el.onclick = (e) => {
-      if (e.target.closest('[data-action],[data-pin]')) return;
+      if (e.target.closest('[data-action],[data-pin],[data-type]')) return;
       openFeedItem(item);
     };
+    const tp = el.querySelector('[data-type]');
+    if (tp) tp.onclick = (e) => { e.stopPropagation(); typeMenu(tp, item); };
     el.querySelector('[data-pin]').onclick = async (e) => {
       e.stopPropagation();
       const pinned = !item.pinned;
