@@ -176,6 +176,11 @@ async function main() {
     const cal = await (await fetch(base + '/calendar?days=3')).json();
     ok('create meeting: event shows on the calendar', cal.some((e) => e.title === 'Pricing follow-up' && e.created));
     const w = require('../core/calwatch');
+    {
+      const far = new Date(Date.now() + 170 * 86400000), z = (d) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
+      const got = require('../core/connectors').parseIcs(`BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:far1\nDTSTART:${z(far)}\nDTEND:${z(new Date(+far + 3600e3))}\nSUMMARY:Spring summit\nEND:VEVENT\nEND:VCALENDAR`);
+      ok('calendars: events up to 6 months out are read', got.some((e) => e.uid === 'far1'));
+    }
     const st = {}, ev = (uid, h, title) => ({ uid, title, start: new Date(Date.now() + h * 3600e3).toISOString(), end: new Date(Date.now() + (h + 1) * 3600e3).toISOString() });
     w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 5, 'A')]));
     const n = w.diff(st, 'k', 'business', 'system', w.snapshot([ev('a', 7, 'A'), ev('b', 9, 'B')]));
@@ -202,8 +207,8 @@ async function main() {
     }
     const evs = [ev('x1', 20, 'Board prep'), ev('x2', 30, 'Dinner with Sam'), ev('x3', 200, 'Kids soccer practice')];
     ok('event questions: "when is <event>" answers "The <event> is happening <day> at <start> to <end>…" then asks what else', /^\*\*The Board prep is happening (today|tomorrow|on \w+).* at .+ to .+\.\*\* What else would you like to know about the event\?$/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*The Kids soccer practice is happening/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));
-    const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
-    ok('calendar watcher: this week\'s events become feed cards once', w.upcoming('business', 'system', up) === 1 && w.upcoming('business', 'system', up) === 0);
+    const up = [ev('c', 3, 'C'), ev('m', 24 * 150, 'Five months out'), ev('d', 24 * 200, 'Far away')];
+    ok('calendar watcher: events in the next 6 months become feed cards once', w.upcoming('business', 'system', up) === 2 && w.upcoming('business', 'system', up) === 0);
     {
       // Ryan (2026-11-04): the alerts set on calendar events post feed notifications at the same time.
       const cn = require('../core/connectors');

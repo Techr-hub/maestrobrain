@@ -251,7 +251,7 @@ function alarmsOf(block) {
   return out.filter((x) => { const k = JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new Date(Date.now() + 90 * 86400000) } = {}) {
+function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new Date(Date.now() + 184 * 86400000) } = {}) { // 6 months ahead (Ryan, 2026-11-04)
   const events = [];
   const overrides = new Map(); // uid -> Set of replaced occurrence times
   const body = unfoldIcs(text);

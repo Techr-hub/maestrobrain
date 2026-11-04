@@ -9,7 +9,7 @@ const demo = require('./demo');
 const connectors = require('./connectors');
 
 const FEED_FILE = path.join(config.DATA_DIR, 'feed.json');
-const MAX_ITEMS = 400;
+const MAX_ITEMS = 1500; // room for 6 months of calendar cards (Ryan, 2026-11-04)
 const bus = new EventEmitter();
 bus.setMaxListeners(50);
 

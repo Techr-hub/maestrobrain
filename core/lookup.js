@@ -402,9 +402,9 @@ function answer(message, ctx, { otherProfileItems = [], profile = 'business' } =
   if (r.kind === 'tickets') return ticketAnswer(r.event);
   if (r.kind === 'detail') return detailAnswer(r.event, r.detail);
   if (r.kind === 'event') {
-    if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 90 days.`;
+    if (r.past && r.titleMatch) return `**${r.past.title} was ${whenText(r.past.start)}.** There isn't another one on your calendar in the next 6 months.`;
     if (r.past) return `**${r.past.title} was ${whenText(r.past.start)}.** Nothing else like it is coming up this week.`;
-    if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 90 days.**`;
+    if (!r.events.length) return `**I don't see ${who ? `anything with ${who}` : r.want && r.want.length ? `"${r.want.join(' ')}"` : 'anything'} on your calendar in the next 6 months.**`;
     const [e, ...rest] = r.events;
     if (r.titleMatch) return whenAnswer(e);
     const mins = Math.round((new Date(e.end) - new Date(e.start)) / 60000);

@@ -86,7 +86,7 @@ async function gatherContext(message, profile) {
   const mem = memoryNotes().map((n) => ({ path: n.path, title: n.title, body: n.body.slice(0, 2500) }));
   const all = feed.list({ profile, limit: 300 });
   const items = all.slice(0, 25);
-  const allEvents = await calendar.list({ profile, days: 90 }); // questions about a specific event look further ahead
+  const allEvents = await calendar.list({ profile, days: 184 }); // questions about a specific event look further ahead
   const weekEnd = new Date(); weekEnd.setHours(0, 0, 0, 0); weekEnd.setDate(weekEnd.getDate() + 7);
   const events = allEvents.filter((e) => new Date(e.start) <= weekEnd);
   const openTasks = tasks.list({ profile }).slice(0, 15);
@@ -499,7 +499,7 @@ async function taskTarget(what, profile, focus) {
   let best = null;
   const consider = (title, make) => { const sc = score(title); if (sc >= 0.6 && (!best || sc > best.sc)) best = { sc, make }; };
   let events = [];
-  try { const today = new Date(); today.setHours(0, 0, 0, 0); events = await require('./calendar').list({ profile, from: new Date(+today - 7 * 86400000).toISOString(), days: 90 }); } catch { /* no calendar */ }
+  try { const today = new Date(); today.setHours(0, 0, 0, 0); events = await require('./calendar').list({ profile, from: new Date(+today - 7 * 86400000).toISOString(), days: 184 }); } catch { /* no calendar */ }
   for (const e of events) consider(e.title, () => asEvent(e));
   for (const it of feed.list({ profile, limit: 300 })) if (!it.removed) consider(it.title, () => ({ title: it.title.replace(/^(New( recurring event)?|Moved|Cancelled): /, ''), category: it.category, source: it.source, eventKey: it.eventKey || '', id: it.id }));
   return best ? best.make() : null;

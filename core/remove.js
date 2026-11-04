@@ -39,7 +39,7 @@ function wantsRemove(text) {
 // Find upcoming events that match what was said: words in the title/attendees, plus a day and time if given.
 async function candidates(text, profile) {
   const now = new Date();
-  const list = (await calendar.list({ profile, days: 90 })).filter((e) => new Date(e.end) > now);
+  const list = (await calendar.list({ profile, days: 184 })).filter((e) => new Date(e.end) > now);
   const m = text.toLowerCase().replace(/[’]/g, "'");
   const day = parseDate(m, now);
   const time = parseTime(m);
@@ -135,7 +135,7 @@ async function handle(text, conv, { profile, name }) {
     if (!explicit && !(VERB.test(text.toLowerCase()) && !/\b(task|to-?do|note|memory|reminder|connection|connector|skill|agent|file|message|email)\b/i.test(text))) return null;
     const found = await candidates(text, profile);
     if (!explicit && !found.length) return null;
-    if (!found.length) return { reply: `I can't find that on your calendar in the next 90 days, ${name}. Tell me the event's name or when it is.` };
+    if (!found.length) return { reply: `I can't find that on your calendar in the next 6 months, ${name}. Tell me the event's name or when it is.` };
     s = { type: 'remove', options: found.slice(0, 6), askedAt: Date.now() };
     if (found.length > 1) { s.step = 'pick'; conv.pending = s; return { reply: `I found ${found.length} that match. Which one?\n${list(found)}`, pending: true }; }
     s.event = found[0];

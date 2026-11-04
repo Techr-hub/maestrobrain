@@ -502,7 +502,7 @@ function toggleMic() {
 
 // ---------------------------------------------------------------- intelligence feed
 async function loadFeed() {
-  S.feed = await api('/feed?limit=80');
+  S.feed = await api('/feed?limit=400');
   fillSourceFilter();
   renderFeed(false);
   greet();
@@ -523,7 +523,7 @@ function fillSourceFilter() {
   sel.onchange = async () => {
     S.sourceView = null; S.source = sel.value;
     if (S.source !== 'all') { // pull that source's own history, so older cards aren't hidden behind the 80-item window
-      try { mergeFeed(await api(`/feed?source=${encodeURIComponent(S.source)}&limit=80`)); } catch {}
+      try { mergeFeed(await api(`/feed?source=${encodeURIComponent(S.source)}&limit=400`)); } catch {}
     }
     renderFeed(false);
   };
@@ -670,7 +670,7 @@ function feedItemHtml(i, isNew) {
   return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.completed ? 'completed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
-      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span></div>
+      <div class="a-head">${sourceChip(i)}</div>
       <div class="a-title">${esc(i.title)}</div>
       <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}

@@ -13,7 +13,7 @@ const eventtypes = require('./eventtypes');
 
 const FILE = path.join(config.DATA_DIR, 'calendar-seen.json');
 const ICS_SOURCES = ['icalendar', 'gcal', 'outlook'];
-const HORIZON = 60 * 86400000; // watch the next 60 days
+const HORIZON = 184 * 86400000; // watch the next 6 months (Ryan, 2026-11-04)
 const calendlyCache = new Map(); // profile -> upcoming Calendly events (for the Calendar page)
 
 function load() { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {}; } }
@@ -85,18 +85,19 @@ function diff(state, stateKey, profile, source, fresh) {
 
 // Every event in the coming week gets its own feed card, so filtering the feed by a calendar shows that calendar.
 // Cards are keyed by event + start time, so each one is posted once. Soonest events sort to the top.
-const WEEK = 7 * 86400000;
+// Ryan (2026-11-04): every event in the next 6 months gets a card (was one week).
+const WEEK = 184 * 86400000;
 function upcoming(profile, source, events, skip = new Set()) {
   const now = Date.now();
   const list = events.filter((e) => new Date(e.end) >= now && new Date(e.start) - now <= WEEK && !/@maestro$/.test(e.uid || '') && !skip.has(e.uid))
-    .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 30);
+    .sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 200);
   let n = 0;
   list.forEach((e) => {
     const start = new Date(e.start);
     const startsIn = start - now;
     const item = feed.add({
       externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
-      ts: now - 1000 - Math.max(0, startsIn) / 10000, // just under brand-new notifications; sooner events sort higher, across all calendars
+      ts: now - 1000 - Math.max(0, startsIn) / 100, // just under brand-new notifications; sooner events sort higher, across all calendars
       source, profile, category: 'MEETING', eventKey: e.uid || e.title, eventStart: start.toISOString(),
       title: e.title,
       quote: `${when(e.start, e.allDay)}${e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
@@ -145,7 +146,7 @@ function syncCards(source, events) {
     if (changed) Object.assign(f, { updated: true, updatedAt: Date.now(), unread: true });
     if (x.startsWith('cal:up:')) {
       Object.assign(f, {
-        ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 10000,
+        ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 100,
         externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
         deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
       });
