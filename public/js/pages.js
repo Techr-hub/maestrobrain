@@ -800,7 +800,9 @@ async function projectsPage(el, ctx) {
 }
 // A new project joins the brain map; its node lights up with the glow beam when you're back on the dashboard.
 async function afterProject(ctx, p) {
-  await ctx.afterChange({ feed: false });
+  // the new project's card shows at the top of the All Sources feed (Ryan, 2026-11-04)
+  S.sourceView = null; S.sourceData = null; S.source = 'all'; S.category = 'all';
+  await ctx.afterChange({ feed: true });
   S.pendingPulse = 'project:' + p.path;
   toast(`Project created: ${p.name}`);
 }

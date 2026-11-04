@@ -88,6 +88,12 @@ function dismissed() {
   return dismissedCache;
 }
 function isDismissed(i) { return dismissed().has(cardKey(i)); }
+function undismiss(key) {
+  const set = dismissed();
+  if (!set.delete(key)) return;
+  const body = JSON.stringify({ savedAt: Date.now(), keys: [...set].slice(-5000) });
+  for (const f of dismissedFiles()) { try { fs.writeFileSync(f, body); } catch { /* read-only copy */ } }
+}
 function dismiss(id) {
   const items = readAll();
   const it = items.find((i) => i.id === id);
@@ -150,7 +156,14 @@ function withType(i, cfg = config.load(), types = eventtypes.list(cfg)) {
   return { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Updated|Moved|Time changed|Cancelled|Reminder|In [^:]+|Starting now|Happening now): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) };
 }
 
-function add(raw, { emit = true } = {}) {
+function add(raw, { emit = true, replace = false } = {}) {
+  // replace: a fresh card for something new (a project made again with the same name, Ryan 2026-11-04) takes the
+  // old card's place, even if that one was cleared with its X.
+  if (replace && raw.externalId) {
+    undismiss(raw.externalId);
+    const all = readAll(), old = all.filter((i) => i.externalId === raw.externalId);
+    if (old.length) { writeAll(all.filter((i) => !old.includes(i))); old.forEach((i) => bus.emit('remove', i)); }
+  }
   if (isDismissed(raw)) return null; // cleared with the card's X
   const items = readAll();
   if (raw.externalId) {

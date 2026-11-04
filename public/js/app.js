@@ -528,11 +528,12 @@ function fillSourceFilter() {
   const cfg = S.state.config;
   const conns = cfg.connections[cfg.profile] || {};
   const sel = $('#source-filter');
-  const opts = [['all', 'All Sources'], ...S.state.connectors.filter((c) => conns[c.id]).map((c) => [c.id, c.name.replace(/ \(.*\)/, '')]), ['system', 'Maestro']];
+  const opts = [['all', 'All Sources'], ['projects', 'Projects'], ...S.state.connectors.filter((c) => conns[c.id]).map((c) => [c.id, c.name.replace(/ \(.*\)/, '')]), ['system', 'Maestro']];
   sel.innerHTML = opts.map(([v, l]) => `<option value="${v}" ${S.source === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
   sel.onchange = async () => {
     S.sourceView = null; S.source = sel.value;
-    if (S.source !== 'all') { // pull that source's own history, so older cards aren't hidden behind the 80-item window
+    if (S.source === 'projects') { try { mergeFeed(await api('/feed?category=PROJECT&limit=400')); } catch {} }
+    else if (S.source !== 'all') { // pull that source's own history, so older cards aren't hidden behind the 80-item window
       try { mergeFeed(await api(`/feed?source=${encodeURIComponent(S.source)}&limit=400`)); } catch {}
     }
     renderFeed(false);
@@ -699,13 +700,16 @@ function feedItemHtml(i, isNew) {
     </div></div>`;
 }
 
+// "Projects" in the feed's filter (Ryan, 2026-11-04): project cards, milestone reminders and reminders for project tasks.
+const isProjectCard = (i) => i.category === 'PROJECT' || i.milestone || /^Projects\//.test(i.taskPath || i.projectPath || '');
+
 // Pinned cards first (most recently pinned on top), then newest first.
 const pinFirst = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.pinned ? (b.pinnedAt || 0) - (a.pinnedAt || 0) : 0) || b.ts - a.ts;
 
 function renderFeed(animateFirst) {
   if (S.sourceView) return renderSourceView();
   const list = $('#feed-list');
-  const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source) && (S.category === 'all' || i.category === S.category)).sort(pinFirst);
+  const items = S.feed.filter((i) => (S.source === 'all' || i.source === S.source || (S.source === 'projects' && isProjectCard(i))) && (S.category === 'all' || i.category === S.category)).sort(pinFirst);
   const cfgNow = S.state.config, srcConn = S.source !== 'all' ? (cfgNow.connections[cfgNow.profile] || {})[S.source] : null;
   if (!items.length && srcConn && srcConn.mode === 'claude') { showSource(S.source); return; } // shows how to sync it from Claude
   if (!items.length && srcConn && srcConn.mode === 'live' && S.source === 'slack' && !(srcConn.fields && srcConn.fields.channels && srcConn.fields.channels.length)) {

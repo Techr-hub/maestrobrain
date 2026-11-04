@@ -216,7 +216,7 @@ const projectCard = (p) => ({
 });
 route('POST', '/api/projects', async (_q, body) => {
   const p = projects.create(body || {});
-  feed.add({ externalId: `project:${p.path}`, ts: Date.now(), source: 'system', profile: config.load().profile, category: 'PROJECT', projectPath: p.path, ...projectCard(p) });
+  feed.add({ externalId: `project:${p.path}`, ts: Date.now(), source: 'system', profile: config.load().profile, category: 'PROJECT', projectPath: p.path, unread: true, ...projectCard(p) }, { replace: true });
   return p;
 });
 route('POST', '/api/projects/update', async (_q, body) => {
