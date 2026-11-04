@@ -204,6 +204,24 @@ async function main() {
     ok('event questions: "when is <event>" answers "The <event> is happening <day> at <start> to <end>…" then asks what else', /^\*\*The Board prep is happening (today|tomorrow|on \w+).* at .+ to .+\.\*\* What else would you like to know about the event\?$/.test(lk.answer('When is board prep?', { items: [], events: evs })) && /^\*\*The Kids soccer practice is happening/.test(lk.answer('what time is kids soccer', { items: [], events: evs })));
     const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
     ok('calendar watcher: this week\'s events become feed cards once', w.upcoming('business', 'system', up) === 1 && w.upcoming('business', 'system', up) === 0);
+    {
+      // Ryan (2026-11-04): a changed time must show on refresh, and new-event cards carry the calendar's name.
+      const fd = require('../core/feed');
+      const e1 = { ...ev('rw', 10, 'Workshop rehearsal'), calendarName: 'Work' };
+      const st2 = {};
+      w.diff(st2, 'k2', 'business', 'icalendar', w.snapshot([]));
+      w.diff(st2, 'k2', 'business', 'icalendar', w.snapshot([e1]));
+      w.upcoming('business', 'icalendar', [e1], new Set(['rw']));
+      const newCard = fd.readAll().find((i) => i.source === 'icalendar' && i.eventKey === 'rw' && /^New: /.test(i.title));
+      const moved = { ...e1, start: new Date(Date.parse(e1.start) + 1800e3).toISOString(), end: new Date(Date.parse(e1.end) + 3600e3).toISOString() };
+      w.upcoming('business', 'icalendar', [e1]);
+      w.syncCards('icalendar', [moved]);
+      w.upcoming('business', 'icalendar', [moved]);
+      const cards = fd.readAll().filter((i) => i.source === 'icalendar' && i.eventKey === 'rw' && !i.removed);
+      const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      ok('calendar refresh: new-event cards are labelled with their calendar, and cards follow a changed time', newCard && newCard.calendarName === 'Work'
+        && cards.length === 2 && cards.every((c) => c.eventStart === moved.start && c.quote.includes(hm(moved.start)) && c.quote.includes(hm(moved.end))));
+    }
   }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));

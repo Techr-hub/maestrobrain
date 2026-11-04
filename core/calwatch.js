@@ -23,6 +23,8 @@ const when = (iso, allDay) => {
   const day = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   return allDay ? `${day} · all day` : `${day} · ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 };
+const until = (e) => (e.allDay ? '' : ' – ' + new Date(e.end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+const place = (e) => (e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : '');
 const viaCalendly = (e) => /calendly/i.test(`${e.description || ''} ${e.location || ''} ${e.organizer || ''}`);
 const soon = (iso) => new Date(iso) - Date.now() < 24 * 3600000;
 
@@ -33,7 +35,7 @@ function snapshot(events) {
     if (new Date(e.end) < now || new Date(e.start) - now > HORIZON) continue;
     const key = e.uid || `${e.title}|${e.start}`;
     if (out[key] && out[key].start <= e.start) continue; // keep the next occurrence of a series
-    out[key] = { title: e.title, start: e.start, end: e.end, allDay: !!e.allDay, recurring: !!e.recurring, location: e.location || '', calendly: viaCalendly(e) };
+    out[key] = { title: e.title, start: e.start, end: e.end, allDay: !!e.allDay, recurring: !!e.recurring, location: e.location || '', calendarName: e.calendarName || '', calendly: viaCalendly(e) };
   }
   return out;
 }
@@ -48,11 +50,12 @@ function post(profile, source, kind, key, e, extra = {}) {
     if (known) return;
   }
   const name = (connectors.get(source) || {}).name || 'Calendar';
-  const title = { new: e.recurring ? `New recurring event: ${e.title}` : `New: ${e.title}`, moved: `Moved: ${e.title}`, cancelled: `Cancelled: ${e.title}` }[kind];
+  const title = { new: e.recurring ? `New recurring event: ${e.title}` : `New: ${e.title}`, moved: `${extra.was === e.start ? 'Time changed' : 'Moved'}: ${e.title}`, cancelled: `Cancelled: ${e.title}` }[kind];
   feed.add({
-    externalId: `cal:${kind}:${source}:${key}:${kind === 'cancelled' ? '' : e.start}`,
+    externalId: `cal:${kind}:${source}:${key}:${kind === 'cancelled' ? '' : e.start}${kind === 'moved' ? ':' + e.end : ''}`,
     ts: Date.now(), source, profile, category: 'MEETING', title, eventKey: key, eventStart: kind === 'cancelled' ? '' : e.start,
-    quote: kind === 'moved' ? `Now ${when(e.start, e.allDay)} (was ${when(extra.was, e.allDay)})` : `${when(e.start, e.allDay)}${extra.with ? ' · with ' + extra.with.join(', ') : ''}${e.location && !/^https?:/.test(e.location) ? ' · ' + e.location : ''}`,
+    quote: kind === 'moved' ? `Now ${when(e.start, e.allDay)}${until(e)} (was ${when(extra.was, e.allDay)}${extra.wasEnd ? until({ end: extra.wasEnd }) : ''})` : `${when(e.start, e.allDay)}${until(e)}${extra.with ? ' · with ' + extra.with.join(', ') : ''}${place(e)}`,
+    calendarName: e.calendarName || '',
     summary: e.calendly || source === 'calendly' ? 'Booked through Calendly' : kind === 'cancelled' ? `Removed from ${name}` : `${kind === 'new' ? 'Added to' : 'Updated in'} ${name}`,
     priority: kind !== 'cancelled' && soon(e.start) ? 'Medium' : '',
     deadline: kind === 'cancelled' ? '' : `Starts ${when(e.start, e.allDay)}`,
@@ -70,7 +73,7 @@ function diff(state, stateKey, profile, source, fresh) {
   for (const [key, e] of Object.entries(fresh)) {
     if (/@maestro$/.test(key)) continue; // created by Maestro: already in the feed
     const old = prev.events[key];
-    if (!old) { post(profile, source, 'new', key, e); n++; } else if (!e.recurring && old.start !== e.start) { post(profile, source, 'moved', key, e, { was: old.start }); n++; }
+    if (!old) { post(profile, source, 'new', key, e); n++; } else if (!e.recurring && (old.start !== e.start || (old.end && old.end !== e.end))) { post(profile, source, 'moved', key, e, { was: old.start, wasEnd: old.end }); n++; }
   }
   for (const [key, e] of Object.entries(prev.events)) {
     if (!fresh[key] && new Date(e.end) > Date.now() && !e.recurring) { post(profile, source, 'cancelled', key, e); n++; }
@@ -108,10 +111,43 @@ function upcoming(profile, source, events, skip = new Set()) {
   return n;
 }
 
-let running = false;
+// Refresh every card already in the feed for these events, so a changed time, title, place, description or calendar
+// shows straight away instead of the card keeping what the calendar said when it was first posted (Ryan, 2026-11-04).
+// A one-off event's agenda card follows the event to its new time; a repeating event's cards match by occurrence.
+function syncCards(source, events) {
+  const byKey = new Map();
+  for (const e of events) { const k = e.uid || e.title; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(e); }
+  return feed.updateCards((i) => i.source === source && i.eventKey && byKey.has(i.eventKey) && !/^Cancelled: /.test(i.title || ''), (i) => {
+    const list = byKey.get(i.eventKey);
+    const e = list.length === 1 && !list[0].recurring ? list[0] : list.find((x) => new Date(x.start).toISOString() === new Date(i.eventStart || 0).toISOString());
+    if (!e) return null;
+    const start = new Date(e.start);
+    const x = String(i.externalId || '');
+    const f = { calendarName: e.calendarName || i.calendarName || '', description: e.description === 'calendly' ? undefined : feed.eventText(e) || i.description };
+    if (x.startsWith('cal:up:')) {
+      Object.assign(f, {
+        title: e.title, eventStart: start.toISOString(), ts: Date.now() - 1000 - Math.max(0, start - Date.now()) / 10000,
+        externalId: `cal:up:${source}:${e.uid || e.title}:${start.toISOString()}`,
+        quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`,
+        deadline: e.allDay ? '' : `Starts ${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      });
+      if (!viaCalendly(e)) f.summary = `Coming up${e.calendarName ? ` on your "${e.calendarName}" calendar` : ''}${e.recurring ? ' · repeats' : ''}`;
+    } else if (x.startsWith('cal:new:')) {
+      Object.assign(f, { title: `${/^New recurring/.test(i.title) ? 'New recurring event' : 'New'}: ${e.title}`, eventStart: start.toISOString(), quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`, deadline: `Starts ${when(e.start, e.allDay)}` });
+    }
+    return f;
+  });
+}
+
+// One check at a time. A refresh that lands while the minute check is still running waits for it and then reads the
+// calendars again, so the refresh button always gets the latest (it used to return straight away with nothing).
+let running = null;
 async function check() {
-  if (running) return 0;
-  running = true;
+  if (running) { await running.catch(() => {}); if (running) return running; }
+  running = run().finally(() => { running = null; });
+  return running;
+}
+async function run() {
   let posted = 0;
   try {
     const cfg = config.load();
@@ -123,6 +159,7 @@ async function check() {
           if (ICS_SOURCES.includes(id)) {
             for (const url of connectors.calendarUrls(conn.fields)) {
               const events = await connectors.fetchIcs(url);
+              syncCards(id, events);
               const key = `${profile}|${id}|${url}`;
               const before = state[key] ? new Set(Object.keys(state[key].events)) : null;
               posted += diff(state, key, profile, id, snapshot(events));
@@ -134,6 +171,7 @@ async function check() {
             const me = await connectors.calendlyMe(conn.fields.token);
             const events = await connectors.calendlyEvents(conn.fields.token, me.uri);
             calendlyCache.set(profile, events);
+            syncCards('calendly', events.map((e) => ({ ...e, description: 'calendly' })));
             const skipNew = state[`${profile}|calendly`] ? new Set(events.map((e) => e.uid).filter((u) => !state[`${profile}|calendly`].events[u])) : new Set();
             const key = `${profile}|calendly`;
             const fresh = snapshot(events);
@@ -154,11 +192,11 @@ async function check() {
       }
     }
     save(state);
-  } finally { running = false; }
+  } catch (e) { /* one bad calendar read must not stop the watcher */ }
   return posted;
 }
 
 function calendlyUpcoming(profile) { return calendlyCache.get(profile) || []; }
 function forgetCalendly(profile, uri) { const list = calendlyCache.get(profile); if (list) calendlyCache.set(profile, list.filter((e) => e.uid !== uri)); }
 
-module.exports = { check, diff, snapshot, upcoming, calendlyUpcoming, forgetCalendly };
+module.exports = { check, diff, snapshot, upcoming, syncCards, calendlyUpcoming, forgetCalendly };

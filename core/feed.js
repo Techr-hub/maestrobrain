@@ -180,6 +180,25 @@ function markRemoved(match) {
   if (hit.length) { writeAll(items); hit.forEach((i) => bus.emit('update', i)); }
   return hit.length;
 }
+// Bring an event's existing cards up to date with what the calendar says now (Ryan, 2026-11-04: a changed time didn't
+// show after a refresh). match(item) picks the cards; fields(item) returns what to change. Re-sent to open dashboards.
+function updateCards(match, fields) {
+  let items = readAll();
+  const hit = [], drop = new Set();
+  for (const i of items) {
+    if (i.removed || !match(i)) continue;
+    const f = fields(i) || {};
+    // a card for the event's new time is already there (an older refresh posted it): this stale copy goes
+    if (f.externalId && f.externalId !== i.externalId && items.some((o) => o !== i && o.externalId === f.externalId)) { drop.add(i.id); continue; }
+    const changed = Object.keys(f).filter((k) => f[k] !== undefined && i[k] !== f[k]);
+    if (!changed.length) continue;
+    changed.forEach((k) => { i[k] = f[k]; });
+    hit.push(i);
+  }
+  if (drop.size) { items = items.filter((i) => !drop.has(i.id)); drop.forEach((id) => bus.emit('remove', { id })); }
+  if (hit.length || drop.size) { writeAll(items); hit.forEach((i) => bus.emit('update', i)); }
+  return hit.length + drop.size;
+}
 // Cards that belong to one event: agenda, new/moved notices and "New:" cards Maestro posted when creating it.
 function eventMatcher(e, { series = false } = {}) {
   const key = e.uid || e.title;
@@ -313,4 +332,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { markTaskDone, dropTaskReminders, list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { updateCards, markTaskDone, dropTaskReminders, list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

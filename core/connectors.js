@@ -278,7 +278,7 @@ function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new 
 
 async function fetchIcs(url) {
   const u = url.trim().replace(/^webcals?:/i, 'https:');
-  const get = (x) => fetch(x, { headers: { 'User-Agent': 'Maestro-Brain', Accept: 'text/calendar, */*' }, redirect: 'follow' });
+  const get = (x) => fetch(x, { headers: { 'User-Agent': 'Maestro-Brain', Accept: 'text/calendar, */*', 'Cache-Control': 'no-cache', Pragma: 'no-cache' }, redirect: 'follow', cache: 'no-store' });
   let res;
   try { res = await get(u); } catch (e) {
     // a few webcal servers only speak plain http
