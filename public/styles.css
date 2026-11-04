@@ -434,7 +434,7 @@ code, .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size:
 .field label.chan-row { text-transform: none; letter-spacing: normal; font-family: inherit; color: var(--text, inherit); margin: 0; }
 
 /* Source chip at the top of each feed card: coloured name + calendar mark */
-.a-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.a-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; margin-bottom: 15px; }
 .src-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 8px 2px 4px; border-radius: 999px;
   background: color-mix(in srgb, var(--sc) 16%, transparent); border: 1px solid color-mix(in srgb, var(--sc) 45%, transparent); font-size: 11.5px; line-height: 1.4; }
 .src-chip svg { width: 14px; height: 14px; flex: none; color: var(--sc); }
@@ -663,3 +663,11 @@ button.wk-dh:hover b { color: var(--cyan); }
 .et-color { width: 38px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-deep); cursor: pointer; }
 .et-del { width: 36px; height: 36px; }
 @media (max-width: 640px) { .et-row { grid-template-columns: 38px 1fr 36px; } .et-words { grid-column: 1 / -1; } }
+
+/* Card footer (Ryan, 2026-11-04): actions on the left, the pin at the bottom right; the task button is the blue one. */
+.a-foot { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; min-height: 22px; }
+.a-foot .a-actions { margin-top: 0; }
+.a-foot .pin-btn { margin-left: auto; }
+.a-actions button.task-btn { display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(180deg, #3d8bff, #1f5fd6); border-color: #5aa0ff; color: #fff; font-weight: 600; cursor: pointer; }
+.a-actions button.task-btn:hover { filter: brightness(1.12); border-color: #5aa0ff; color: #fff; }
+.a-actions button.task-btn .icon { width: 12px; height: 12px; }

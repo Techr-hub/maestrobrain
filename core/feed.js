@@ -140,10 +140,14 @@ function list({ profile, source, category, limit = 60 } = {}) {
   if (source && source !== 'all') items = items.filter((i) => i.source === source);
   if (category && category !== 'all') items = items.filter((i) => i.category === category);
   items.sort(byPinThenTime);
-  // Calendar cards carry an event type (Meeting, Workshop, Call…) for their label (Ryan, 2026-11-04).
   const types = eventtypes.list(cfg);
-  return items.slice(0, limit).map((i) => (i.category === 'MEETING' && !(i.eventType && types.some((t) => t.id === i.eventType))
-    ? { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) } : i));
+  return items.slice(0, limit).map((i) => withType(i, cfg, types));
+}
+// Calendar cards carry an event type (Meeting, Workshop, Call…) for their label (Ryan, 2026-11-04). Every card sent to
+// the dashboard goes through this, including live updates, so the label and its dropdown are always there.
+function withType(i, cfg = config.load(), types = eventtypes.list(cfg)) {
+  if (!i || i.category !== 'MEETING' || (i.eventType && types.some((t) => t.id === i.eventType))) return i;
+  return { ...i, eventType: eventtypes.typeFor({ title: String(i.title || '').replace(/^(New( recurring event)?|Moved|Time changed|Cancelled|Reminder|In [^:]+|Starting now|Happening now): /, ''), description: `${i.description || ''} ${i.quote || ''}`, eventKey: i.eventKey || i.id }, i.source, cfg) };
 }
 
 function add(raw, { emit = true } = {}) {
@@ -336,4 +340,4 @@ async function pollLive() {
   return results;
 }
 
-module.exports = { updateCards, markTaskDone, dropTaskReminders, list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };
+module.exports = { withType, updateCards, markTaskDone, dropTaskReminders, list, add, dismiss, eventText, markRead, setPinned, byPinThenTime, markRemoved, eventMatcher, surfaceSource, surfacePack, reset, nextDemoItem, pollLive, bus, readAll };

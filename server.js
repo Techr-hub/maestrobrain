@@ -33,8 +33,8 @@ function broadcast(type, data) {
   for (const res of clients) res.write(msg);
 }
 const seenIds = new Set(feed.readAll().map((i) => i.id));
-feed.bus.on('item', (item) => { seenIds.add(item.id); broadcast('feed', item); });
-feed.bus.on('update', (item) => broadcast('feed-update', item));
+feed.bus.on('item', (item) => { seenIds.add(item.id); broadcast('feed', feed.withType(item)); });
+feed.bus.on('update', (item) => broadcast('feed-update', feed.withType(item)));
 feed.bus.on('remove', (item) => broadcast('feed-remove', { id: item.id }));
 
 // Every repeating job goes through every(), so an update-restart can stop them all (see watchForUpdates).
@@ -62,7 +62,7 @@ every(() => {
     feedMtime = st.mtimeMs;
     const all = feed.readAll();
     for (const it of all.slice(0, 20)) if (!seenIds.has(it.id)) { seenIds.add(it.id); broadcast('feed', it); }
-    for (const it of all) if (it.removedAt && it.removedAt > lastRemovedScan) broadcast('feed-update', it); // greyed out from Claude Desktop
+    for (const it of all) if (it.removedAt && it.removedAt > lastRemovedScan) broadcast('feed-update', feed.withType(it)); // greyed out from Claude Desktop
     lastRemovedScan = Date.now();
   } catch { /* no feed yet */ }
 }, 2000);

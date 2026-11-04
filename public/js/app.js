@@ -593,6 +593,7 @@ function typeMenu(btn, item) {
     if (type === item.eventType) return;
     const same = (x) => x.source === item.source && (item.eventKey ? x.eventKey === item.eventKey : x.id === item.id);
     S.feed.forEach((x) => { if (same(x)) x.eventType = type; });
+    ((S.sourceData && S.sourceData.items) || []).forEach((x) => { if (same(x)) x.eventType = type; });
     renderFeed(false);
     try { await api('/feed/event-type', { id: item.id, type }); } catch (err) { toast('Could not change it: ' + err.message, 'error'); }
   });
@@ -634,6 +635,32 @@ function editEventTypes() {
   });
 }
 
+// One card's buttons, the same in the main feed and in a source or hub view (Ryan, 2026-11-04: the category dropdown
+// did nothing in the Calendar hub view because only the main feed wired it).
+const cardItem = (id) => S.feed.find((x) => x.id === id) || ((S.sourceData && S.sourceData.items) || []).find((x) => x.id === id);
+function wireCard(el) {
+  const item = cardItem(el.dataset.id);
+  if (!item) return;
+  el.onclick = (e) => { if (e.target.closest('[data-action],[data-pin],[data-type],[data-dismiss]')) return; openFeedItem(item); };
+  const tp = el.querySelector('[data-type]');
+  if (tp) tp.onclick = (e) => { e.stopPropagation(); typeMenu(tp, item); };
+  const pin = el.querySelector('[data-pin]');
+  if (pin) pin.onclick = async (e) => {
+    e.stopPropagation();
+    const pinned = !item.pinned;
+    for (const x of [S.feed.find((y) => y.id === item.id), item]) if (x) Object.assign(x, { pinned, pinnedAt: pinned ? Date.now() : 0 });
+    renderFeed(false);
+    try { await api('/feed/pin', { id: item.id, pinned }); } catch (err) { toast('Could not pin: ' + err.message, 'error'); }
+  };
+  el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async (e) => {
+    e.stopPropagation();
+    if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } // note, action items, deadline
+    await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
+    toast(`Task added: ${b.dataset.action}`);
+    markRead(item);
+  });
+}
+
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
   const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
@@ -641,7 +668,7 @@ function feedItemHtml(i, isNew) {
   return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.completed ? 'completed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
     <div class="activity-details">
-      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span><button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${icon('pin')}${i.pinned ? '<span>Pinned</span>' : ''}</button></div>
+      <div class="a-head">${sourceChip(i)}<span class="a-time">${timeAgo(i.ts)}</span></div>
       <div class="a-title">${esc(i.title)}</div>
       <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
@@ -649,7 +676,7 @@ function feedItemHtml(i, isNew) {
       ${i.summary ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}
       ${meta ? `<div class="a-meta">${meta}</div>` : ''}
       ${typeof i.progress === 'number' ? `<div class="progress"><div class="track"><div class="bar" style="width:${i.progress}%"></div></div><span>${i.progress}%</span></div>` : ''}
-      ${i.actions && i.actions.length && !i.removed ? `<div class="a-actions">${i.actions.map((a) => `<button data-action="${esc(a)}">${esc(a)}</button>`).join('')}</div>` : ''}
+      <div class="a-foot">${i.actions && i.actions.length && !i.removed ? `<div class="a-actions">${i.actions.map((a) => `<button data-action="${esc(a)}" class="${/task/i.test(a) ? 'task-btn' : ''}">${/task/i.test(a) ? icon('plus') : ''}${esc(a)}</button>`).join('')}</div>` : ''}<button class="pin-btn ${i.pinned ? 'on' : ''}" data-pin title="${i.pinned ? 'Unpin' : 'Pin to the top of the feed'}" aria-label="${i.pinned ? 'Unpin card' : 'Pin card'}" aria-pressed="${!!i.pinned}">${i.pinned ? '<span>Pinned</span>' : ''}${icon('pin')}</button></div>
     </div></div>`;
 }
 
@@ -672,28 +699,7 @@ function renderFeed(animateFirst) {
     return;
   }
   list.innerHTML = items.map((i, k) => feedItemHtml(i, animateFirst && k === 0)).join('');
-  list.querySelectorAll('.activity').forEach((el) => {
-    const item = S.feed.find((x) => x.id === el.dataset.id);
-    el.onclick = (e) => {
-      if (e.target.closest('[data-action],[data-pin],[data-type]')) return;
-      openFeedItem(item);
-    };
-    const tp = el.querySelector('[data-type]');
-    if (tp) tp.onclick = (e) => { e.stopPropagation(); typeMenu(tp, item); };
-    el.querySelector('[data-pin]').onclick = async (e) => {
-      e.stopPropagation();
-      const pinned = !item.pinned;
-      Object.assign(item, { pinned, pinnedAt: pinned ? Date.now() : 0 });
-      renderFeed(false);
-      try { await api('/feed/pin', { id: item.id, pinned }); } catch (err) { toast('Could not pin: ' + err.message, 'error'); }
-    };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => {
-      if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } // note, action items, deadline
-      await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) });
-      toast(`Task added: ${b.dataset.action}`);
-      markRead(item);
-    });
-  });
+  list.querySelectorAll('.activity[data-id]').forEach((el) => wireCard(el));
   const unread = S.feed.some((i) => i.unread);
   $('#bell-dot').hidden = !unread;
 }
@@ -761,11 +767,7 @@ function renderSourceView() {
   const cp = list.querySelector('#src-copy');
   if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(`Sync my ${conn.name} into Maestro: read my latest ${conn.name} activity with your connector and add it with the Maestro add_feed_items tool.`); toast('Copied. Paste it into Claude Desktop.'); } catch { toast('Copy failed. Use the Maestro prompt in Claude Desktop instead.', 'error'); } };
   list.querySelectorAll('[data-note]').forEach((el) => el.onclick = () => openNote(el.dataset.note));
-  list.querySelectorAll('.activity[data-id]').forEach((el) => {
-    const item = S.feed.find((x) => x.id === el.dataset.id);
-    el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
-  });
+  list.querySelectorAll('.activity[data-id]').forEach((el) => wireCard(el));
 }
 
 // A hub (Email, Calendar, Messages, Calls, Projects): everything from its connected sources in one place.
@@ -804,11 +806,7 @@ function renderHubView(d) {
   list.querySelectorAll('[data-member]').forEach((b) => b.onclick = () => openConnect(b.dataset.member));
   list.querySelectorAll('[data-make]').forEach((b) => b.onclick = () => b.dataset.make ? openConnect(b.dataset.make) : pickConnection(d, openConnect));
   list.querySelectorAll('[data-note]').forEach((el) => el.onclick = () => openNote(el.dataset.note));
-  list.querySelectorAll('.activity[data-id]').forEach((el) => {
-    const item = S.feed.find((x) => x.id === el.dataset.id);
-    el.onclick = (e) => { if (!e.target.closest('[data-action]')) openFeedItem(item); };
-    el.querySelectorAll('[data-action]').forEach((b) => b.onclick = async () => { if (b.dataset.action === 'Add Task') { markRead(item); return eventTaskForm(item); } await api('/tasks', { text: `${b.dataset.action}: ${item.title}`, priority: item.priority || undefined, section: sectionOf(item) }); toast(`Task added: ${b.dataset.action}`); markRead(item); });
-  });
+  list.querySelectorAll('.activity[data-id]').forEach((el) => wireCard(el));
 }
 
 // "Make Connection" on a hub: pick which service to connect.
