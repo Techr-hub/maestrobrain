@@ -663,7 +663,9 @@ function wireCard(el) {
 
 function feedItemHtml(i, isNew) {
   const cat = CATEGORY[i.category] || CATEGORY.INSIGHT;
-  const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', i.deadline ? `<span class="dead">${esc(i.deadline)}</span>` : ''].filter(Boolean).join(' · ');
+  // Calendar cards already show their time in the quote, so their "Starts …" line isn't repeated (Ryan, 2026-11-04).
+  const deadline = i.deadline && !/^Starts /.test(i.deadline) ? i.deadline : '';
+  const meta = [i.priority ? `<span class="pri-${i.priority}">${esc(i.priority)} Priority</span>` : '', deadline ? `<span class="dead">${esc(deadline)}</span>` : ''].filter(Boolean).join(' · ');
   const calColor = CAL_MARK[i.source] || i.category === 'MEETING' ? '#00e5ff' : cat.c; // calendar cards use the Calendar hub's aqua (Ryan, 2026-11-02)
   return `<div class="activity ${isNew ? 'new' : ''} ${i.removed ? 'removed' : ''} ${i.completed ? 'completed' : ''} ${i.pinned ? 'pinned' : ''}" data-id="${i.id}" style="--c:${calColor}">
     <div class="agent-icon">${icon(cat.icon)}</div>
