@@ -4,7 +4,7 @@ import { renderMarkdown, stripMarkdown, esc } from './md.js';
 import { BrainMap, avatar as makeAvatar } from './brainmap.js';
 import { Voice, voiceSupported } from './voice.js';
 import { S, api, refreshState, toast, timeAgo, modal, modalHead, openNote, wireWikilinks, closeDrawer } from './core.js';
-import { PAGES, onboarding, knowledgeModal, connectModal, dueFields, wireDueFields } from './pages.js';
+import { PAGES, onboarding, knowledgeModal, connectModal, dueFields, wireDueFields, projectStatus } from './pages.js';
 import { monthCalendar } from './calendar-ui.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -199,7 +199,7 @@ function buildDashboard() {
 
   brain = new BrainMap(dashboardEl.querySelector('#brain-canvas'), {
     tooltip: dashboardEl.querySelector('#brain-tip'),
-    onNodeClick: (n) => (n.kind === 'note' ? openNote(n.id) : showSource(n.id)), // a project node shows just its card (Ryan, 2026-11-04) // hubs use 'hub:<id>'
+    onNodeClick: (n) => { S.sourceBack = null; return n.kind === 'note' ? openNote(n.id) : showSource(n.id); }, // a project node shows just its card (Ryan, 2026-11-04) // hubs use 'hub:<id>'
     onLayout: (b) => { const st = dashboardEl.querySelector('#subtitle'); if (st) { st.style.top = b.subY + 'px'; st.style.left = b.subX + 'px'; } },
   });
   window.maestroBrain = brain;
@@ -747,11 +747,39 @@ function renderProjectView(d) {
   const list = $('#feed-list');
   list.innerHTML = `<div class="src-head" style="--c:#00f2af"><button class="src-back" id="src-back" title="Back to all activity">${icon('arrow-right')}</button><span class="agent-icon">${icon('folder')}</span><div><b>${esc(d.name)}</b><div><span class="tag live">Project</span></div></div></div>`
     + (d.items.length ? d.items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">This project is no longer in your vault.</div>`);
-  list.querySelector('#src-back').onclick = closeSource;
+  const back = S.sourceBack; // opened from the Projects list: back goes to the list
+  list.querySelector('#src-back').onclick = () => { S.sourceBack = null; if (back) showSource(back); else closeSource(); };
   list.querySelectorAll('.activity[data-id]').forEach((el) => wireCard(el));
 }
 
-function closeSource() { S.sourceView = null; S.sourceData = null; if (brain) brain.selectedSource = null; renderFeed(false); }
+function projectListCard(p) {
+  const open = (p.taskList || []).filter((t) => !t.done), done = (p.taskList || []).length - open.length;
+  const today = new Date().toISOString().slice(0, 10);
+  return `<div class="activity proj-card" data-proj="${esc(p.path)}" style="--c:#00f2af" tabindex="0" role="button" aria-label="Open ${esc(p.name)}">
+    <div class="agent-icon">${icon('folder')}</div>
+    <div class="activity-details">
+      <div class="a-title">${esc(p.name)}</div>
+      <div class="a-cat"><span class="pill proj-status ${p.progress >= 100 ? 'done' : ''}">${esc(projectStatus(p))}</span></div>
+      ${p.client ? `<div class="pc-client">${icon('briefcase')}${esc(p.client)}</div>` : ''}
+      ${p.description ? `<div class="a-desc">${esc(p.description)}</div>` : ''}
+      <div class="pc-tasks"><div class="pc-sub">Tasks <span>${open.length} open${done ? ` · ${done} done` : ''}</span></div>
+        ${open.length ? open.slice(0, 3).map((t) => `<div class="pc-task"><i></i><span>${esc(t.text)}</span>${t.due ? `<small class="${t.due < today ? 'late' : ''}">${new Date(t.due + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric' })}</small>` : ''}</div>`).join('') + (open.length > 3 ? `<div class="pc-more">+${open.length - 3} more</div>` : '') : `<div class="pc-none">${done ? 'All tasks done.' : 'No tasks yet.'}</div>`}</div>
+      ${p.progress != null ? `<div class="progress"><div class="track"><div class="bar" style="width:${p.progress}%"></div></div><span>${p.progress}%</span></div>` : ''}
+    </div></div>`;
+}
+async function fillProjectList(el, hubId) {
+  let list = [];
+  try { list = await api('/projects'); } catch (e) { el.innerHTML = `<div class="feed-empty" style="padding:18px">${esc(e.message)}</div>`; return; }
+  if (S.sourceView !== hubId) return;
+  el.innerHTML = list.length ? list.map(projectListCard).join('') : `<div class="feed-empty" style="padding:18px">No projects yet. Create one on the <a href="#projects" data-go>Projects</a> page.</div>`;
+  const go = el.querySelector('[data-go]'); if (go) go.onclick = (e) => { e.preventDefault(); navigate('projects'); };
+  el.querySelectorAll('[data-proj]').forEach((c) => {
+    const open = () => { S.sourceBack = hubId; showSource('project:' + c.dataset.proj); };
+    c.onclick = open; c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  });
+}
+
+function closeSource() { S.sourceBack = null; S.sourceView = null; S.sourceData = null; if (brain) brain.selectedSource = null; renderFeed(false); }
 
 function dayLabel(d) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
@@ -823,18 +851,19 @@ function renderHubView(d) {
   if (!on.length && d.kind !== 'projects') html += notice(`No ${esc(d.name.toLowerCase())} connected yet`, `Connect ${d.members.map((m) => esc(m.name)).join(', ').replace(/, ([^,]*)$/, ' or $1')} to ${d.kind === 'calendar' ? 'see your schedule here' : 'stream it into your feed'}.`, false, '');
   for (const m of bad) html += notice(`${esc(m.name)} connection failed`, esc(m.error), true, m.id);
   if (d.kind === 'calendar' && on.length) html += `<div id="hub-month"></div>`; // month calendar, filled in below
-  if (d.kind === 'projects') {
-    html += `<div class="section-title" style="margin:14px 4px 6px">Projects in your vault</div>` + (d.notes.length ? d.notes.map((n) => `<div class="sched-ev" style="--c:${d.color}" data-note="${esc(n.path)}"><div class="sched-body" style="flex:1"><b>${esc(n.title)}</b>${n.status ? `<small>${esc(n.status)}${n.due ? ' · due ' + esc(n.due) : ''}</small>` : ''}${typeof n.progress === 'number' && !isNaN(n.progress) ? `<div class="progress"><div class="track"><div class="bar" style="width:${n.progress}%"></div></div><span>${n.progress}%</span></div>` : ''}</div></div>`).join('') : '<div class="feed-empty" style="padding:18px">No project notes yet. Add notes to the Projects folder.</div>');
-    if (!on.length) html += notice('Connect a project tool', 'Install a role pack, then connect Linear, Jira, Notion, GitHub or Figma to stream updates here.', false, '');
-  }
+  // The Projects hub lists your projects as cards (Ryan, 2026-11-04): name, client, 2 lines of description, tasks
+  // and how complete it is. Clicking one shows that project's own card.
+  if (d.kind === 'projects') html += `<div id="hub-projects"><div class="feed-empty" style="padding:18px">Loading projects…</div></div>`;
   const ids = new Set(on.map((m) => m.id));
   const items = S.feed.filter((i) => d.categories.includes(i.category) && (ids.has(i.source) || (d.kind === 'projects' && i.source === 'system')));
-  if (on.length || d.kind === 'projects') {
+  if (on.length && d.kind !== 'projects') {
     html += `<div class="section-title" style="margin:14px 4px 6px">Recent activity</div>`;
     html += items.length ? items.map((i) => feedItemHtml(i, false)).join('') : `<div class="feed-empty" style="padding:18px">Nothing new.</div>`;
   }
   list.innerHTML = html;
   list.querySelector('#src-back').onclick = closeSource;
+  const hp = list.querySelector('#hub-projects');
+  if (hp) fillProjectList(hp, d.id);
   const hm = list.querySelector('#hub-month');
   if (hm) { const ids = new Set(on.map((m) => m.id)); monthCalendar(hm, { filter: (e) => ids.has(e.source) || e.source === 'maestro' || (e.created && !e.calendarFor), ask: (t) => ask(t) }); }
   const prof = S.state.config.profile;

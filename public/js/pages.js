@@ -752,6 +752,8 @@ export async function onboarding({ after, afterChange }) {
 // ================================================================ PROJECTS (Ryan, 2026-11-04)
 // Each project is a note in Projects/ (name, description, client, start, milestones, completion) with its tasks.
 // Cards show the details and the attached tasks; tasks can be ticked and added right on the card.
+// "75% complete" (Ryan, 2026-11-04): on the Projects page and the Projects hub's list in the feed.
+export function projectStatus(p) { return p.progress == null ? 'No tasks yet' : p.progress >= 100 ? 'Complete' : `${p.progress}% complete`; }
 const fmtDay = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 async function projectsPage(el, ctx) {
   const list = await api('/projects');
@@ -764,7 +766,7 @@ async function projectsPage(el, ctx) {
       <header class="proj-head"><span class="proj-icon">${icon('folder')}</span><div class="proj-title"><h3>${esc(p.name)}</h3>${p.client ? `<span class="proj-client">${icon('briefcase')}${esc(p.client)}</span>` : ''}</div>
         <button class="t-edit" data-edit="${k}" title="Edit project" aria-label="Edit ${esc(p.name)}">${icon('pencil')}</button></header>
       ${p.description ? `<p class="proj-desc">${esc(p.description)}</p>` : ''}
-      <dl class="proj-dates"><div><dt>Start</dt><dd>${fmtDay(p.start) || '—'}</dd></div><div><dt>Completion</dt><dd class="${late ? 'late' : ''}">${fmtDay(p.completion) || '—'}</dd></div>${p.status ? `<div><dt>Status</dt><dd>${esc(p.status)}</dd></div>` : ''}</dl>
+      <dl class="proj-dates"><div><dt>Start</dt><dd>${fmtDay(p.start) || '—'}</dd></div><div><dt>Completion</dt><dd class="${late ? 'late' : ''}">${fmtDay(p.completion) || '—'}</dd></div><div><dt>Status</dt><dd class="proj-pct ${p.progress >= 100 ? 'done' : ''}">${esc(projectStatus(p))}</dd></div></dl>
       ${pct != null ? `<div class="progress"><div class="track"><div class="bar" style="width:${pct}%"></div></div><span>${pct}%</span></div>` : ''}
       ${p.milestones.length ? `<div class="proj-sub">Milestones</div><ol class="proj-ms">${p.milestones.map((m) => `<li class="${m.date && m.date < today ? 'past' : ''} ${p.nextMilestone && m === p.milestones.find((x) => x.date === p.nextMilestone.date && x.name === p.nextMilestone.name) ? 'next' : ''}"><i></i><b>${esc(m.name || 'Milestone')}</b><span>${fmtDay(m.date) || 'No date'}</span></li>`).join('')}</ol>` : ''}
       <div class="proj-sub">Tasks <span>${open.length} open${done.length ? ` · ${done.length} done` : ''}</span></div>
