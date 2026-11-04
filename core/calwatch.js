@@ -142,6 +142,53 @@ function syncCards(source, events) {
 
 // One check at a time. A refresh that lands while the minute check is still running waits for it and then reads the
 // calendars again, so the refresh button always gets the latest (it used to return straight away with nothing).
+// The alerts set on calendar events (Ryan, 2026-11-04): each one posts a feed notification at the same moment the
+// calendar would alert you ("In 15 minutes: …"). One card per alert per occurrence; an alert is only posted within
+// 30 minutes of its time and before the event ends, so an alert missed while Maestro was closed isn't posted late.
+const LATE = 30 * 60000;
+const inWords = (ms) => {
+  const m = Math.round(ms / 60000);
+  if (m <= 0) return 'Now';
+  if (m < 60) return `In ${m} minute${m === 1 ? '' : 's'}`;
+  const h = m / 60;
+  if (h < 24) return `In ${Number.isInteger(h) ? h : h.toFixed(1)} hour${h === 1 ? '' : 's'}`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'Tomorrow' : `In ${d} days`;
+};
+function alertTime(e, a) {
+  if (a.at) return Date.parse(a.at);
+  if (a.beforeEnd != null) return Date.parse(e.end) - a.beforeEnd;
+  return Date.parse(e.start) - (a.before || 0);
+}
+function alerts(profile, source, events, now = Date.now()) {
+  let n = 0;
+  for (const e of events) {
+    if (!e.alarms || !e.alarms.length || /@maestro$/.test(e.uid || '')) continue;
+    const start = Date.parse(e.start), end = Date.parse(e.end);
+    if (now > end) continue;
+    // the latest alert that is due (if two are due at once, only the nearer one is posted)
+    const due = e.alarms.map((a) => ({ a, t: alertTime(e, a) })).filter((x) => x.t <= now && now - x.t < LATE).sort((x, y) => y.t - x.t)[0];
+    if (!due) continue;
+    const key = e.uid || e.title;
+    const tag = due.a.at ? 'at' + due.a.at : due.a.beforeEnd != null ? 'end' + due.a.beforeEnd : String(due.a.before || 0);
+    const lead = start - now;
+    const item = feed.add({
+      externalId: `cal:alert:${source}:${key}:${new Date(start).toISOString()}:${tag}`,
+      ts: now, source, profile, category: 'MEETING', alert: true,
+      title: `${lead > 60000 ? inWords(lead) : start > now - 60000 ? 'Starting now' : 'Happening now'}: ${e.title}`,
+      eventKey: key, eventStart: new Date(start).toISOString(), eventType: eventtypes.typeFor(e, source), calendarName: e.calendarName || '',
+      quote: `${when(e.start, e.allDay)}${until(e)}${place(e)}`,
+      summary: `Calendar alert${e.calendarName ? ` from your "${e.calendarName}" calendar` : ''}`,
+      description: feed.eventText(e),
+      priority: lead <= 15 * 60000 ? 'High' : lead <= 2 * 3600000 ? 'Medium' : '',
+      deadline: e.allDay ? '' : `Starts ${new Date(start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      actions: ['Add Task'],
+    });
+    if (item) n++;
+  }
+  return n;
+}
+
 let running = null;
 async function check() {
   if (running) { await running.catch(() => {}); if (running) return running; }
@@ -167,6 +214,7 @@ async function run() {
               // brand-new events already got a "New:" card; everything else in the coming week gets an agenda card
               const fresh = before ? new Set(Object.keys(state[key].events).filter((k) => !before.has(k))) : new Set();
               posted += upcoming(profile, id, events, fresh);
+              posted += alerts(profile, id, events);
             }
           } else if (id === 'calendly') {
             const me = await connectors.calendlyMe(conn.fields.token);
@@ -200,4 +248,4 @@ async function run() {
 function calendlyUpcoming(profile) { return calendlyCache.get(profile) || []; }
 function forgetCalendly(profile, uri) { const list = calendlyCache.get(profile); if (list) calendlyCache.set(profile, list.filter((e) => e.uid !== uri)); }
 
-module.exports = { check, diff, snapshot, upcoming, syncCards, calendlyUpcoming, forgetCalendly };
+module.exports = { alerts, check, diff, snapshot, upcoming, syncCards, calendlyUpcoming, forgetCalendly };

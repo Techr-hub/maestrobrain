@@ -931,8 +931,8 @@ function connectStream() {
     const item = JSON.parse(e.data);
     if (!visibleNow(item)) return;
     // Task reminders also pop up as a desktop notification when the browser allows it (Ryan, 2026-11-02).
-    if (item.reminder && 'Notification' in window && Notification.permission === 'granted') {
-      try { const n = new Notification(item.title, { body: [item.deadline, item.quote].filter(Boolean).join(' · '), tag: item.externalId || item.id }); n.onclick = () => { window.focus(); navigate('tasks'); }; } catch { /* not allowed here */ }
+    if ((item.reminder || item.alert) && 'Notification' in window && Notification.permission === 'granted') {
+      try { const n = new Notification(item.title, { body: [item.deadline, item.quote].filter(Boolean).join(' · '), tag: item.externalId || item.id }); n.onclick = () => { window.focus(); if (item.alert) openFeedItem(item); else navigate('tasks'); }; } catch { /* not allowed here */ }
     }
     mergeFeed([item]);
     renderFeed(true);

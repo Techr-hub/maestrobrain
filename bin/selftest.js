@@ -205,6 +205,18 @@ async function main() {
     const up = [ev('c', 3, 'C'), ev('d', 300, 'Far away')];
     ok('calendar watcher: this week\'s events become feed cards once', w.upcoming('business', 'system', up) === 1 && w.upcoming('business', 'system', up) === 0);
     {
+      // Ryan (2026-11-04): the alerts set on calendar events post feed notifications at the same time.
+      const cn = require('../core/connectors');
+      const t0 = new Date(Date.now() + 10 * 60000); const z = (d) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');
+      const ics = `BEGIN:VCALENDAR\nX-WR-CALNAME:Work\nBEGIN:VEVENT\nUID:al1\nDTSTART:${z(t0)}\nDTEND:${z(new Date(+t0 + 3600e3))}\nSUMMARY:Alert test workshop\nDESCRIPTION:The real description\nBEGIN:VALARM\nACTION:DISPLAY\nDESCRIPTION:Reminder\nTRIGGER:-PT15M\nEND:VALARM\nBEGIN:VALARM\nTRIGGER;RELATED=START:-P1D\nEND:VALARM\nEND:VEVENT\nEND:VCALENDAR`;
+      const [ae] = cn.parseIcs(ics);
+      ok('calendar alerts: read from the event (15 min and 1 day before), event description kept', ae && ae.alarms.length === 2 && ae.alarms[0].before === 900e3 && ae.alarms[1].before === 86400e3 && ae.description === 'The real description');
+      const first = w.alerts('business', 'icalendar', [ae]), again = w.alerts('business', 'icalendar', [ae]);
+      const card = require('../core/feed').readAll().find((i) => i.alert && i.eventKey === 'al1');
+      const early = w.alerts('business', 'icalendar', [{ ...ae, uid: 'al2', alarms: [{ before: 5 * 60000 }] }]);
+      ok('calendar alerts: one feed notification when the alert is due, none before', first === 1 && again === 0 && early === 0 && card && /^In (9|10) minutes: Alert test workshop$/.test(card.title) && card.calendarName === 'Work' && card.eventType === 'workshop');
+    }
+    {
       // Ryan (2026-11-04): a changed time must show on refresh, and new-event cards carry the calendar's name.
       const fd = require('../core/feed');
       const e1 = { ...ev('rw', 10, 'Workshop rehearsal'), calendarName: 'Work' };

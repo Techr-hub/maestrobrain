@@ -231,13 +231,37 @@ function expandRule(start, rule, from, to, exdates) {
   return out;
 }
 
+// An event's alerts as [{ before: ms before the start }] or [{ at: ISO time }] (absolute alerts).
+// TRIGGER:-PT15M, -P1D, -PT1H30M, PT0S, TRIGGER;RELATED=END:-PT5M, TRIGGER;VALUE=DATE-TIME:20261104T170000Z.
+// Alerts the calendar marks as acknowledged or that only play a sound are kept too: they still mean "tell me then".
+function alarmsOf(block) {
+  const out = [];
+  for (const a of block.split('BEGIN:VALARM').slice(1).map((x) => x.split('END:VALARM')[0])) {
+    const m = a.match(/^TRIGGER(;[^:\r\n]*)?:(.*)$/m);
+    if (!m) continue;
+    const params = m[1] || '', v = m[2].trim();
+    if (/VALUE=DATE-TIME/i.test(params) || /^\d{8}T/.test(v)) { const at = parseIcsDate(params + ':' + v); if (at) out.push({ at: at.toISOString() }); continue; }
+    const d = v.match(/^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
+    if (!d) continue;
+    const ms = ((+d[2] || 0) * 7 * 86400 + (+d[3] || 0) * 86400 + (+d[4] || 0) * 3600 + (+d[5] || 0) * 60 + (+d[6] || 0)) * 1000;
+    const before = d[1] === '+' ? -ms : ms; // "-PT15M" = 15 minutes before
+    out.push(/RELATED=END/i.test(params) ? { beforeEnd: before } : { before });
+  }
+  const seen = new Set();
+  return out.filter((x) => { const k = JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new Date(Date.now() + 90 * 86400000) } = {}) {
   const events = [];
   const overrides = new Map(); // uid -> Set of replaced occurrence times
   const body = unfoldIcs(text);
   const blocks = body.split('BEGIN:VEVENT').slice(1).map((b) => b.split('END:VEVENT')[0]);
   const parsed = [];
-  for (const b of blocks) {
+  for (const block of blocks) {
+    // Alerts set on the event (Ryan, 2026-11-04). VALARMs are read on their own and kept out of the event's fields,
+    // so an alarm's own DESCRIPTION ("Reminder") never replaces the event's.
+    const alarms = alarmsOf(block);
+    const b = block.replace(/BEGIN:VALARM[\s\S]*?END:VALARM\r?\n?/g, '');
     const get = (key) => {
       const m = b.match(new RegExp('^' + key + '(;[^:\\r\\n]*)?:(.*)$', 'm'));
       return m ? (m[1] || '') + ':' + m[2].trim() : null;
@@ -255,10 +279,10 @@ function parseIcs(text, { from = new Date(Date.now() - 30 * 86400000), to = new 
     if (rid) { if (!overrides.has(uid)) overrides.set(uid, new Set()); overrides.get(uid).add(rid.getTime()); }
     const exdates = new Set();
     for (const ex of all('EXDATE')) { const head = ex.slice(0, ex.lastIndexOf(':') + 1); for (const part of ex.slice(ex.lastIndexOf(':') + 1).split(',')) { const d = parseIcsDate(head + part); if (d) exdates.add(d.getTime()); } }
-    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 2000), url: val('URL'), organizer: val('ORGANIZER').replace(/^mailto:/i, '') });
+    parsed.push({ uid, start, end, allDay, rrule: val('RRULE'), exdates, rid, title: val('SUMMARY') || '(no title)', alarms, location: val('LOCATION'), description: val('DESCRIPTION').slice(0, 2000), url: val('URL'), organizer: val('ORGANIZER').replace(/^mailto:/i, '') });
   }
   for (const e of parsed) {
-    const base = { uid: e.uid, title: e.title, location: e.location, description: e.description, url: e.url, organizer: e.organizer, allDay: e.allDay };
+    const base = { uid: e.uid, alarms: e.alarms, title: e.title, location: e.location, description: e.description, url: e.url, organizer: e.organizer, allDay: e.allDay };
     const dur = e.end - e.start;
     if (e.rrule && !e.rid) {
       const skip = overrides.get(e.uid) || new Set();
@@ -455,4 +479,4 @@ async function testLiveRaw(id, fields) {
   throw new Error('This connector goes live inside Claude Desktop. Use demo mode here.');
 }
 
-module.exports = { list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, calendlyCancel, slackHistory, slackChannels, twilioList, testLive };
+module.exports = { alarmsOf, list, get, fetchIcs, parseIcs, calendarUrls, calendlyMe, calendlyEvents, calendlyInvitees, calendlyCancel, slackHistory, slackChannels, twilioList, testLive };
