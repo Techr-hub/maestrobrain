@@ -752,3 +752,11 @@ button.wk-dh:hover b { color: var(--cyan); }
 .task-group h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-family: var(--font-display); font-size: 14px; letter-spacing: .6px; color: var(--g); }
 .task-group h4 svg { width: 15px; height: 15px; }
 .task-group h4 b { margin-left: auto; color: var(--muted); font-family: var(--font); font-weight: 500; font-size: 12px; }
+/* ⋮ on event cards: Edit / Delete (Ryan, 2026-11-06) */
+.more-btn { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; margin-left: -2px; }
+.more-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+.more-btn:hover, .more-btn:focus-visible { color: var(--text); border-color: var(--line); background: var(--bg-deep); outline: none; }
+.ev-menu { min-width: 170px; }
+.ev-menu button .icon, .ev-menu button svg { width: 14px; height: 14px; margin-left: 0; color: var(--muted); }
+.ev-menu button.danger { color: #ff6b81; }
+.ev-menu button.danger svg { color: #ff6b81; }

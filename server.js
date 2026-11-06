@@ -200,6 +200,11 @@ route('POST', '/api/chat/save', async (_q, body) => ({ path: brain.saveAnswer(bo
 route('GET', '/api/conversations', async () => brain.loadConversations());
 
 // Projects page (Ryan, 2026-11-04)
+// The ⋮ menu on event cards: Edit or Delete the event (Ryan, 2026-11-06).
+const eventRef = (b) => ({ source: b.source, key: b.key, start: b.start, title: b.title, cardId: b.cardId });
+route('POST', '/api/events/find', async (_q, body) => (await require('./core/eventedit').describe(eventRef(body))) || { error: "I couldn't find that event in your calendars any more." });
+route('POST', '/api/events/update', async (_q, body) => { const r = await require('./core/eventedit').update(eventRef(body), body.fields || {}); try { calwatch.check(); } catch { /* best-effort */ } return r; });
+route('POST', '/api/events/delete', async (_q, body) => require('./core/eventedit').remove(eventRef(body), { series: !!body.series }));
 route('GET', '/api/projects', async () => projects.list());
 route('GET', '/api/projects/one', async (q) => projects.get(q.get('path')));
 // A new project also gets a card in the Intelligence Feed (Ryan, 2026-11-04); editing the project keeps that card current.

@@ -175,6 +175,23 @@ async function main() {
     ok('create event: "new calendar item" starts the questions instead of listing events', /What day/.test(vague.reply));
     const cal = await (await fetch(base + '/calendar?days=3')).json();
     ok('create meeting: event shows on the calendar', cal.some((e) => e.title === 'Pricing follow-up' && e.created));
+    {
+      // Ryan (2026-11-06): the ⋮ menu on event cards edits or deletes the event.
+      const pf = cal.find((e) => e.title === 'Pricing follow-up');
+      const card = (await (await fetch(base + '/feed?limit=400')).json()).find((i) => i.eventKey === pf.uid);
+      const ref = { source: card ? card.source : pf.source, key: pf.uid, start: pf.start, cardId: card && card.id };
+      const ns = new Date(+new Date(pf.start) + 3600e3).toISOString(), ne = new Date(+new Date(pf.end) + 3600e3).toISOString();
+      const up = await post('/events/update', { ...ref, fields: { title: 'Pricing deep-dive', start: ns, end: ne, location: 'Room 4', description: 'Bring the numbers' } });
+      const cal2 = await (await fetch(base + '/calendar?days=3')).json();
+      const moved = cal2.find((e) => e.uid === pf.uid);
+      const card2 = (await (await fetch(base + '/feed?limit=400')).json()).find((i) => card && i.id === card.id);
+      ok('edit event: title, time, place and description change in the calendar, and its card says Updated', up.event && moved && moved.title === 'Pricing deep-dive' && moved.start === ns && moved.location === 'Room 4' && moved.notes === 'Bring the numbers' && (!card || (card2 && card2.title === 'Updated: Pricing deep-dive' && card2.eventStart === ns)));
+      const bad = await post('/events/update', { ...ref, start: ns, fields: { start: ne, end: ns } });
+      ok('edit event: an end before the start is refused', /end after it starts/.test(bad.error || ''));
+      const del = await post('/events/delete', { ...ref, start: ns });
+      const cal3 = await (await fetch(base + '/calendar?days=3')).json();
+      ok('delete event: gone from the calendar, its card greyed', /Removed "Pricing deep-dive"/.test(del.done || '') && !cal3.some((e) => e.uid === pf.uid) && (!card || (await (await fetch(base + '/feed?limit=400')).json()).some((i) => i.id === card.id && i.removed)));
+    }
     const w = require('../core/calwatch');
     {
       const far = new Date(Date.now() + 170 * 86400000), z = (d) => d.toISOString().replace(/[-:]|\.\d{3}/g, '');

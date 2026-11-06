@@ -582,6 +582,89 @@ function typePill(i) {
   if (!t) return '';
   return `<button class="pill type-pill" data-type style="--tc:${t.color}" aria-haspopup="menu" title="Change the category">${esc(t.name.toUpperCase())}${icon('chevron-down')}</button>`;
 }
+// ⋮ on event cards (Ryan, 2026-11-06): a small menu with Edit and Delete for the event itself.
+const isEventCard = (i) => i.category === 'MEETING' && !i.removed && !i.reminder;
+const eventRef = (item) => ({ source: item.source, key: item.eventKey || '', start: item.eventStart || '', title: item.eventTitle || item.title, cardId: item.id });
+function eventMenu(btn, item) {
+  const was = document.querySelector('.type-menu');
+  closeTypeMenu();
+  if (was && was.dataset.for === 'ev:' + item.id) return;
+  const m = document.createElement('div');
+  m.className = 'type-menu ev-menu'; m.setAttribute('role', 'menu'); m.dataset.for = 'ev:' + item.id;
+  m.innerHTML = `<button role="menuitem" data-ev-edit>${icon('pencil')} Edit event</button><button role="menuitem" class="danger" data-ev-del>${icon('trash')} Delete event</button>`;
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+  m.style.top = (r.bottom + 6 + h > window.innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  m.querySelector('[data-ev-edit]').onclick = () => { closeTypeMenu(); editEvent(item); };
+  m.querySelector('[data-ev-del]').onclick = () => { closeTypeMenu(); deleteEvent(item); };
+  m.querySelector('button').focus();
+  setTimeout(() => { document.addEventListener('mousedown', typeMenuOutside, true); document.addEventListener('keydown', typeMenuKey, true); });
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+const localDay = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const localTime = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+async function lookupEvent(item) {
+  const e = await api('/events/find', eventRef(item));
+  if (!e || e.error) throw new Error((e && e.error) || "I couldn't find that event.");
+  return e;
+}
+async function editEvent(item) {
+  let e;
+  try { e = await lookupEvent(item); } catch (err) { return toast(err.message, 'error'); }
+  const s = new Date(e.start), en = new Date(e.end);
+  modal(`${modalHead('Edit event', esc(e.where || ''))}
+    <div class="field"><label for="ee-title">Title</label><input class="input" id="ee-title" value="${esc(e.title)}"></div>
+    <div class="due-fields">
+      <div class="field"><label for="ee-day">Date</label><input class="input" type="date" id="ee-day" value="${localDay(s)}"></div>
+      <div class="field"><label for="ee-start">Starts</label><input class="input" type="time" id="ee-start" step="300" value="${localTime(s)}"${e.allDay ? ' disabled' : ''}></div>
+      <div class="field"><label for="ee-end">Ends</label><input class="input" type="time" id="ee-end" step="300" value="${localTime(en)}"${e.allDay ? ' disabled' : ''}></div>
+    </div>
+    <div class="field"><label for="ee-loc">Location</label><input class="input" id="ee-loc" value="${esc(e.location || '')}" placeholder="Room, address or meeting link"></div>
+    <div class="field"><label for="ee-desc">Description</label><textarea class="input" id="ee-desc" rows="4">${esc(e.description || '')}</textarea></div>
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="ee-save">${icon('save')} Save changes</button></div>`, {
+    onMount: (el, close) => {
+      const v = (id) => el.querySelector(id).value;
+      setTimeout(() => el.querySelector('#ee-title').focus(), 50);
+      el.querySelector('#ee-save').onclick = async () => {
+        const day = v('#ee-day');
+        if (!v('#ee-title').trim()) return toast('Give the event a title', 'error');
+        if (!day) return toast('Pick a date', 'error');
+        let start, end;
+        if (e.allDay) { const len = en - s; start = new Date(`${day}T00:00`); end = new Date(+start + len); }
+        else {
+          start = new Date(`${day}T${v('#ee-start') || localTime(s)}`); end = new Date(`${day}T${v('#ee-end') || localTime(en)}`);
+          if (end <= start) end = new Date(+end + 86400000); // ends after midnight
+        }
+        const btn = el.querySelector('#ee-save'); btn.disabled = true;
+        try {
+          const r = await api('/events/update', { ...eventRef(item), fields: { title: v('#ee-title'), start: start.toISOString(), end: end.toISOString(), location: v('#ee-loc'), description: v('#ee-desc') } });
+          close(); toast(`Event updated. ${r.note || ''}`.trim());
+          if (S.route === 'calendar') navigate('calendar');
+        } catch (err) { btn.disabled = false; toast(err.message, 'error'); }
+      };
+    },
+  });
+}
+async function deleteEvent(item) {
+  let e;
+  try { e = await lookupEvent(item); } catch (err) { return toast(err.message, 'error'); }
+  const when = new Date(e.start).toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', ...(e.allDay ? {} : { hour: 'numeric', minute: '2-digit' }) });
+  modal(`${modalHead('Delete event?', '')}
+    <p style="margin:0 0 6px"><b>${esc(e.title)}</b></p><p style="margin:0;color:var(--muted)">${esc(when)}${e.calendarName ? ` · ${esc(e.calendarName)}` : ''}</p>
+    ${e.recurring ? '<p style="color:var(--muted)">This is a repeating event.</p>' : ''}
+    <div class="modal-foot"><button class="btn ghost" data-close>Cancel</button>${e.recurring ? `<button class="btn danger" data-del="1">${icon('trash')} Every date</button><button class="btn danger" data-del="0">${icon('trash')} Just this one</button>` : `<button class="btn danger" data-del="0">${icon('trash')} Delete event</button>`}</div>`, {
+    onMount: (el, close) => el.querySelectorAll('[data-del]').forEach((b) => (b.onclick = async () => {
+      el.querySelectorAll('[data-del]').forEach((x) => (x.disabled = true));
+      try {
+        const r = await api('/events/delete', { ...eventRef(item), series: b.dataset.del === '1' });
+        close(); toast([r.done, r.note].filter(Boolean).join(' '));
+        if (S.route === 'calendar') navigate('calendar');
+      } catch (err) { el.querySelectorAll('[data-del]').forEach((x) => (x.disabled = false)); toast(err.message, 'error'); }
+    })),
+  });
+}
+
 function closeTypeMenu() { document.querySelectorAll('.type-menu').forEach((m) => m.remove()); document.removeEventListener('mousedown', typeMenuOutside, true); document.removeEventListener('keydown', typeMenuKey, true); }
 function typeMenuOutside(e) { if (!e.target.closest('.type-menu')) closeTypeMenu(); }
 function typeMenuKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closeTypeMenu(); } }
@@ -652,7 +735,9 @@ const cardItem = (id) => S.feed.find((x) => x.id === id) || ((S.sourceData && S.
 function wireCard(el) {
   const item = cardItem(el.dataset.id);
   if (!item) return;
-  el.onclick = (e) => { if (e.target.closest('[data-action],[data-pin],[data-type],[data-dismiss]')) return; openFeedItem(item); };
+  el.onclick = (e) => { if (e.target.closest('[data-action],[data-pin],[data-type],[data-dismiss],[data-more]')) return; openFeedItem(item); };
+  const more = el.querySelector('[data-more]');
+  if (more) more.onclick = (e) => { e.stopPropagation(); eventMenu(more, item); };
   const tp = el.querySelector('[data-type]');
   if (tp) tp.onclick = (e) => { e.stopPropagation(); typeMenu(tp, item); };
   const pin = el.querySelector('[data-pin]');
@@ -690,7 +775,7 @@ function feedItemHtml(i, isNew) {
     <div class="activity-details">
       <div class="a-head">${sourceChip(i)}</div>
       <div class="a-title">${esc(i.title)}</div>
-      <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button></div>
+      <div class="a-cat">${i.unread && !i.removed && !i.completed ? '<span class="unread-dot"></span>' : ''}${i.removed ? '<span class="pill removed-pill">Removed</span>' : ''}${i.completed ? `<span class="pill done-pill">${icon('check')}Completed</span>` : ''}${typePill(i) || `<span class="pill" style="--pill:${cat.pill};--pill-text:${cat.text}">${esc(i.category)}</span>`}<button class="dismiss-btn" data-dismiss="${i.id}" title="Clear from the feed" aria-label="Clear this card from the feed">${icon('x')}</button>${isEventCard(i) ? `<button class="more-btn" data-more title="Edit or delete this event" aria-label="Event options" aria-haspopup="menu">${icon('more-vertical')}</button>` : ''}</div>
       ${i.quote ? `<div class="a-quote">${esc(i.quote)}</div>` : ''}
       ${i.description ? `<div class="a-desc">${esc(i.description)}</div>` : ''}
       ${i.summary && !/^Coming up\b/.test(i.summary) ? `<div class="a-summary">${esc(i.summary)}</div>` : ''}

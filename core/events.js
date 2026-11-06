@@ -231,4 +231,4 @@ async function caldavPutIf(creds, url, ics, etag) {
 function pendingSync() { return readAll().filter((e) => e.calendarFor && !e.synced); }
 function markSynced(uid) { const all = readAll(); const e = all.find((x) => x.uid === uid); if (!e) return false; e.synced = true; e.syncedAt = Date.now(); writeAll(all); return true; }
 
-module.exports = { list, create, targets, toIcs, discover, caldavCreds, caldavFind, caldavDelete, caldavPutIf, withExdate, removeCreated, pendingSync, markSynced, CAL_CONNECTORS, CAL_LABEL };
+module.exports = { readAll, writeAll, list, create, targets, toIcs, discover, caldavCreds, caldavFind, caldavDelete, caldavPutIf, withExdate, removeCreated, pendingSync, markSynced, CAL_CONNECTORS, CAL_LABEL };

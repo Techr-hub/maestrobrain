@@ -54,6 +54,7 @@ async function list({ profile, days = 7, from: fromArg, to: toArg } = {}) {
   // events Maestro created (skip ones already coming back through a live calendar link)
   const liveUids = new Set(events.filter((e) => e.uid).map((e) => e.uid));
   for (const e of created.list({ profile: prof })) if (!liveUids.has(e.uid)) events.push({ ...e, source: e.calendarFor && conns[e.calendarFor] ? e.calendarFor : 'maestro', created: true });
+  try { events = require('./eventedit').apply(events); } catch { /* edits are a bonus */ } // edits made from a card's ⋮ menu
   const gone = removed.readAll();
   events = events.filter((e) => new Date(e.end) >= from && new Date(e.start) <= to && !removed.isRemoved(e, gone));
   events.sort((a, b) => new Date(a.start) - new Date(b.start));
