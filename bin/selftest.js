@@ -323,6 +323,62 @@ async function main() {
     const re = await post('/projects/complete', { path: lp.path, done: false });
     ok('projects: reopen', !re.completed && re.status === 'active' && re.taskList.length === 2);
   }
+  {
+    // Ryan (2026-11-06): signed in to Google or Microsoft, edits/deletes/new events go to the real calendar.
+    // Google Calendar and Microsoft Graph are stood in for by small fakes here.
+    const realFetch = global.fetch;
+    const at = new Date(Date.now() + 2 * 86400000); at.setHours(10, 0, 0, 0);
+    const g = { e1: { id: 'e1', summary: 'Design review', start: { dateTime: at.toISOString() }, end: { dateTime: new Date(+at + 3600e3).toISOString() }, location: 'HQ' } };
+    const ms = { m1: { id: 'm1', subject: 'Budget sync', start: { dateTime: new Date(+at + 7200e3).toISOString().replace('Z', '') }, end: { dateTime: new Date(+at + 9000e3).toISOString().replace('Z', '') }, location: { displayName: '' }, body: { content: '' }, type: 'singleInstance' } };
+    const calls = [];
+    const json = (o, status = 200) => new Response(o == null ? null : JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+    global.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      if (!/googleapis\.com|graph\.microsoft\.com|login\.microsoftonline/.test(u)) return realFetch(url, opts);
+      const m = opts.method || 'GET', body = opts.body ? JSON.parse(opts.body) : null;
+      calls.push(`${m} ${u.split('?')[0]}`);
+      if (/calendarList/.test(u)) return json({ items: [{ id: 'primary@x', summary: 'Ryan', accessRole: 'owner', primary: true }] });
+      let mm = u.match(/calendars\/[^/]+\/events\/([^?]+)/);
+      if (mm && m === 'PATCH') { Object.assign(g[mm[1]], body); return json(g[mm[1]]); }
+      if (mm && m === 'DELETE') { delete g[mm[1]]; return new Response(null, { status: 204 }); }
+      if (/calendars\/[^/]+\/events/.test(u) && m === 'POST') { const id = 'new' + Object.keys(g).length; g[id] = { id, ...body }; return json(g[id]); }
+      if (/calendars\/[^/]+\/events/.test(u)) return json({ items: Object.values(g) });
+      if (/me\/calendars\?/.test(u)) return json({ value: [{ id: 'cal1', name: 'Calendar', canEdit: true, isDefaultCalendar: true }] });
+      if (/calendarView/.test(u)) return json({ value: Object.values(ms) });
+      mm = u.match(/me\/events\/([^?]+)/);
+      if (mm && m === 'PATCH') { Object.assign(ms[mm[1]], body); return json(ms[mm[1]]); }
+      return json({ error: { message: 'not faked: ' + u } }, 400);
+    };
+    let saved = {};
+    try {
+      const cfgm = require('../core/config');
+      const prof = cfgm.load().profile;
+      saved = JSON.parse(JSON.stringify({ gcal: cfgm.load().connections[prof].gcal, outlook: cfgm.load().connections[prof].outlook }));
+      cfgm.update((c) => { for (const [id, prov] of [['gcal', 'google'], ['outlook', 'microsoft']]) c.connections[prof][id] = { mode: 'live', fields: {}, oauth: { provider: prov, refresh: 'r', access: 'a', expires: Date.now() + 3600e3, email: 'ryan@example.com' } }; });
+      require('../core/cloudcal').forget();
+      const st = await (await fetch(base + '/state')).json();
+      const pub = st.config.connections[prof].gcal.oauth;
+      ok('two-way sync: sign-in tokens never reach the browser', pub && pub.signedIn && pub.email === 'ryan@example.com' && !pub.refresh && !pub.access);
+      const cal = await (await fetch(base + '/calendar?days=5')).json();
+      const ge = cal.find((e) => e.uid === 'e1'), me = cal.find((e) => e.uid === 'm1');
+      ok('two-way sync: Google and Outlook events are read through their APIs', ge && ge.source === 'gcal' && ge.provider === 'google' && me && me.source === 'outlook' && me.title === 'Budget sync');
+      const ns = new Date(+at + 3600e3).toISOString(), ne = new Date(+at + 7200e3).toISOString();
+      const up = await post('/events/update', { source: 'gcal', key: 'e1', start: ge.start, fields: { title: 'Design review v2', start: ns, end: ne, location: 'Room 9', description: 'Agenda' } });
+      ok('two-way sync: an edit updates Google Calendar itself', g.e1 && g.e1.summary === 'Design review v2' && g.e1.start.dateTime === ns && g.e1.location === 'Room 9' && /Google Calendar/.test(up.note || '') && calls.some((c) => /^PATCH .*events\/e1$/.test(c)));
+      await post('/events/update', { source: 'outlook', key: 'm1', start: me.start, fields: { title: 'Budget sync (moved)' } });
+      ok('two-way sync: an edit updates Outlook itself', ms.m1.subject === 'Budget sync (moved)' && calls.some((c) => /^PATCH .*me\/events\/m1$/.test(c)));
+      const tg = await require('../core/events').targets(prof);
+      const made = await require('../core/events').create({ title: 'Kickoff', start: new Date(+at + 86400e3).toISOString(), minutes: 30 }, { profile: prof, target: tg.targets.find((t) => t.id.startsWith('cloud:gcal:')).id });
+      ok('two-way sync: new events go straight into Google Calendar', made.event.cloud && Object.values(g).some((x) => x.summary === 'Kickoff') && /Google Calendar/.test(made.where));
+      const del = await post('/events/delete', { source: 'gcal', key: 'e1', start: ns });
+      ok('two-way sync: delete removes it from Google Calendar', !g.e1 && /Removed "Design review v2"/.test(del.done || ''));
+    } finally {
+      global.fetch = realFetch;
+      const cfgm = require('../core/config');
+      cfgm.update((c) => { const p = c.connections[c.profile]; for (const k of ['gcal', 'outlook']) { if (saved[k]) p[k] = saved[k]; else delete p[k]; } });
+      require('../core/cloudcal').forget();
+    }
+  }
   const brief = await post('/chat', { message: 'Brief me on my day' });
   ok('daily brief: overview with counts, then a question', /You've got \d+ meetings?/.test(brief.reply) && brief.reply.split('\n')[0].split(/[.!?] /).length <= 2 && /hear more about/.test(brief.reply));
   const more = await post('/chat', { message: 'tell me about the calls' });

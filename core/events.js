@@ -124,6 +124,14 @@ async function targets(profile) {
     if (!c) continue;
     const creds = c.mode === 'live' ? caldavCreds(id, c) : null;
     let direct = false;
+    if (c.mode === 'live' && c.oauth && c.oauth.refresh && (id === 'gcal' || id === 'outlook')) {
+      // signed in to Google / Microsoft: each calendar you can write to (Ryan, 2026-11-06)
+      try {
+        const cals = (await require('./cloudcal').calendars(prof, id)).filter((x) => x.writable).sort((a, b) => b.primary - a.primary);
+        for (const cal of cals) out.push({ id: `cloud:${id}:${cal.id}`, name: cal.name, via: CAL_CONNECTORS[id], connector: id });
+        direct = cals.length > 0;
+      } catch (e) { notes.push(`${CAL_CONNECTORS[id]}: ${e.message}`); }
+    }
     if (creds) {
       try {
         for (const cal of await discover(creds)) out.push({ id: `caldav:${id}:${cal.href}`, name: cal.name, via: CAL_CONNECTORS[id], connector: id, href: cal.href });
@@ -152,7 +160,18 @@ async function create(input, { profile, target = 'maestro' } = {}) {
   };
   if (isNaN(new Date(ev.start))) throw new Error('That start time is not a valid date.');
   let where = 'your Maestro calendar', warning = '';
-  if (target && target.startsWith('pending:')) {
+  if (target && target.startsWith('cloud:')) {
+    // straight into Google Calendar or Outlook through their API; it comes back on the next read
+    const [, id, ...rest] = target.split(':');
+    const calId = rest.join(':');
+    try {
+      const gid = await require('./cloudcal').create(prof, id, calId, { title: ev.title, start: ev.start, end: ev.end, location: ev.location, description: ev.notes, attendees: ev.attendees });
+      const cal = (await require('./cloudcal').calendars(prof, id)).find((c) => c.id === calId);
+      return { event: { ...ev, uid: gid, target, calendarFor: id, synced: true, cloud: true }, where: `your ${cal ? `"${cal.name}" ` : ''}${CAL_CONNECTORS[id]} calendar`, warning: '' };
+    } catch (e) {
+      warning = `I couldn't write it to ${CAL_CONNECTORS[id]} (${e.message}), so it's in your Maestro calendar for now.`;
+    }
+  } else if (target && target.startsWith('pending:')) {
     const id = target.slice(8);
     ev.target = target; ev.calendarFor = id; ev.synced = false;
     const conn = (config.load().connections[prof] || {})[id] || {};

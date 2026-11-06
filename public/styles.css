@@ -760,3 +760,19 @@ button.wk-dh:hover b { color: var(--cyan); }
 .ev-menu button .icon, .ev-menu button svg { width: 14px; height: 14px; margin-left: 0; color: var(--muted); }
 .ev-menu button.danger { color: #ff6b81; }
 .ev-menu button.danger svg { color: #ff6b81; }
+/* Two-way calendar sync box on the Google / Outlook cards (Ryan, 2026-11-06) */
+.sync-box { margin: 0 0 12px; }
+.sync-load { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.sync-load svg { width: 14px; height: 14px; }
+.sync-off, .sync-on { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid rgba(0,242,175,.35); border-radius: 10px; background: rgba(0,242,175,.06); }
+.sync-text, .sync-on > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sync-text span, .sync-on span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.sync-on > svg { width: 20px; height: 20px; color: #00f2af; flex: none; }
+.sync-btn { background: linear-gradient(180deg, #19b8ff, #0a7fd6); border-color: #2aa8ff; color: #fff; white-space: nowrap; }
+.sync-btn svg { width: 15px; height: 15px; }
+.sync-setup { margin-top: 8px; font-size: 13px; }
+.sync-setup summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.sync-setup .field { margin-top: 8px; }
+.sync-device { margin-top: 10px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 10px; font-size: 13px; }
+.sync-device b { font-family: var(--font-display); font-size: 22px; letter-spacing: 3px; color: var(--cyan); }
+@media (max-width: 560px) { .sync-off { flex-direction: column; align-items: stretch; } }

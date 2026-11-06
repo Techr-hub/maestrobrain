@@ -155,8 +155,10 @@ function publicView(cfg) {
   for (const p of ['anthropic', 'openai', 'gemini', 'compatible']) {
     if (copy.llm[p]) copy.llm[p].apiKey = copy.llm[p].apiKey ? '••••' + copy.llm[p].apiKey.slice(-4) : '';
   }
+  if (copy.oauth) for (const o of Object.values(copy.oauth)) if (o && o.clientSecret) o.clientSecret = '••••' + String(o.clientSecret).slice(-4);
   for (const prof of Object.values(copy.connections || {})) {
     for (const c of Object.values(prof)) {
+      if (c.oauth) c.oauth = { signedIn: !!c.oauth.refresh, email: c.oauth.email || '', provider: c.oauth.provider || '' }; // tokens never leave this computer
       if (c.fields) for (const k of Object.keys(c.fields)) if (/token|secret|password|key/i.test(k) && c.fields[k]) c.fields[k] = '••••';
     }
   }

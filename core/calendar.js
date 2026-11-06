@@ -35,6 +35,11 @@ async function list({ profile, days = 7, from: fromArg, to: toArg } = {}) {
   events.push(...demo.calendarEvents(prof, now).filter((e) => demoSources.includes(e.source)));
   for (const s of CAL_SOURCES) {
     const c = conns[s];
+    // Signed in to Google / Microsoft: read (and later write) through their APIs instead of the iCal link.
+    if (c && c.mode === 'live' && c.oauth && c.oauth.refresh && (s === 'gcal' || s === 'outlook')) {
+      try { events.push(...(await require('./cloudcal').events(prof, s)).map((e) => ({ ...e, source: s, live: true }))); } catch { /* shown as the card's error */ }
+      continue;
+    }
     const urls = c && c.mode === 'live' ? connectors.calendarUrls(c.fields) : [];
     if (urls.length) {
       for (const u of urls) {
@@ -71,6 +76,6 @@ function errorForConn(conn) {
 }
 
 // Forget cached results so a newly saved link is fetched straight away.
-function forget(urls = []) { for (const u of urls) icsCache.delete(u); }
+function forget(urls = []) { for (const u of urls) icsCache.delete(u); try { require('./cloudcal').forget(); } catch { /* none */ } }
 
 module.exports = { list, errorFor, errorForConn, forget, CAL_SOURCES };

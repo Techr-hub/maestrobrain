@@ -287,12 +287,62 @@ function wireListFields(m) {
   });
 }
 
+// Two-way sync for Google Calendar and Outlook (Ryan, 2026-11-06): sign in once on the card, then edits, deletes
+// and new events in Maestro go straight to the real calendar. The OAuth app's client ID is set up once per kit
+// (docs/CALENDAR-SYNC.md); the fields show until it is.
+async function wireTwoWay(box, c, prof, finish) {
+  const google = c.id === 'gcal';
+  const brand = google ? 'Google' : 'Microsoft';
+  let st;
+  try { st = await api(`/oauth/status?source=${c.id}&profile=${prof}`); } catch (e) { box.innerHTML = `<p class="help">${esc(e.message)}</p>`; return; }
+  const poll = (until, onDone) => { const t = setInterval(async () => { if (!document.body.contains(box)) return clearInterval(t); try { const s2 = await api(`/oauth/status?source=${c.id}&profile=${prof}`); if (until(s2)) { clearInterval(t); onDone(s2); } } catch { /* keep trying */ } }, 2000); };
+  if (st.signedIn) {
+    box.innerHTML = `<div class="sync-on">${icon('check')}<div><b>Two-way sync is on</b><span>Signed in${st.email ? ' as ' + esc(st.email) : ''}. Edits, deletes and new events in Maestro update ${esc(c.name)} itself.</span></div><button type="button" class="btn small ghost" id="sync-out">Sign out</button></div>`;
+    box.querySelector('#sync-out').onclick = async () => { await api('/oauth/signout', { source: c.id, profile: prof }); toast(`Signed out of ${brand}`); finish(); };
+    return;
+  }
+  const appFields = google
+    ? `<div class="field"><label for="sync-id">OAuth client ID</label><input class="input" id="sync-id" placeholder="1234-abc.apps.googleusercontent.com"></div><div class="field"><label for="sync-secret">Client secret</label><input class="input" id="sync-secret" type="password" placeholder="GOCSPX-…"></div><span class="help">Google Cloud console → APIs & Services → Credentials → Create OAuth client ID → Desktop app. Turn on the Google Calendar API. Steps in docs/CALENDAR-SYNC.md.</span>`
+    : `<div class="field"><label for="sync-id">Application (client) ID</label><input class="input" id="sync-id" placeholder="00000000-0000-0000-0000-000000000000"></div><span class="help">portal.azure.com → App registrations → New registration (any account type) → Authentication → allow public client flows. API permissions: Calendars.ReadWrite. Steps in docs/CALENDAR-SYNC.md.</span>`;
+  box.innerHTML = `<div class="sync-off"><div class="sync-text"><b>Two-way sync</b><span>Sign in so edits, deletes and new events in Maestro update ${esc(c.name)} itself, with no iCal link needed.</span></div>
+    <button type="button" class="btn sync-btn" id="sync-in">${icon('log-in')} Sign in with ${brand}</button></div>
+    <details class="sync-setup" ${st.hasApp ? '' : 'open'}><summary>${st.hasApp ? 'Change the OAuth app' : `Set up once: your ${brand} OAuth app`}</summary>${appFields}</details>
+    <div id="sync-code" hidden></div>`;
+  box.querySelector('#sync-in').onclick = async (e) => {
+    const id = box.querySelector('#sync-id').value.trim(), secret = (box.querySelector('#sync-secret') || {}).value;
+    if (!st.hasApp && !id) return toast(`Add the ${brand} client ID first`, 'error');
+    e.target.disabled = true;
+    try {
+      if (google) {
+        const win = window.open('about:blank', '_blank');
+        const r = await api('/oauth/google/start', { profile: prof, clientId: id || undefined, clientSecret: secret || undefined });
+        if (win) win.location = r.url; else location.href = r.url;
+        e.target.innerHTML = `${icon('refresh')} Waiting for Google…`;
+        poll((s2) => s2.signedIn, (s2) => { toast(`Google Calendar connected${s2.email ? ' as ' + s2.email : ''}. Two-way sync is on.`); finish(); });
+      } else {
+        const r = await api('/oauth/microsoft/start', { profile: prof, clientId: id || undefined });
+        const code = box.querySelector('#sync-code'); code.hidden = false;
+        code.innerHTML = `<div class="sync-device"><span>Go to <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url.replace(/^https:\/\//, ''))}</a> and enter this code:</span><b>${esc(r.code)}</b><button type="button" class="btn small ghost" id="sync-copy">${icon('copy')} Copy code</button></div>`;
+        code.querySelector('#sync-copy').onclick = async () => { try { await navigator.clipboard.writeText(r.code); toast('Code copied'); } catch { /* select it by hand */ } };
+        window.open(r.url, '_blank');
+        e.target.innerHTML = `${icon('refresh')} Waiting for Microsoft…`;
+        poll((s2) => s2.signedIn || (s2.device && s2.device.status === 'error'), (s2) => {
+          if (s2.signedIn) { toast(`Outlook connected${s2.email ? ' as ' + s2.email : ''}. Two-way sync is on.`); finish(); }
+          else { toast(s2.device.error || 'Microsoft sign-in failed', 'error'); e.target.disabled = false; e.target.innerHTML = `${icon('log-in')} Sign in with ${brand}`; }
+        });
+      }
+    } catch (err) { toast(err.message, 'error'); e.target.disabled = false; e.target.innerHTML = `${icon('log-in')} Sign in with ${brand}`; }
+  };
+}
+
 export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real' } = {}) {
   const s = c.status[prof];
   const canLive = c.live && c.live.includes('dashboard');
   const viaClaude = c.live && c.live.includes('claude');
   const first = s ? s.mode : noDemo ? (canLive ? 'live' : 'claude') : 'demo';
+  const twoWay = c.id === 'gcal' || c.id === 'outlook';
   modal(`${modalHead(`Connect ${esc(c.name)}`, `${profileName()} profile`)}
+    ${twoWay ? `<div class="sync-box" id="sync-box"><div class="sync-load">${icon('refresh')} Checking two-way sync…</div></div>` : ''}
     ${noDemo && first !== 'demo' ? '' : `<button class="choice ${first === 'demo' ? 'on' : ''}" data-mode="demo">${icon('zap')}<div><b>Use demo data</b><span>Instantly see how ${esc(c.name)} notifications look in the feed and how the brain uses them. Perfect for the workshop.</span></div></button>`}
     ${canLive ? `<button class="choice ${first === 'live' ? 'on' : ''}" data-mode="live">${icon('plug')}<div><b>Connect live</b><span>Stream your real ${esc(c.name)} data into Maestro.</span></div></button>
       <div id="live-fields" ${first === 'live' ? '' : 'hidden'} style="margin:4px 0 10px">${(c.liveFields || []).map((f) => liveFieldHtml(f, (s && s.mode === 'live' && s.fields) || {})).join('')}</div>` : ''}
@@ -311,6 +361,7 @@ export function connectModal(c, prof, done, { noDemo = cfg().dataMode === 'real'
       if (off) off.onclick = async () => { await api('/connections/disconnect', { id: c.id, profile: prof }); toast(`${c.name} disconnected`); close(); done(); };
       wireListFields(m);
       wireChannelPickers(m, c, prof);
+      if (twoWay) wireTwoWay(m.querySelector('#sync-box'), c, prof, () => { close(); done(); });
       m.querySelector('#go').onclick = async (e) => {
         const fields = {};
         const scope = m.querySelector(mode === 'claude' ? '#claude-fields' : '#live-fields') || m;

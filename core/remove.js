@@ -87,6 +87,12 @@ async function removeIt(e, { profile, series = false } = {}) {
     if (!e.live) { calendar.forget(); return { done: `Removed "${e.title}" (${fmt(e.start, e.allDay)}) from your ${LABEL[rec.calendarFor] || label}.`, note }; }
   }
 
+  if (e.provider && e.writable !== false) {
+    // Google / Outlook you signed in to: deleted in the real calendar (Ryan, 2026-11-06)
+    await require('./cloudcal').remove(prof, e, { series });
+    done = `Removed "${e.title}" (${fmt(e.start, e.allDay)})${series ? ' and the rest of the series' : ''} from your ${label}.`;
+    return { done, note };
+  }
   if (e.source === 'calendly') {
     await connectors.calendlyCancel(conn.fields && conn.fields.token, e.uid);
     require('./calwatch').forgetCalendly(prof, e.uid);

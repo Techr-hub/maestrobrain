@@ -315,6 +315,21 @@ route('POST', '/api/connections', async (_q, body) => {
   if (mode === 'live') { feed.pollLive().catch(() => {}); calwatch.check().catch(() => {}); }
   return { ok: true, message, surfaced };
 });
+// Two-way calendar sync: sign in to Google or Microsoft on the calendar's card (Ryan, 2026-11-06).
+route('POST', '/api/oauth/app', async (_q, body) => { require('./core/cloudcal').setApp(body.provider === 'microsoft' ? 'microsoft' : 'google', body); return { ok: true }; });
+route('POST', '/api/oauth/google/start', async (_q, body, req) => {
+  const cc = require('./core/cloudcal');
+  if (body.clientId || body.clientSecret) cc.setApp('google', body);
+  const host = String(req.maestroOrigin).replace('://127.0.0.1', '://localhost');
+  return { url: cc.googleStart(body.profile || config.load().profile, `${host}/oauth/google`) };
+});
+route('POST', '/api/oauth/microsoft/start', async (_q, body) => {
+  const cc = require('./core/cloudcal');
+  if (body.clientId) cc.setApp('microsoft', body);
+  return cc.microsoftStart(body.profile || config.load().profile);
+});
+route('GET', '/api/oauth/status', async (q) => require('./core/cloudcal').status(q.get('profile') || config.load().profile, q.get('source')));
+route('POST', '/api/oauth/signout', async (_q, body) => { require('./core/cloudcal').signOut(body.profile || config.load().profile, body.source); return { ok: true }; });
 // Slack channel picker: uses the token typed in the form, or the one already saved.
 route('POST', '/api/slack/channels', async (_q, body) => {
   const cfg = config.load();
@@ -450,12 +465,22 @@ function createServer() {
       return send(res, 200, zip, { 'content-type': 'application/zip', 'content-disposition': `attachment; filename="${folder || 'maestro-claude-skills'}.zip"` });
     }
 
+    // Google sends you back here after "Sign in with Google" (two-way calendar sync, Ryan 2026-11-06).
+    if (p === '/oauth/google') {
+      let msg, ok = true;
+      try { const r = await require('./core/cloudcal').googleCallback(url.searchParams); msg = `Signed in to Google Calendar${r.email ? ' as ' + r.email : ''}. Maestro now keeps it in sync both ways.`; calwatch.check().catch(() => {}); }
+      catch (e) { ok = false; msg = e.message; }
+      const safe = String(msg).replace(/[<>&]/g, '');
+      return send(res, ok ? 200 : 400, `<!doctype html><meta charset="utf-8"><title>Maestro</title><body style="background:#020812;color:#e6f7ff;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0"><div style="max-width:440px;text-align:center"><h2 style="color:${ok ? '#00f2af' : '#ff6b81'}">${ok ? 'You\'re connected' : 'Sign-in didn\'t work'}</h2><p>${safe}</p><p style="color:#8aa0b8">You can close this tab and go back to Maestro.</p></div><script>try{window.opener&&window.opener.postMessage({maestroOAuth:'google',ok:${ok}},'*')}catch(e){};${ok ? 'setTimeout(()=>window.close(),1500)' : ''}</script>`, { 'content-type': 'text/html; charset=utf-8' });
+    }
+
     if (p.startsWith('/api/')) {
+      req.maestroOrigin = `http://${req.headers.host || 'localhost'}`;
       const r = routes.find((x) => x.method === req.method && x.pattern === p);
       if (!r) return send(res, 404, { error: 'No such endpoint' });
       try {
         const body = req.method === 'POST' ? await readBody(req) : {};
-        const out = await r.fn(url.searchParams, body);
+        const out = await r.fn(url.searchParams, body, req);
         return send(res, 200, out === undefined ? { ok: true } : out);
       } catch (e) {
         return send(res, 400, { error: e.message });

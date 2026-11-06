@@ -222,7 +222,17 @@ async function run() {
       for (const [id, conn] of Object.entries(cfg.connections[profile] || {})) {
         if (conn.mode !== 'live' || !conn.fields) continue;
         try {
-          if (ICS_SOURCES.includes(id)) {
+          if ((id === 'gcal' || id === 'outlook') && conn.oauth && conn.oauth.refresh) {
+            // signed in for two-way sync (Ryan, 2026-11-06): the same checks on what the API returns
+            const events = await require('./cloudcal').events(profile, id);
+            syncCards(id, events);
+            const key = `${profile}|${id}|cloud`;
+            const before = state[key] ? new Set(Object.keys(state[key].events)) : null;
+            posted += diff(state, key, profile, id, snapshot(events));
+            const fresh = before ? new Set(Object.keys(state[key].events).filter((k) => !before.has(k))) : new Set();
+            posted += upcoming(profile, id, events, fresh);
+            posted += alerts(profile, id, events);
+          } else if (ICS_SOURCES.includes(id)) {
             for (const url of connectors.calendarUrls(conn.fields)) {
               const events = await connectors.fetchIcs(url);
               syncCards(id, events);

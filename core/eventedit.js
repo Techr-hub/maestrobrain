@@ -49,6 +49,8 @@ async function find({ source, key, start, title }, profile) {
 function whereText(e, conn) {
   if (e.created) return e.target && e.target.startsWith('caldav:') ? 'Saved in Maestro and in your iCloud calendar.' : 'Saved in your Maestro calendar.';
   if (conn && conn.mode === 'demo') return 'Demo event: changed in Maestro.';
+  if (e.provider) return e.writable === false ? `You can only view "${e.calendarName}", so changes stay in Maestro.` : `Saved in Maestro and in ${e.provider === 'google' ? 'Google Calendar' : 'Outlook'}${e.recurring ? ' (just this date)' : ''}. Guests get the update.`;
+  if (e.source === 'calendly') return "Calendly doesn't let apps change a booking, so this changes Maestro only. To move it, cancel it and send the invitee your reschedule link.";
   if (e.live && events.caldavCreds(e.source, conn) && !e.recurring) return 'Saved in Maestro and in your calendar.';
   return `Changed in Maestro. ${e.recurring ? 'This is one date of a repeating event; ' : ''}Your ${events.CAL_LABEL[e.source] || 'calendar'} keeps the old details until you change it there too.`;
 }
@@ -83,7 +85,10 @@ async function update(ref, input, { profile } = {}) {
   const conn = (cfg.connections[prof] || {})[e.source] || {};
   let note = '';
 
-  if (e.created) {
+  if (e.provider && e.writable !== false) {
+    // Google / Outlook you signed in to: changed in the real calendar (Ryan, 2026-11-06)
+    await require('./cloudcal').update(prof, e, next);
+  } else if (e.created) {
     const all = events.readAll ? events.readAll() : [];
     const rec = all.find((x) => x.uid === e.uid);
     if (rec) {
