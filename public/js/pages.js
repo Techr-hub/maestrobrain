@@ -367,8 +367,36 @@ const TASK_TABS = [
   { id: 'projects', name: 'Projects', icon: 'folder', c: '#00f2af' },
   { id: 'other', name: 'Other', icon: 'clipboard-check', c: '#9db2d7' },
 ];
+// Group open tasks by project, date or priority (Ryan, 2026-11-06). The choice is remembered in this browser.
+const TASK_GROUPS = [['project', 'Project', 'folder'], ['date', 'Date', 'calendar-days'], ['priority', 'Priority', 'flag']];
+function groupTasks(open, by) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = (d) => Math.round((new Date(d + 'T12:00').setHours(0, 0, 0, 0) - today) / 86400000);
+  const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || ({ High: 0, Medium: 1, '': 2, Low: 3 }[a.priority || ''] - { High: 0, Medium: 1, '': 2, Low: 3 }[b.priority || '']);
+  let keyOf, order;
+  if (by === 'date') {
+    const DATE = ['Overdue', 'Today', 'Tomorrow', 'Next 7 days', 'Later', 'No due date'];
+    keyOf = (t) => { if (!t.due) return 'No due date'; const n = days(t.due); return n < 0 ? 'Overdue' : n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n <= 7 ? 'Next 7 days' : 'Later'; };
+    order = (a, b) => DATE.indexOf(a) - DATE.indexOf(b);
+  } else if (by === 'priority') {
+    const PRI = ['High priority', 'Medium priority', 'No priority', 'Low priority'];
+    keyOf = (t) => (t.priority ? `${t.priority} priority` : 'No priority');
+    order = (a, b) => PRI.indexOf(a) - PRI.indexOf(b);
+  } else {
+    // projects first (by name), then the other notes tasks live in (Inbox, Personal Tasks…)
+    keyOf = (t) => (/^Projects\//.test(t.path) ? `P|${t.note}` : `N|${t.note}`);
+    order = (a, b) => (a[0] === b[0] ? a.localeCompare(b) : a[0] === 'P' ? -1 : 1);
+  }
+  const groups = new Map();
+  for (const t of open) { const k = keyOf(t); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(t); }
+  return [...groups.keys()].sort(order).map((k) => ({ key: k, name: k.replace(/^[PN]\|/, ''), project: k.startsWith('P|'), tasks: groups.get(k).sort(byDue) }));
+}
+const GROUP_COLOR = { Overdue: '#ff6b81', Today: '#ffe14d', 'High priority': '#ff6b81', 'Medium priority': '#ff9f43', 'Low priority': '#8aa0b8' };
+
 async function tasksPage(el, ctx) {
   const list = await api('/tasks?done=1');
+  let by = S.taskGroup; if (!by) { try { by = localStorage.getItem('maestro.taskGroup'); } catch { /* private window */ } }
+  if (!TASK_GROUPS.some(([k]) => k === by)) by = 'project';
   const tab = TASK_TABS.some((t) => t.id === S.taskTab) ? S.taskTab : 'all';
   const inTab = (t) => tab === 'all' || (t.section || 'other') === tab;
   const open = list.filter((t) => !t.done && inTab(t)), done = list.filter((t) => t.done && inTab(t));
@@ -381,9 +409,11 @@ async function tasksPage(el, ctx) {
   el.innerHTML = head('Tasks', `Tasks are Obsidian checkboxes anywhere in your vault (${profileName()} profile). Tick them here, in Obsidian, or ask the brain: “add a task to…”.`) +
     `<div class="task-tabs" role="tablist">${TASK_TABS.map((t) => `<button role="tab" class="task-tab ${t.id === tab ? 'on' : ''}" aria-selected="${t.id === tab}" data-tab="${t.id}" style="--c:${t.c}">${icon(t.icon)}<span>${t.name}</span><b>${count(t.id)}</b></button>`).join('')}</div>
      <div class="task-new"><div class="composer-row"><div class="input-wrap" style="height:44px"><input id="t-new" placeholder="Add a task${tab !== 'all' && tab !== 'other' ? ` to ${cur.name}` : ''}… (add #high for high priority)"></div><button class="btn primary" id="t-add" style="height:44px">${icon('plus')} Add</button></div>${dueFields('t')}</div>
-     <div class="section-title">Open · ${open.length}</div>${open.map(row).join('') || `<p style="color:var(--muted)">${tab === 'all' ? 'Inbox zero.' : `No open ${cur.name} tasks.`}</p>`}
+     <div class="task-groupbar"><div class="section-title" style="margin:0">Open · ${open.length}</div><div class="task-seg" role="group" aria-label="Group tasks by"><span>Group by</span>${TASK_GROUPS.map(([k, n, ic]) => `<button data-group="${k}" class="${by === k ? 'on' : ''}" aria-pressed="${by === k}">${icon(ic)}${n}</button>`).join('')}</div></div>
+     ${open.length ? groupTasks(open, by).map((g) => `<section class="task-group" style="--g:${GROUP_COLOR[g.name] || (g.project ? '#00f2af' : 'var(--cyan)')}"><h4>${icon(by === 'project' ? (g.project ? 'folder' : 'file-text') : by === 'date' ? 'calendar-days' : 'flag')}<span>${esc(g.name)}</span><b>${g.tasks.length}</b></h4>${g.tasks.map(row).join('')}</section>`).join('') : `<p style="color:var(--muted)">${tab === 'all' ? 'Inbox zero.' : `No open ${cur.name} tasks.`}</p>`}
      <div class="section-title">Done · ${done.length}</div>${done.slice(0, 20).map(row).join('')}`;
   el.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { S.taskTab = b.dataset.tab; tasksPage(el, ctx); }));
+  el.querySelectorAll('[data-group]').forEach((b) => (b.onclick = () => { S.taskGroup = b.dataset.group; try { localStorage.setItem('maestro.taskGroup', b.dataset.group); } catch { /* private window */ } tasksPage(el, ctx); }));
   const readDue = wireDueFields(el, 't');
   const add = async () => {
     const v = el.querySelector('#t-new').value.trim(); if (!v) return;
