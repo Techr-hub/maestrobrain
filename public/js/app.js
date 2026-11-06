@@ -1069,9 +1069,57 @@ function eventTaskForm(item, { prompt = '', viaVoice = false } = {}) {
   });
 }
 
+// Event details lightbox (Ryan, 2026-11-06): the event's facts stacked one per row (when, where, links, calendar),
+// then the description laid out as paragraphs and bullet lists, instead of one long block.
+const shortUrl = (u) => { try { const x = new URL(u); const path = x.pathname.replace(/\/$/, ''); return x.host.replace(/^www\./, '') + (path.length > 1 ? (path.length > 24 ? path.slice(0, 22) + '…' : path) : ''); } catch { return u; } };
+function linkKind(u) {
+  if (/zoom\.us|meet\.google|teams\.(microsoft|live)|webex|whereby|gotomeet/i.test(u)) return ['video', 'Join video call'];
+  if (/lu\.ma|luma\.com|eventbrite|meetup\.com|tito\.io|ticket/i.test(u)) return ['ticket', 'Tickets'];
+  if (/maps\.(google|apple)|goo\.gl\/maps/i.test(u)) return ['map-pin', 'Map'];
+  return ['link', shortUrl(u)];
+}
+function descHtml(text) {
+  const link = (h) => h.replace(/https?:\/\/[^\s<]+[^\s<.,;:)!?'"]/g, (u) => `<a href="${u}" target="_blank" rel="noopener" title="${u}">${esc(shortUrl(u.replace(/&amp;/g, '&')))}</a>`);
+  const out = []; let list = null, para = [];
+  const flushPara = () => { if (para.length) out.push(`<p>${para.join('<br>')}</p>`); para = []; };
+  const flushList = () => { if (list) out.push(`<ul>${list.map((x) => `<li>${x}</li>`).join('')}</ul>`); list = null; };
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) { flushPara(); flushList(); continue; }
+    const bullet = line.match(/^(?:[-*•▪◦]|\d+[.)])\s+(.*)$/);
+    const h = link(esc(bullet ? bullet[1] : line)).replace(/^([A-Z][\w ?'’&/-]{1,24}):(\s|$)/, '<b>$1:</b>$2');
+    if (bullet) { flushPara(); (list = list || []).push(h); } else { flushList(); para.push(h); }
+  }
+  flushPara(); flushList();
+  return out.join('');
+}
+function eventDetailHtml(item) {
+  const start = item.eventStart ? new Date(item.eventStart) : null, end = item.eventEnd ? new Date(item.eventEnd) : null;
+  const title = item.eventTitle || item.title.replace(/^(New( recurring event)?|Updated|Moved|Time changed|Cancelled|Reminder|In [^:]+|Starting now|Happening now): /, '');
+  const rows = [];
+  if (start && !isNaN(start)) {
+    const day = start.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: start.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined });
+    const t = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const mins = end && !isNaN(end) ? Math.round((end - start) / 60000) : 0;
+    const len = mins >= 1440 ? '' : mins >= 60 ? ` (${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''})` : mins ? ` (${mins} min)` : '';
+    rows.push(['calendar-days', 'When', `${esc(day)}<small>${esc(t(start))}${end && !isNaN(end) && mins < 1440 ? ` – ${esc(t(end))}` : ''}${esc(len)}</small>`]);
+  } else if (item.quote) rows.push(['calendar-days', 'When', esc(item.quote)]);
+  const loc = item.eventLocation || '';
+  if (loc && !/^https?:/i.test(loc)) rows.push(['map-pin', 'Where', `${esc(loc)}<small><a href="https://maps.google.com/?q=${encodeURIComponent(loc)}" target="_blank" rel="noopener">Open in Maps</a></small>`]);
+  const urls = [...new Set(`${loc} ${item.description || ''}`.match(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:)!?]/g) || [])].slice(0, 6);
+  if (urls.length) rows.push(['link', 'Links', `<div class="evd-links">${urls.map((u) => { const [ic, label] = linkKind(u); return `<a class="evd-link" href="${esc(u)}" target="_blank" rel="noopener" title="${esc(u)}">${icon(ic === 'ticket' ? 'tag' : ic)}${esc(label)}</a>`; }).join('')}</div>`]);
+  const cal = [item.sourceName, item.calendarName].filter(Boolean).join(' · ');
+  if (cal) rows.push(['layers', 'Calendar', esc(cal)]);
+  const status = [item.removed ? 'Removed' : '', item.summary && !/^Coming up\b/.test(item.summary) ? item.summary : '', item.priority ? `${item.priority} priority` : ''].filter(Boolean).join(' · ');
+  if (status) rows.push(['info', 'Status', esc(status)]);
+  return { title, html: `<div class="evd-rows">${rows.map(([ic, k, v]) => `<div class="evd-row"><span class="evd-ic">${icon(ic)}</span><div><span class="evd-k">${k}</span><div class="evd-v">${v}</div></div></div>`).join('')}</div>
+    ${item.description ? `<div class="evd-about"><div class="evd-k">About this event</div><div class="evd-desc">${descHtml(item.description)}</div></div>` : ''}` };
+}
+
 function openFeedItem(item) {
   markRead(item);
   const cat = CATEGORY[item.category] || CATEGORY.INSIGHT;
+  if (item.category === 'MEETING' && (item.eventStart || item.eventKey || item.description)) return openEventItem(item);
   modal(`${modalHead(esc(item.title), `${esc(item.sourceName)} · ${timeAgo(item.ts)} · ${esc(item.category)}`)}
     ${item.quote ? `<blockquote class="md" style="border-left:3px solid ${cat.c};padding:8px 12px;background:rgba(0,45,76,.35);margin:0 0 10px">${esc(item.quote)}</blockquote>` : ''}
     ${item.description ? `<div class="ev-desc">${linkify(esc(item.description)).replace(/\n/g, '<br>')}</div>` : ''}
@@ -1087,6 +1135,25 @@ function openFeedItem(item) {
       const mt = el.querySelector('[data-task]'); if (mt) mt.onclick = async () => { await api('/tasks', { text: item.title, priority: item.priority || undefined, section: sectionOf(item) }); toast('Task added'); close(); };
       const et = el.querySelector('[data-event-task]'); if (et) et.onclick = () => { close(); eventTaskForm(item); };
       const n = el.querySelector('[data-note]'); if (n) n.onclick = (e) => { e.preventDefault(); close(); openNote(item.notePath); };
+    },
+  });
+}
+
+function openEventItem(item) {
+  const d = eventDetailHtml(item);
+  const label = item.title !== d.title ? item.title.split(':')[0] : '';
+  modal(`<div class="modal-head evd-head"><div style="flex:1;min-width:0"><div class="evd-tags">${typePill(item) || '<span class="pill">MEETING</span>'}${label ? `<span class="evd-flag">${esc(label)}</span>` : ''}</div><h3>${esc(d.title)}</h3></div><button class="icon-btn" data-close aria-label="Close">${icon('x')}</button></div>
+    ${d.html}
+    <div class="modal-foot evd-foot">
+      ${!item.removed ? `<button class="btn ghost" data-ev-edit>${icon('pencil')} Edit</button>` : ''}
+      <button class="btn ghost" data-event-task>${icon('clipboard-check')} Create Task</button>
+      <button class="btn primary" data-ask>${icon('sparkles')} Ask ${esc(S.state.config.assistantName)}</button>
+    </div>`, {
+    onMount: (el, close) => {
+      el.querySelector('[data-ask]').onclick = () => { close(); ask(`Tell me about ${d.title}`); };
+      el.querySelector('[data-event-task]').onclick = () => { close(); eventTaskForm(item); };
+      const ed = el.querySelector('[data-ev-edit]'); if (ed) ed.onclick = () => { close(); editEvent(item); };
+      el.querySelectorAll('.evd-pill-type, [data-type]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); typeMenu(b, item); }));
     },
   });
 }
